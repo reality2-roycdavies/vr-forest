@@ -1,0 +1,41 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  overflow: hidden;
+  background: #000;
+  font-family: system-ui, sans-serif;
+  color: #fff;
+}
+
+canvas {
+  display: block;
+}
+
+#info {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#info h1 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: #8fbc8f;
+}
+
+#info p {
+  font-size: 1rem;
+  opacity: 0.7;
+}
+
+#VRButton {
+  z-index: 100;
+}
