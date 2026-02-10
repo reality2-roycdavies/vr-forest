@@ -426,13 +426,16 @@ export class AmbientAudio {
       Math.random() * (CONFIG.CRICKET_CHIRP_RATE_MAX - CONFIG.CRICKET_CHIRP_RATE_MIN);
     const pulseDuration = 1 / pulseRate;
 
-    // Schedule rapid on/off for each pulse
+    // Schedule rapid on/off for each pulse — use ramps throughout to avoid clicks
     for (let i = 0; i < pulseCount; i++) {
       const t = startTime + i * pulseDuration;
-      voice.gain.gain.setValueAtTime(0, t);
-      voice.gain.gain.linearRampToValueAtTime(0.8 + Math.random() * 0.2, t + pulseDuration * 0.15);
-      voice.gain.gain.setValueAtTime(0.8 + Math.random() * 0.2, t + pulseDuration * 0.5);
-      voice.gain.gain.linearRampToValueAtTime(0, t + pulseDuration * 0.85);
+      const vol = 0.6 + Math.random() * 0.2;
+      const attack = pulseDuration * 0.2;
+      const release = pulseDuration * 0.3;
+      voice.gain.gain.linearRampToValueAtTime(0.001, t);
+      voice.gain.gain.linearRampToValueAtTime(vol, t + attack);
+      voice.gain.gain.linearRampToValueAtTime(vol * 0.8, t + pulseDuration * 0.55);
+      voice.gain.gain.linearRampToValueAtTime(0.001, t + pulseDuration * 0.55 + release);
     }
 
     // Random gap before next burst
