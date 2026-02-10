@@ -470,11 +470,11 @@ export class AmbientAudio {
       const distSq = dx * dx + dz * dz;
 
       if (distSq < triggerDistSq) {
-        // Probability scales with closeness (closer = more likely)
+        // Low probability, scales with closeness
         const closeness = 1 - Math.sqrt(distSq) / triggerDist;
-        if (Math.random() < closeness * 0.08) {
+        if (Math.random() < closeness * 0.02) {
           this._playRustle({ x: tree.x, y: tree.y + 2, z: tree.z });
-          this._rustleCooldown = CONFIG.RUSTLE_COOLDOWN;
+          this._rustleCooldown = 1.0; // longer cooldown between rustles
           break;
         }
       }
@@ -487,22 +487,22 @@ export class AmbientAudio {
 
     this._activeRustles++;
 
-    // Bandpass noise burst
+    // Gentle bandpass noise — soft rustling character
     const noise = ctx.createBufferSource();
     noise.buffer = this._noiseBuffer;
-    noise.playbackRate.value = 0.8 + Math.random() * 0.6;
+    noise.playbackRate.value = 0.6 + Math.random() * 0.4;
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.value = 4000 + Math.random() * 2000;
-    filter.Q.value = 0.5 + Math.random() * 0.3;
+    filter.frequency.value = 4500 + Math.random() * 1500;
+    filter.Q.value = 0.3;
 
     const gain = ctx.createGain();
-    const duration = 0.3 + Math.random() * 0.3;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(CONFIG.RUSTLE_VOLUME * 0.6, now + 0.06);
-    gain.gain.linearRampToValueAtTime(CONFIG.RUSTLE_VOLUME * 0.4, now + duration * 0.4);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    const duration = 0.4 + Math.random() * 0.4;
+    gain.gain.value = 0;
+    // Smooth exponential attack and decay — no clicks possible
+    gain.gain.setTargetAtTime(CONFIG.RUSTLE_VOLUME * 0.5, now, 0.05);
+    gain.gain.setTargetAtTime(0, now + 0.15, duration * 0.3);
 
     // Spatial positioning
     const panner = this._createPanner(position);
@@ -513,7 +513,7 @@ export class AmbientAudio {
     panner.connect(this.spatialBus);
 
     noise.start(now);
-    noise.stop(now + duration + 0.05);
+    noise.stop(now + duration + 0.5);
 
     noise.onended = () => {
       this._activeRustles--;
