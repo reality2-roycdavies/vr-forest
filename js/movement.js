@@ -123,8 +123,10 @@ export class MovementSystem {
 
     const bobOffset = Math.sin(this.bobPhase * Math.PI * 2) * this.bobAmplitude;
 
-    // In VR, the headset tracking provides eye height — only set camera Y on desktop
-    if (!this.vr.isInVR()) {
+    if (this.vr.isInVR()) {
+      // In VR, apply subtle bob to dolly (whole rig) — headset tracking handles eye height
+      dolly.position.y += bobOffset;
+    } else {
       camera.position.y = CONFIG.TERRAIN_FOLLOW_OFFSET + bobOffset;
     }
 

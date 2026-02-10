@@ -91,7 +91,7 @@ export const CONFIG = {
   FLOWER_SCALE: 0.3,
 
   // Footsteps
-  FOOTSTEP_VOLUME: 0.08,
+  FOOTSTEP_VOLUME: 0.12,
   FOOTSTEP_GRASS_LP_FREQ: 600,       // lowpass cutoff for grass thud
   FOOTSTEP_GRASS_HP_FREQ: 3000,      // highpass cutoff for grass swish
   FOOTSTEP_ROCK_BP_FREQ: 1800,       // bandpass center for rock tap

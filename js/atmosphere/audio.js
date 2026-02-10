@@ -271,92 +271,132 @@ export class AmbientAudio {
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const variation = 1 + (Math.random() - 0.5) * CONFIG.FOOTSTEP_PITCH_VARIATION * 2;
+    const vol = CONFIG.FOOTSTEP_VOLUME;
 
-    // Thud: lowpass-filtered noise burst — deep, soft impact
+    // Layer 1: Impact thud — very short, low-frequency punch
     const thudNoise = ctx.createBufferSource();
     thudNoise.buffer = this._noiseBuffer;
-    thudNoise.playbackRate.value = 0.5 + Math.random() * 0.2;
+    thudNoise.playbackRate.value = 0.3 + Math.random() * 0.15;
 
     const thudFilter = ctx.createBiquadFilter();
     thudFilter.type = 'lowpass';
-    thudFilter.frequency.value = CONFIG.FOOTSTEP_GRASS_LP_FREQ * variation;
-    thudFilter.Q.value = 0.7;
+    thudFilter.frequency.value = 300 * variation;
+    thudFilter.Q.value = 1.2;
 
     const thudGain = ctx.createGain();
     thudGain.gain.setValueAtTime(0, now);
-    thudGain.gain.linearRampToValueAtTime(CONFIG.FOOTSTEP_VOLUME, now + 0.02);
-    thudGain.gain.linearRampToValueAtTime(CONFIG.FOOTSTEP_VOLUME * 0.6, now + 0.08);
-    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    thudGain.gain.linearRampToValueAtTime(vol * 1.5, now + 0.008);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
     thudNoise.connect(thudFilter);
     thudFilter.connect(thudGain);
     thudGain.connect(this.masterGain);
     thudNoise.start(now);
-    thudNoise.stop(now + 0.26);
+    thudNoise.stop(now + 0.11);
 
-    // Swish: faint highpass rustle — grass/leaf shuffle, delayed slightly
+    // Layer 2: Crunch — mid-frequency texture, slightly delayed
+    const crunchNoise = ctx.createBufferSource();
+    crunchNoise.buffer = this._noiseBuffer;
+    crunchNoise.playbackRate.value = 0.6 + Math.random() * 0.3;
+
+    const crunchFilter = ctx.createBiquadFilter();
+    crunchFilter.type = 'bandpass';
+    crunchFilter.frequency.value = 1000 * variation;
+    crunchFilter.Q.value = 0.6;
+
+    const crunchGain = ctx.createGain();
+    crunchGain.gain.setValueAtTime(0, now + 0.005);
+    crunchGain.gain.linearRampToValueAtTime(vol * 0.7, now + 0.02);
+    crunchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+    crunchNoise.connect(crunchFilter);
+    crunchFilter.connect(crunchGain);
+    crunchGain.connect(this.masterGain);
+    crunchNoise.start(now);
+    crunchNoise.stop(now + 0.16);
+
+    // Layer 3: Grass swish — faint high-frequency tail
     const swishNoise = ctx.createBufferSource();
     swishNoise.buffer = this._noiseBuffer;
     swishNoise.playbackRate.value = 0.8 + Math.random() * 0.4;
 
     const swishFilter = ctx.createBiquadFilter();
     swishFilter.type = 'highpass';
-    swishFilter.frequency.value = CONFIG.FOOTSTEP_GRASS_HP_FREQ * variation;
-    swishFilter.Q.value = 0.5;
+    swishFilter.frequency.value = 2500 * variation;
 
     const swishGain = ctx.createGain();
-    swishGain.gain.setValueAtTime(0, now + 0.02);
-    swishGain.gain.linearRampToValueAtTime(CONFIG.FOOTSTEP_VOLUME * 0.25, now + 0.06);
-    swishGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    swishGain.gain.setValueAtTime(0, now + 0.01);
+    swishGain.gain.linearRampToValueAtTime(vol * 0.25, now + 0.04);
+    swishGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
     swishNoise.connect(swishFilter);
     swishFilter.connect(swishGain);
     swishGain.connect(this.masterGain);
     swishNoise.start(now);
-    swishNoise.stop(now + 0.23);
+    swishNoise.stop(now + 0.21);
   }
 
   _rockStep() {
     const ctx = this.ctx;
     const now = ctx.currentTime;
     const variation = 1 + (Math.random() - 0.5) * CONFIG.FOOTSTEP_PITCH_VARIATION * 2;
+    const vol = CONFIG.FOOTSTEP_VOLUME;
 
-    // Sharp tap: bandpass-filtered noise — crisp impact
-    const tapNoise = ctx.createBufferSource();
-    tapNoise.buffer = this._noiseBuffer;
-    tapNoise.playbackRate.value = 0.9 + Math.random() * 0.3;
+    // Layer 1: Hard impact — short, punchy
+    const impactNoise = ctx.createBufferSource();
+    impactNoise.buffer = this._noiseBuffer;
+    impactNoise.playbackRate.value = 0.7 + Math.random() * 0.3;
 
-    const tapFilter = ctx.createBiquadFilter();
-    tapFilter.type = 'bandpass';
-    tapFilter.frequency.value = CONFIG.FOOTSTEP_ROCK_BP_FREQ * variation;
-    tapFilter.Q.value = 1.5;
+    const impactFilter = ctx.createBiquadFilter();
+    impactFilter.type = 'bandpass';
+    impactFilter.frequency.value = 1200 * variation;
+    impactFilter.Q.value = 1.0;
 
-    const tapGain = ctx.createGain();
-    tapGain.gain.setValueAtTime(0, now);
-    tapGain.gain.linearRampToValueAtTime(CONFIG.FOOTSTEP_VOLUME * 1.2, now + 0.008);
-    tapGain.gain.linearRampToValueAtTime(CONFIG.FOOTSTEP_VOLUME * 0.4, now + 0.05);
-    tapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    const impactGain = ctx.createGain();
+    impactGain.gain.setValueAtTime(0, now);
+    impactGain.gain.linearRampToValueAtTime(vol * 1.5, now + 0.004);
+    impactGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
 
-    tapNoise.connect(tapFilter);
-    tapFilter.connect(tapGain);
-    tapGain.connect(this.masterGain);
-    tapNoise.start(now);
-    tapNoise.stop(now + 0.19);
+    impactNoise.connect(impactFilter);
+    impactFilter.connect(impactGain);
+    impactGain.connect(this.masterGain);
+    impactNoise.start(now);
+    impactNoise.stop(now + 0.09);
 
-    // Click: short sine ping
+    // Layer 2: Click — short sine ping for stone character
     const ping = ctx.createOscillator();
     ping.type = 'sine';
     ping.frequency.value = CONFIG.FOOTSTEP_ROCK_PING_FREQ * variation;
 
     const pingGain = ctx.createGain();
     pingGain.gain.setValueAtTime(0, now);
-    pingGain.gain.linearRampToValueAtTime(CONFIG.FOOTSTEP_VOLUME * 0.4, now + 0.005);
-    pingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    pingGain.gain.linearRampToValueAtTime(vol * 0.5, now + 0.003);
+    pingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
 
     ping.connect(pingGain);
     pingGain.connect(this.masterGain);
     ping.start(now);
-    ping.stop(now + 0.11);
+    ping.stop(now + 0.07);
+
+    // Layer 3: Gritty scrape — higher frequency texture
+    const scrapeNoise = ctx.createBufferSource();
+    scrapeNoise.buffer = this._noiseBuffer;
+    scrapeNoise.playbackRate.value = 1.0 + Math.random() * 0.4;
+
+    const scrapeFilter = ctx.createBiquadFilter();
+    scrapeFilter.type = 'highpass';
+    scrapeFilter.frequency.value = 2000 * variation;
+
+    const scrapeGain = ctx.createGain();
+    scrapeGain.gain.setValueAtTime(0, now + 0.005);
+    scrapeGain.gain.linearRampToValueAtTime(vol * 0.3, now + 0.015);
+    scrapeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+    scrapeNoise.connect(scrapeFilter);
+    scrapeFilter.connect(scrapeGain);
+    scrapeGain.connect(this.masterGain);
+    scrapeNoise.start(now);
+    scrapeNoise.stop(now + 0.13);
   }
 
   // ======== Crickets — night ambient, 4 sine voices with chirp bursts ========
