@@ -76,12 +76,14 @@ export class AmbientAudio {
     if (!this.started || !this.ctx) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
 
-    // Bird chirps
-    this.birdTimer += delta;
-    if (this.birdTimer > this.nextBirdTime) {
-      this.birdTimer = 0;
-      this.nextBirdTime = 1.5 + Math.random() * 6;
-      this._chirp();
+    // Bird chirps — daytime only
+    if (sunElevation === undefined || sunElevation > 0.02) {
+      this.birdTimer += delta;
+      if (this.birdTimer > this.nextBirdTime) {
+        this.birdTimer = 0;
+        this.nextBirdTime = 1.5 + Math.random() * 6;
+        this._chirp();
+      }
     }
 
     // Update listener position/orientation for spatial audio
