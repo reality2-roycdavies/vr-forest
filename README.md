@@ -2,6 +2,10 @@
 
 A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — one external audio asset (morepork owl call), everything else procedurally generated.
 
+**Try it now:** [https://reality2-roycdavies.github.io/vr-forest/](https://reality2-roycdavies.github.io/vr-forest/)
+
+Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter VR" — or use it on desktop with keyboard and mouse.
+
 ## Features
 
 ### Infinite Procedural Terrain
