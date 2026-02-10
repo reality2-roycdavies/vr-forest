@@ -61,8 +61,13 @@ export const CONFIG = {
   CLOUD_SCALE_MIN: 25,
   CLOUD_SCALE_MAX: 60,
 
-  // Default latitude for sun calculation (overridden by geolocation)
+  // Default location for sun/moon calculation (overridden by geolocation)
   DEFAULT_LATITUDE: -36.85,    // Auckland fallback
+  DEFAULT_LONGITUDE: 174.76,   // Auckland fallback
+
+  // Moon
+  MOON_VISUAL_RADIUS: 3.5,    // SUN_VISUAL_RADIUS * 0.7
+  MOON_DISTANCE: 135,         // SUN_DISTANCE * 0.9
 
   // Ground surface
   GROUND_DIRT_SCALE: 0.03,       // noise frequency for dirt patches

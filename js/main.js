@@ -38,7 +38,7 @@ const chunkManager = new ChunkManager(scene);
 movement.chunkManager = chunkManager;
 
 // --- Water surface with wave displacement ---
-const waterGeom = new THREE.PlaneGeometry(180, 180, 360, 360);
+const waterGeom = new THREE.PlaneGeometry(180, 180, 720, 720);
 waterGeom.rotateX(-Math.PI / 2);
 const waterMat = new THREE.MeshPhongMaterial({
   color: new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b),
@@ -305,8 +305,8 @@ function onFrame() {
     dayNight.timeOffset += input.timeAdjust * delta * 3; // 3 hours per second
   }
 
-  // Update day/night cycle (sky, sun, lights, fog, clouds)
-  dayNight.update(pos);
+  // Update day/night cycle (sky, sun, lights, fog, clouds, moon)
+  dayNight.update(pos, vr.camera);
 
   // Show time offset indicator (visible while adjusting, fades out after)
   const isAdjusting = input.timeAdjust !== 0;
@@ -338,11 +338,12 @@ function onFrame() {
   birds.update(delta, pos, dayNight.sunElevation);
 
   // Wildlife peek events
-  wildlife.update(delta, pos);
+  wildlife.update(delta, pos, dayNight.sunElevation);
 
-  // Audio (birds, footsteps, crickets, rustles, spatial)
+  // Audio (birds, footsteps, crickets, rustles, water ambient, spatial)
   vr.camera.getWorldDirection(_cameraDir);
   const nearbyTrees = getNearbyTrees(pos, CONFIG.RUSTLE_TRIGGER_DIST);
+  const waterProximity = Math.max(0, 1 - Math.abs(pos.y - CONFIG.WATER_LEVEL) / 8);
   audio.update(
     delta,
     dayNight.sunElevation,
@@ -351,7 +352,8 @@ function onFrame() {
     movement.isMoving,
     movement.groundType,
     movement.bobPhase,
-    nearbyTrees
+    nearbyTrees,
+    waterProximity
   );
 
   // Render

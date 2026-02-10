@@ -35,10 +35,22 @@ export class AmbientAudio {
     this._activeRustles = 0;
     this._rustleCooldown = 0;
 
-    // Morepork (NZ owl) — nighttime call
+    // Water ambient state
+    this._waterActive = false;
+    this._waterGain = null;
+    this._waterSource = null;
+    this._waterFilter = null;
+    this._waterShimmerSource = null;
+    this._waterShimmerGain = null;
+    this._waterShimmerFilter = null;
+    this._waterModTimeout = null;
+    this._waterShimmerModTimeout = null;
+
+    // Morepork (NZ owl) — nighttime call-and-response conversation
     this._moreporkBuffer = null;
-    this._moreporkTimer = 0;
-    this._moreporkNextTime = 20 + Math.random() * 40;
+    this._moreporkConvo = null;       // active conversation state
+    this._moreporkPauseTimer = 0;     // timer between conversations
+    this._moreporkNextPause = 20 + Math.random() * 40;
   }
 
   /**
@@ -72,7 +84,7 @@ export class AmbientAudio {
   /**
    * Call each frame with extended parameters for all audio subsystems.
    */
-  update(delta, sunElevation, playerPos, cameraDir, isMoving, groundType, bobPhase, nearbyTrees) {
+  update(delta, sunElevation, playerPos, cameraDir, isMoving, groundType, bobPhase, nearbyTrees, waterProximity) {
     if (!this.started || !this.ctx) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
 
@@ -101,16 +113,17 @@ export class AmbientAudio {
       this._updateCrickets(sunElevation);
     }
 
-    // Morepork — nighttime owl call
+    // Morepork — nighttime owl call-and-response
     if (sunElevation !== undefined && sunElevation < -0.03) {
-      this._moreporkTimer += delta;
-      if (this._moreporkTimer >= this._moreporkNextTime) {
-        this._playMorepork(playerPos);
-        this._moreporkTimer = 0;
-        this._moreporkNextTime = 30 + Math.random() * 60;
-      }
+      this._updateMoreporkConversation(delta, playerPos);
     } else {
-      this._moreporkTimer = 0;
+      this._moreporkConvo = null;
+      this._moreporkPauseTimer = 0;
+    }
+
+    // Water ambient
+    if (waterProximity !== undefined) {
+      this._updateWaterAmbient(waterProximity);
     }
 
     // Rustling leaves — disabled, synthetic noise doesn't convincingly replicate leaves
@@ -561,6 +574,108 @@ export class AmbientAudio {
     }, Math.max(0, delay));
   }
 
+  // ======== Water ambient — gentle lapping near lakes ========
+
+  _updateWaterAmbient(waterProximity) {
+    const ctx = this.ctx;
+    const shouldBeActive = waterProximity > 0.05;
+
+    if (shouldBeActive && !this._waterActive) {
+      // Start water ambient
+      this._waterActive = true;
+
+      // Main low-mid layer: bandpass noise for gentle lapping wash (300-800 Hz)
+      this._waterSource = ctx.createBufferSource();
+      this._waterSource.buffer = this._noiseBuffer;
+      this._waterSource.loop = true;
+
+      this._waterFilter = ctx.createBiquadFilter();
+      this._waterFilter.type = 'bandpass';
+      this._waterFilter.frequency.value = 450;
+      this._waterFilter.Q.value = 0.6;
+
+      this._waterGain = ctx.createGain();
+      this._waterGain.gain.value = 0;
+
+      this._waterSource.connect(this._waterFilter);
+      this._waterFilter.connect(this._waterGain);
+      this._waterGain.connect(this.masterGain);
+      this._waterSource.start();
+
+      // Slow modulation for organic lapping character
+      this._modulateWater();
+
+      // Higher shimmer layer (1200-2500 Hz) for surface sparkle
+      this._waterShimmerSource = ctx.createBufferSource();
+      this._waterShimmerSource.buffer = this._noiseBuffer;
+      this._waterShimmerSource.loop = true;
+
+      this._waterShimmerFilter = ctx.createBiquadFilter();
+      this._waterShimmerFilter.type = 'bandpass';
+      this._waterShimmerFilter.frequency.value = 1800;
+      this._waterShimmerFilter.Q.value = 0.4;
+
+      this._waterShimmerGain = ctx.createGain();
+      this._waterShimmerGain.gain.value = 0;
+
+      this._waterShimmerSource.connect(this._waterShimmerFilter);
+      this._waterShimmerFilter.connect(this._waterShimmerGain);
+      this._waterShimmerGain.connect(this.masterGain);
+      this._waterShimmerSource.start();
+
+      this._modulateWaterShimmer();
+    } else if (!shouldBeActive && this._waterActive) {
+      // Stop water ambient
+      this._waterActive = false;
+      const now = ctx.currentTime;
+      if (this._waterGain) {
+        this._waterGain.gain.linearRampToValueAtTime(0, now + 1);
+      }
+      if (this._waterShimmerGain) {
+        this._waterShimmerGain.gain.linearRampToValueAtTime(0, now + 1);
+      }
+      clearTimeout(this._waterModTimeout);
+      clearTimeout(this._waterShimmerModTimeout);
+      setTimeout(() => {
+        try { this._waterSource?.stop(); } catch (e) { /* already stopped */ }
+        try { this._waterShimmerSource?.stop(); } catch (e) { /* already stopped */ }
+        this._waterSource = null;
+        this._waterShimmerSource = null;
+        this._waterGain = null;
+        this._waterShimmerGain = null;
+      }, 1200);
+    }
+
+    // Update volume based on proximity
+    if (this._waterActive && this._waterGain) {
+      const targetVol = waterProximity * 0.06;
+      const now = ctx.currentTime;
+      this._waterGain.gain.setTargetAtTime(targetVol, now, 0.15);
+      if (this._waterShimmerGain) {
+        this._waterShimmerGain.gain.setTargetAtTime(targetVol * 0.3, now, 0.15);
+      }
+    }
+  }
+
+  _modulateWater() {
+    if (!this._waterActive || !this._waterFilter) return;
+    const now = this.ctx.currentTime;
+    // Sweep filter frequency slowly for lapping wave character
+    const duration = 3 + Math.random() * 3;
+    const targetFreq = 200 + Math.random() * 400;
+    this._waterFilter.frequency.linearRampToValueAtTime(targetFreq, now + duration);
+    this._waterModTimeout = setTimeout(() => this._modulateWater(), duration * 1000);
+  }
+
+  _modulateWaterShimmer() {
+    if (!this._waterActive || !this._waterShimmerFilter) return;
+    const now = this.ctx.currentTime;
+    const duration = 4 + Math.random() * 4;
+    const targetFreq = 1200 + Math.random() * 1300;
+    this._waterShimmerFilter.frequency.linearRampToValueAtTime(targetFreq, now + duration);
+    this._waterShimmerModTimeout = setTimeout(() => this._modulateWaterShimmer(), duration * 1000);
+  }
+
   // ======== Rustling leaves — proximity-triggered, spatially positioned ========
 
   _updateRustles(playerPos, nearbyTrees) {
@@ -888,6 +1003,17 @@ export class AmbientAudio {
     this._cricketActive = false;
     this._cricketGain = null;
 
+    // Stop water ambient
+    this._waterActive = false;
+    clearTimeout(this._waterModTimeout);
+    clearTimeout(this._waterShimmerModTimeout);
+    try { this._waterSource?.stop(); } catch (e) { /* already stopped */ }
+    try { this._waterShimmerSource?.stop(); } catch (e) { /* already stopped */ }
+    this._waterSource = null;
+    this._waterShimmerSource = null;
+    this._waterGain = null;
+    this._waterShimmerGain = null;
+
     if (this.ctx) {
       this.ctx.close();
       this.ctx = null;
@@ -895,7 +1021,7 @@ export class AmbientAudio {
     this.started = false;
   }
 
-  // ======== Morepork (NZ owl) ========
+  // ======== Morepork (NZ owl) — call-and-response conversation ========
 
   _loadMorepork() {
     fetch('assets/audio/morepork-single.mp3')
@@ -911,19 +1037,100 @@ export class AmbientAudio {
       .catch(e => { console.warn('Morepork load error:', e); });
   }
 
-  _playMorepork(playerPos) {
+  _updateMoreporkConversation(delta, playerPos) {
     if (!this._moreporkBuffer || !playerPos) return;
-    const ctx = this.ctx;
 
-    // Random distant position around the player
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 40 + Math.random() * 60; // 40-100m away
-    const px = playerPos.x + Math.cos(angle) * dist;
-    const pz = playerPos.z + Math.sin(angle) * dist;
-    const py = playerPos.y + 8 + Math.random() * 12; // up in trees
+    // Active conversation — advance it
+    if (this._moreporkConvo) {
+      const convo = this._moreporkConvo;
+      convo.timer += delta;
+
+      if (convo.timer >= convo.nextCallTime) {
+        // Play this owl's call
+        const owl = convo.owls[convo.currentOwl];
+        this._playMoreporkAt(owl.position, owl.pitch);
+
+        convo.exchangesDone++;
+        convo.timer = 0;
+
+        // Check if third owl joins (20% chance, once per conversation)
+        if (!convo.thirdJoined && convo.owls.length === 2 &&
+            convo.exchangesDone >= 2 && Math.random() < 0.2) {
+          convo.thirdJoined = true;
+          convo.owls.push(this._pickOwlPosition(playerPos, convo.owls));
+        }
+
+        if (convo.exchangesDone >= convo.totalExchanges) {
+          // Conversation over
+          this._moreporkConvo = null;
+          this._moreporkPauseTimer = 0;
+          this._moreporkNextPause = 20 + Math.random() * 40;
+          return;
+        }
+
+        // Advance to next owl, random delay before next call
+        convo.currentOwl = (convo.currentOwl + 1) % convo.owls.length;
+        convo.nextCallTime = 1.5 + Math.random() * 3.5;
+      }
+      return;
+    }
+
+    // No active conversation — wait for pause timer
+    this._moreporkPauseTimer += delta;
+    if (this._moreporkPauseTimer >= this._moreporkNextPause) {
+      this._startMoreporkConversation(playerPos);
+    }
+  }
+
+  _startMoreporkConversation(playerPos) {
+    const owls = [];
+    owls.push(this._pickOwlPosition(playerPos, []));
+    owls.push(this._pickOwlPosition(playerPos, owls));
+
+    this._moreporkConvo = {
+      owls,
+      currentOwl: 0,
+      exchangesDone: 0,
+      totalExchanges: 2 + Math.floor(Math.random() * 3) * 2, // 2, 4, or 6 (always even for back-and-forth)
+      timer: 0,
+      nextCallTime: 0, // first call immediately
+      thirdJoined: false,
+    };
+  }
+
+  _pickOwlPosition(playerPos, existingOwls) {
+    const minAngleSep = Math.PI / 3; // 60 degrees apart
+    let angle, attempts = 0;
+
+    do {
+      angle = Math.random() * Math.PI * 2;
+      attempts++;
+      if (attempts > 20) break; // avoid infinite loop
+    } while (existingOwls.some(owl => {
+      let diff = Math.abs(owl.angle - angle);
+      if (diff > Math.PI) diff = 2 * Math.PI - diff;
+      return diff < minAngleSep;
+    }));
+
+    const dist = 40 + Math.random() * 60;
+    return {
+      angle,
+      pitch: 0.95 + Math.random() * 0.1, // 0.95-1.05
+      position: {
+        x: playerPos.x + Math.cos(angle) * dist,
+        y: playerPos.y + 8 + Math.random() * 12,
+        z: playerPos.z + Math.sin(angle) * dist,
+      },
+    };
+  }
+
+  _playMoreporkAt(position, pitch) {
+    if (!this._moreporkBuffer) return;
+    const ctx = this.ctx;
 
     const source = ctx.createBufferSource();
     source.buffer = this._moreporkBuffer;
+    source.playbackRate.value = pitch || 1.0;
 
     const gain = ctx.createGain();
     gain.gain.value = 0.15 + Math.random() * 0.1;
@@ -934,7 +1141,7 @@ export class AmbientAudio {
     panner.refDistance = 20;
     panner.maxDistance = 150;
     panner.rolloffFactor = 0.6;
-    panner.setPosition(px, py, pz);
+    panner.setPosition(position.x, position.y, position.z);
 
     source.connect(gain);
     gain.connect(panner);

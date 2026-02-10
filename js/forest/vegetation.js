@@ -60,6 +60,7 @@ export class VegetationPool {
       const mesh = new THREE.InstancedMesh(geom, mat, MAX_VEG_PER_TYPE);
       mesh.count = 0;
       mesh.frustumCulled = false;
+      mesh.castShadow = true;
       this.scene.add(mesh);
       this.fernVariants.push(mesh);
     }
@@ -248,6 +249,7 @@ export class VegetationPool {
       const mesh = new THREE.InstancedMesh(geom, mat, MAX_ROCKS);
       mesh.count = 0;
       mesh.frustumCulled = false;
+      mesh.castShadow = true;
       this.scene.add(mesh);
       this.rockMeshes.push(mesh);
     }
