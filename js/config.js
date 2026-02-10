@@ -62,7 +62,7 @@ export const CONFIG = {
   CLOUD_SCALE_MAX: 60,
 
   // Default latitude for sun calculation (overridden by geolocation)
-  DEFAULT_LATITUDE: 51.5,      // London fallback
+  DEFAULT_LATITUDE: -36.85,    // Auckland fallback
 
   // Ground surface
   GROUND_DIRT_SCALE: 0.03,       // noise frequency for dirt patches

@@ -32,7 +32,7 @@ The ground got a procedural grass texture (blade strokes, soil speckles, pebble 
 
 ### Phase 3: The Sky and Time
 
-The day/night cycle was tied to real-world time from the start. The sun position is calculated from the device's clock, date, and geolocation (with a London latitude fallback). Four colour palettes -- night, twilight, golden hour, and day -- blend smoothly as the sun moves.
+The day/night cycle was tied to real-world time from the start. The sun position is calculated from the device's clock, date, and geolocation (with an Auckland latitude fallback). Four colour palettes -- night, twilight, golden hour, and day -- blend smoothly as the sun moves.
 
 Stars appeared (300 points on a sphere), then a moon, then shooting stars streaking across the night sky. Clouds were added as billboard sprites in a ring at altitude.
 
