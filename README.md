@@ -1,6 +1,6 @@
 # VR Endless Forest
 
-A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — no external assets or textures required.
+A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — one external audio asset (morepork owl call), everything else procedurally generated.
 
 ## Features
 
@@ -137,7 +137,7 @@ Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS 
 
 - **Engine**: Three.js r170 (loaded from CDN via import map)
 - **Noise**: simplex-noise 4.0.3 (CDN)
-- **Audio**: Web Audio API (no audio libraries)
+- **Audio**: Web Audio API (all procedural except morepork owl call — single external recording)
 - **Rendering**: WebGL 2 with WebXR
 - **Textures**: All procedurally generated on HTML5 Canvas
 - **Geometry**: All built from Three.js primitives (no 3D models)
