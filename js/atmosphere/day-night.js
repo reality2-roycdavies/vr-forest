@@ -78,7 +78,7 @@ export class DayNightSystem {
 
     // --- Sun disc ---
     const sunGeo = new THREE.CircleGeometry(CONFIG.SUN_VISUAL_RADIUS, 16);
-    this.sunMat = new THREE.MeshBasicMaterial({ color: 0xfff4e0, fog: false });
+    this.sunMat = new THREE.MeshBasicMaterial({ color: 0xfff4e0, fog: false, depthTest: false });
     this.sunMesh = new THREE.Mesh(sunGeo, this.sunMat);
     this.sunMesh.renderOrder = -1;
     scene.add(this.sunMesh);
@@ -106,8 +106,18 @@ export class DayNightSystem {
 
     // --- Directional sun light ---
     this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    this.sunLight.castShadow = false;
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.width = 1024;
+    this.sunLight.shadow.mapSize.height = 1024;
+    this.sunLight.shadow.camera.near = 0.5;
+    this.sunLight.shadow.camera.far = 80;
+    this.sunLight.shadow.camera.left = -40;
+    this.sunLight.shadow.camera.right = 40;
+    this.sunLight.shadow.camera.top = 40;
+    this.sunLight.shadow.camera.bottom = -40;
+    this.sunLight.shadow.bias = -0.002;
     scene.add(this.sunLight);
+    scene.add(this.sunLight.target);
 
     // --- Hemisphere light ---
     this.hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
@@ -346,8 +356,10 @@ export class DayNightSystem {
     this.stars.material.transparent = true;
     this.stars.visible = elevation < 0.1;
 
-    // --- Sun light ---
-    this.sunLight.position.copy(_sunPos).normalize();
+    // --- Sun light + shadow ---
+    const sunDir = _sunPos.clone().normalize();
+    this.sunLight.position.copy(playerPos).addScaledVector(sunDir, 50);
+    this.sunLight.target.position.copy(playerPos);
     this.sunLight.color.copy(palette.sun);
     this.sunLight.intensity = palette.sunIntensity;
 

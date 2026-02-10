@@ -32,6 +32,7 @@ export class TreePool {
       );
       trunkMesh.count = 0;
       trunkMesh.frustumCulled = false;
+      trunkMesh.castShadow = true;
       this.scene.add(trunkMesh);
       this.trunkMeshes.push(trunkMesh);
 
@@ -42,6 +43,7 @@ export class TreePool {
       );
       canopyMesh.count = 0;
       canopyMesh.frustumCulled = false;
+      canopyMesh.castShadow = true;
       this.scene.add(canopyMesh);
       this.canopyMeshes.push(canopyMesh);
     }

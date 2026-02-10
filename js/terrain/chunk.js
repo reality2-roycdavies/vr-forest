@@ -52,7 +52,7 @@ export class Chunk {
     geometry.setIndex(new THREE.BufferAttribute(data.indices, 1));
 
     this.mesh = new THREE.Mesh(geometry, getGroundMaterial());
-    this.mesh.receiveShadow = false;
+    this.mesh.receiveShadow = true;
     this.mesh.castShadow = false;
     this.mesh.matrixAutoUpdate = false;
   }
