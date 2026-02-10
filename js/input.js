@@ -82,17 +82,21 @@ export class InputManager {
   }
 
   _pollGamepads() {
-    const session = this.vrSetup.session;
+    // Try session.inputSources first, fall back to renderer's getController approach
+    const session = this.vrSetup.renderer.xr.getSession();
     if (!session) return;
 
     const sources = session.inputSources;
+    if (!sources || sources.length === 0) return;
+
     for (const source of sources) {
       if (!source.gamepad) continue;
       const axes = source.gamepad.axes;
       const buttons = source.gamepad.buttons;
 
-      const sx = axes[2] ?? axes[0] ?? 0;
-      const sy = axes[3] ?? axes[1] ?? 0;
+      // Quest controllers: thumbstick on axes 2,3; fallback to 0,1
+      const sx = axes.length > 2 ? (axes[2] ?? 0) : (axes[0] ?? 0);
+      const sy = axes.length > 3 ? (axes[3] ?? 0) : (axes[1] ?? 0);
 
       if (source.handedness === 'left') {
         this.leftStick.x = Math.abs(sx) > CONFIG.THUMBSTICK_DEADZONE ? sx : 0;
