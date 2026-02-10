@@ -487,13 +487,14 @@ export class AmbientAudio {
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.value = 3000 + Math.random() * 3000;
-    filter.Q.value = 0.8 + Math.random() * 0.5;
+    filter.frequency.value = 4000 + Math.random() * 2000;
+    filter.Q.value = 0.5 + Math.random() * 0.3;
 
     const gain = ctx.createGain();
-    const duration = 0.2 + Math.random() * 0.3;
+    const duration = 0.3 + Math.random() * 0.3;
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(CONFIG.RUSTLE_VOLUME, now + 0.02);
+    gain.gain.linearRampToValueAtTime(CONFIG.RUSTLE_VOLUME * 0.6, now + 0.06);
+    gain.gain.linearRampToValueAtTime(CONFIG.RUSTLE_VOLUME * 0.4, now + duration * 0.4);
     gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
     // Spatial positioning
