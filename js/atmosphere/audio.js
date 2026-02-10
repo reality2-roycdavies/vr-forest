@@ -272,42 +272,59 @@ export class AmbientAudio {
     const now = ctx.currentTime;
     const variation = 1 + (Math.random() - 0.5) * CONFIG.FOOTSTEP_PITCH_VARIATION * 2;
     const vol = CONFIG.FOOTSTEP_VOLUME;
+    const toeDelay = 0.055 + Math.random() * 0.02;
 
-    // Kick drum thud — sine with fast pitch sweep (like a bass drum)
-    const kick = ctx.createOscillator();
-    kick.type = 'sine';
-    kick.frequency.setValueAtTime(90 * variation, now);
-    kick.frequency.exponentialRampToValueAtTime(35, now + 0.06);
+    // Heel strike — deeper, heavier thump
+    const heel = ctx.createOscillator();
+    heel.type = 'sine';
+    heel.frequency.setValueAtTime(80 * variation, now);
+    heel.frequency.exponentialRampToValueAtTime(30, now + 0.07);
 
-    const kickGain = ctx.createGain();
-    kickGain.gain.setValueAtTime(vol * 1.8, now);
-    kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    const heelGain = ctx.createGain();
+    heelGain.gain.setValueAtTime(vol * 1.8, now);
+    heelGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
-    kick.connect(kickGain);
-    kickGain.connect(this.masterGain);
-    kick.start(now);
-    kick.stop(now + 0.13);
+    heel.connect(heelGain);
+    heelGain.connect(this.masterGain);
+    heel.start(now);
+    heel.stop(now + 0.11);
 
-    // Light crunch texture — just a touch of filtered noise
-    const crunch = ctx.createBufferSource();
-    crunch.buffer = this._noiseBuffer;
-    crunch.playbackRate.value = 0.5 + Math.random() * 0.3;
+    // Toe tap — lighter, higher, slightly delayed
+    const toe = ctx.createOscillator();
+    toe.type = 'sine';
+    toe.frequency.setValueAtTime(140 * variation, now + toeDelay);
+    toe.frequency.exponentialRampToValueAtTime(50, now + toeDelay + 0.05);
 
-    const crunchFilter = ctx.createBiquadFilter();
-    crunchFilter.type = 'bandpass';
-    crunchFilter.frequency.value = 800 * variation;
-    crunchFilter.Q.value = 0.5;
+    const toeGain = ctx.createGain();
+    toeGain.gain.setValueAtTime(0, now);
+    toeGain.gain.setValueAtTime(vol * 0.9, now + toeDelay);
+    toeGain.gain.exponentialRampToValueAtTime(0.001, now + toeDelay + 0.07);
 
-    const crunchGain = ctx.createGain();
-    crunchGain.gain.setValueAtTime(0, now);
-    crunchGain.gain.linearRampToValueAtTime(vol * 0.4, now + 0.01);
-    crunchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    toe.connect(toeGain);
+    toeGain.connect(this.masterGain);
+    toe.start(now + toeDelay);
+    toe.stop(now + toeDelay + 0.08);
 
-    crunch.connect(crunchFilter);
-    crunchFilter.connect(crunchGain);
-    crunchGain.connect(this.masterGain);
-    crunch.start(now);
-    crunch.stop(now + 0.11);
+    // Faint grass texture on the toe
+    const swish = ctx.createBufferSource();
+    swish.buffer = this._noiseBuffer;
+    swish.playbackRate.value = 0.5 + Math.random() * 0.3;
+
+    const swishFilter = ctx.createBiquadFilter();
+    swishFilter.type = 'bandpass';
+    swishFilter.frequency.value = 900 * variation;
+    swishFilter.Q.value = 0.4;
+
+    const swishGain = ctx.createGain();
+    swishGain.gain.setValueAtTime(0, now + toeDelay);
+    swishGain.gain.linearRampToValueAtTime(vol * 0.3, now + toeDelay + 0.01);
+    swishGain.gain.exponentialRampToValueAtTime(0.001, now + toeDelay + 0.08);
+
+    swish.connect(swishFilter);
+    swishFilter.connect(swishGain);
+    swishGain.connect(this.masterGain);
+    swish.start(now + toeDelay);
+    swish.stop(now + toeDelay + 0.09);
   }
 
   _rockStep() {
@@ -315,35 +332,38 @@ export class AmbientAudio {
     const now = ctx.currentTime;
     const variation = 1 + (Math.random() - 0.5) * CONFIG.FOOTSTEP_PITCH_VARIATION * 2;
     const vol = CONFIG.FOOTSTEP_VOLUME;
+    const toeDelay = 0.045 + Math.random() * 0.015;
 
-    // Higher-pitched kick for hard surface
-    const kick = ctx.createOscillator();
-    kick.type = 'sine';
-    kick.frequency.setValueAtTime(180 * variation, now);
-    kick.frequency.exponentialRampToValueAtTime(60, now + 0.04);
+    // Heel strike — hard, sharp impact
+    const heel = ctx.createOscillator();
+    heel.type = 'sine';
+    heel.frequency.setValueAtTime(160 * variation, now);
+    heel.frequency.exponentialRampToValueAtTime(55, now + 0.04);
 
-    const kickGain = ctx.createGain();
-    kickGain.gain.setValueAtTime(vol * 1.5, now);
-    kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    const heelGain = ctx.createGain();
+    heelGain.gain.setValueAtTime(vol * 1.5, now);
+    heelGain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
 
-    kick.connect(kickGain);
-    kickGain.connect(this.masterGain);
-    kick.start(now);
-    kick.stop(now + 0.09);
+    heel.connect(heelGain);
+    heelGain.connect(this.masterGain);
+    heel.start(now);
+    heel.stop(now + 0.08);
 
-    // Click — short sine ping
-    const ping = ctx.createOscillator();
-    ping.type = 'triangle';
-    ping.frequency.value = CONFIG.FOOTSTEP_ROCK_PING_FREQ * variation;
+    // Toe tap — higher click, snappier
+    const toe = ctx.createOscillator();
+    toe.type = 'triangle';
+    toe.frequency.setValueAtTime(280 * variation, now + toeDelay);
+    toe.frequency.exponentialRampToValueAtTime(90, now + toeDelay + 0.03);
 
-    const pingGain = ctx.createGain();
-    pingGain.gain.setValueAtTime(vol * 0.4, now);
-    pingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    const toeGain = ctx.createGain();
+    toeGain.gain.setValueAtTime(0, now);
+    toeGain.gain.setValueAtTime(vol * 1.0, now + toeDelay);
+    toeGain.gain.exponentialRampToValueAtTime(0.001, now + toeDelay + 0.05);
 
-    ping.connect(pingGain);
-    pingGain.connect(this.masterGain);
-    ping.start(now);
-    ping.stop(now + 0.06);
+    toe.connect(toeGain);
+    toeGain.connect(this.masterGain);
+    toe.start(now + toeDelay);
+    toe.stop(now + toeDelay + 0.06);
   }
 
   // ======== Crickets — night ambient, 4 sine voices with chirp bursts ========
