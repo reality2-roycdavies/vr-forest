@@ -1,6 +1,7 @@
 // Random wildlife — bear, mountain lion, or Where's Wally peek from behind trees
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { getTerrainHeight } from '../terrain/noise.js';
 
 const _cameraDir = new THREE.Vector3();
 const _toTree = new THREE.Vector3();
@@ -186,6 +187,19 @@ export class WildlifeSystem {
       group.add(lens);
     }
 
+    // Eye dots behind glasses (for nighttime glow)
+    if (!group.userData.eyeShines) group.userData.eyeShines = [];
+    group.userData.eyeShineBaseColor = 0xffcc88;
+    group.userData.eyeShineBaseRadius = 0.012;
+    for (const side of [-1, 1]) {
+      const eyeGeo = new THREE.SphereGeometry(0.012, 4, 4);
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffcc88 });
+      const eye = new THREE.Mesh(eyeGeo, eyeMat);
+      eye.position.set(side * 0.05, 0.74, 0.105);
+      group.add(eye);
+      group.userData.eyeShines.push(eye);
+    }
+
     // Smile
     const smileGeo = new THREE.TorusGeometry(0.03, 0.008, 4, 6, Math.PI);
     const smile = new THREE.Mesh(smileGeo, redMat);
@@ -197,6 +211,9 @@ export class WildlifeSystem {
   }
 
   _addEyes(group, offsetX, y, z, radius, shineColor) {
+    if (!group.userData.eyeShines) group.userData.eyeShines = [];
+    group.userData.eyeShineBaseColor = shineColor;
+    group.userData.eyeShineBaseRadius = radius * 0.45;
     for (const side of [-1, 1]) {
       const eyeGeo = new THREE.SphereGeometry(radius, 4, 4);
       const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
@@ -209,6 +226,7 @@ export class WildlifeSystem {
       const shine = new THREE.Mesh(shineGeo, shineMat);
       shine.position.set(side * offsetX + side * radius * 0.2, y + radius * 0.2, z + radius * 0.3);
       group.add(shine);
+      group.userData.eyeShines.push(shine);
     }
   }
 
@@ -254,9 +272,13 @@ export class WildlifeSystem {
 
   // ======== Main update ========
 
-  update(delta, playerPos) {
+  update(delta, playerPos, sunElevation) {
     this.timer += delta;
+    this.sunElevation = sunElevation;
     this._updatePeek(delta, playerPos);
+    if (this.activeCreature) {
+      this._updateEyeGlow(this.activeCreature);
+    }
   }
 
   // ======== Peek animation (slide out, show, slide back) ========
@@ -268,8 +290,11 @@ export class WildlifeSystem {
 
       if (this.fadeState === 'fadein') {
         const t = Math.min(1, this.peekTimer / 0.8);
-        mesh.position.x = mesh.userData.hideX + (mesh.userData.peekX - mesh.userData.hideX) * this._easeOutCubic(t);
-        mesh.position.z = mesh.userData.hideZ + (mesh.userData.peekZ - mesh.userData.hideZ) * this._easeOutCubic(t);
+        const ease = this._easeOutCubic(t);
+        mesh.position.x = mesh.userData.hideX + (mesh.userData.peekX - mesh.userData.hideX) * ease;
+        mesh.position.z = mesh.userData.hideZ + (mesh.userData.peekZ - mesh.userData.hideZ) * ease;
+        mesh.position.y = mesh.userData.hideY + (mesh.userData.peekY - mesh.userData.hideY) * ease;
+        mesh.userData.baseY = mesh.position.y;
         if (t >= 1) {
           this.fadeState = 'showing';
           this.peekTimer = 0;
@@ -286,8 +311,10 @@ export class WildlifeSystem {
         }
       } else if (this.fadeState === 'fadeout') {
         const t = Math.min(1, this.peekTimer / 0.6);
-        mesh.position.x = mesh.userData.peekX + (mesh.userData.hideX - mesh.userData.peekX) * this._easeInCubic(t);
-        mesh.position.z = mesh.userData.peekZ + (mesh.userData.hideZ - mesh.userData.peekZ) * this._easeInCubic(t);
+        const ease = this._easeInCubic(t);
+        mesh.position.x = mesh.userData.peekX + (mesh.userData.hideX - mesh.userData.peekX) * ease;
+        mesh.position.z = mesh.userData.peekZ + (mesh.userData.hideZ - mesh.userData.peekZ) * ease;
+        mesh.position.y = mesh.userData.peekY + (mesh.userData.hideY - mesh.userData.peekY) * ease;
         if (t >= 1) {
           mesh.visible = false;
           this.fadeState = 'none';
@@ -332,15 +359,19 @@ export class WildlifeSystem {
     const side = Math.random() > 0.5 ? 1 : -1;
     const perpX = -toPlayerZ * side;
     const perpZ = toPlayerX * side;
-    const peekOffset = 0.5;
+    const peekOffset = 0.8;
 
-    mesh.userData.hideX = tree.x - toPlayerX * 0.3;
-    mesh.userData.hideZ = tree.z - toPlayerZ * 0.3;
+    mesh.userData.hideX = tree.x - toPlayerX * 0.5;
+    mesh.userData.hideZ = tree.z - toPlayerZ * 0.5;
     mesh.userData.peekX = tree.x + perpX * peekOffset - toPlayerX * 0.1;
     mesh.userData.peekZ = tree.z + perpZ * peekOffset - toPlayerZ * 0.1;
 
-    mesh.position.set(mesh.userData.hideX, tree.y, mesh.userData.hideZ);
-    mesh.userData.baseY = tree.y;
+    // Sample terrain height at actual hide/peek positions
+    mesh.userData.hideY = getTerrainHeight(mesh.userData.hideX, mesh.userData.hideZ);
+    mesh.userData.peekY = getTerrainHeight(mesh.userData.peekX, mesh.userData.peekZ);
+
+    mesh.position.set(mesh.userData.hideX, mesh.userData.hideY, mesh.userData.hideZ);
+    mesh.userData.baseY = mesh.userData.hideY;
 
     const faceAngle = Math.atan2(toPlayerX, toPlayerZ);
     mesh.rotation.y = faceAngle;
@@ -360,6 +391,28 @@ export class WildlifeSystem {
       } else {
         this.audio.playGrowl(creatureType, pos);
       }
+    }
+  }
+
+  _updateEyeGlow(mesh) {
+    const shines = mesh.userData.eyeShines;
+    if (!shines || shines.length === 0) return;
+
+    // Glow ramps up as sun goes below horizon
+    const elev = this.sunElevation !== undefined ? this.sunElevation : 1;
+    const darkness = Math.max(0, Math.min(1, (-elev + 0.02) / 0.12)); // 0 at day, 1 at night
+
+    const baseRadius = mesh.userData.eyeShineBaseRadius || 0.01;
+    const baseColor = mesh.userData.eyeShineBaseColor || 0xffffff;
+
+    for (const shine of shines) {
+      // Scale up shine spheres at night (1x day → 2.5x night)
+      const scale = 1 + darkness * 1.5;
+      shine.scale.setScalar(scale);
+
+      // Brighten colour toward white at night for glow effect
+      shine.material.color.set(baseColor);
+      shine.material.color.lerp(new THREE.Color(0xffffff), darkness * 0.4);
     }
   }
 
