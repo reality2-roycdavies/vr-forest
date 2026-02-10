@@ -32,6 +32,12 @@ const dirtNoise2D = createNoise2D(rng5);
 const rng6 = mulberry32(CONFIG.TERRAIN_SEED + 5);
 const rockNoise2D = createNoise2D(rng6);
 
+const rng7 = mulberry32(CONFIG.TERRAIN_SEED + 6);
+const streamNoise2D = createNoise2D(rng7);
+
+const rng8 = mulberry32(CONFIG.TERRAIN_SEED + 7);
+const warpNoise2D = createNoise2D(rng8);
+
 /**
  * Multi-octave fractal noise
  */
@@ -52,10 +58,11 @@ export function fractalNoise(x, z, scale, octaves, persistence, lacunarity) {
 }
 
 /**
- * Get terrain height at world coordinates
+ * Get terrain height at world coordinates.
+ * Includes stream channel carving via domain-warped ridge noise.
  */
 export function getTerrainHeight(worldX, worldZ) {
-  return fractalNoise(
+  const baseHeight = fractalNoise(
     worldX,
     worldZ,
     CONFIG.TERRAIN_SCALE,
@@ -63,6 +70,22 @@ export function getTerrainHeight(worldX, worldZ) {
     CONFIG.TERRAIN_PERSISTENCE,
     CONFIG.TERRAIN_LACUNARITY
   ) * CONFIG.TERRAIN_HEIGHT;
+
+  // Stream channels — ridge noise creates continuous valley lines
+  const warp = CONFIG.STREAM_WARP;
+  const warpX = warpNoise2D(worldX * 0.006, worldZ * 0.006) * warp;
+  const warpZ = warpNoise2D(worldX * 0.006 + 100, worldZ * 0.006 + 100) * warp;
+
+  const scale = CONFIG.STREAM_SCALE;
+  const raw = streamNoise2D((worldX + warpX) * scale, (worldZ + warpZ) * scale);
+  const ridge = 1 - Math.abs(raw);                         // peaks along zero-crossings
+  const channel = Math.pow(ridge, CONFIG.STREAM_SHARPNESS); // sharpen to narrow channels
+
+  // Carve through most terrain, only fade out on the highest peaks
+  const normalizedH = (baseHeight / CONFIG.TERRAIN_HEIGHT + 1) * 0.5; // 0..1
+  const carveMask = Math.max(0, 1 - normalizedH * 0.8);               // carves across most terrain
+
+  return baseHeight - channel * CONFIG.STREAM_DEPTH * carveMask;
 }
 
 /**

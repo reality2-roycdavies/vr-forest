@@ -9,9 +9,9 @@ const _sunPos = new THREE.Vector3();
 const PALETTES = {
   // sunElevation ranges: night < -0.1, twilight -0.1..0.05, day > 0.05
   night: {
-    skyTop:    new THREE.Color(0x162040),
-    skyBottom: new THREE.Color(0x1a2535),
-    fog:       new THREE.Color(0x182030),
+    skyTop:    new THREE.Color(0x0a1228),
+    skyBottom: new THREE.Color(0x080c14),
+    fog:       new THREE.Color(0x060810),
     sun:       new THREE.Color(0x444466),
     sunIntensity: 0,
     hemiSky:   new THREE.Color(0x2a3558),
@@ -31,21 +31,21 @@ const PALETTES = {
     ambient:   0.2,
   },
   golden: {
-    skyTop:    new THREE.Color(0x4a6aaa),
-    skyBottom: new THREE.Color(0xe8a060),
-    fog:       new THREE.Color(0xc8a878),
-    sun:       new THREE.Color(0xffbb44),
-    sunIntensity: 0.8,
-    hemiSky:   new THREE.Color(0x8899aa),
-    hemiGround: new THREE.Color(0x2a2010),
-    hemiIntensity: 0.45,
-    ambient:   0.3,
+    skyTop:    new THREE.Color(0x5a80c0),
+    skyBottom: new THREE.Color(0xeab070),
+    fog:       new THREE.Color(0xb0a890),
+    sun:       new THREE.Color(0xffcc55),
+    sunIntensity: 0.9,
+    hemiSky:   new THREE.Color(0x99aabb),
+    hemiGround: new THREE.Color(0x3a3020),
+    hemiIntensity: 0.55,
+    ambient:   0.38,
   },
   day: {
     skyTop:    new THREE.Color(0x3068cc),
-    skyBottom: new THREE.Color(0x7ab0d8),
+    skyBottom: new THREE.Color(0x7aaccc),
     fog:       new THREE.Color(0x8ab4d0),
-    sun:       new THREE.Color(0xfff4e0),
+    sun:       new THREE.Color(0xffdd66),
     sunIntensity: 1.0,
     hemiSky:   new THREE.Color(0x80c0e8),
     hemiGround: new THREE.Color(0x5a5040),
@@ -58,28 +58,63 @@ export class DayNightSystem {
   constructor(scene) {
     this.scene = scene;
     this.latitude = CONFIG.DEFAULT_LATITUDE;
+    this.timeOffset = 0; // hours offset from real time
 
     // Try to get real location
     this._requestGeolocation();
 
-    // --- Sky dome ---
+    // --- Sky dome (ShaderMaterial for reliable gradient) ---
     this.skyGeo = new THREE.SphereGeometry(CONFIG.SKY_RADIUS, 24, 16);
-    this.skyColors = new Float32Array(this.skyGeo.getAttribute('position').count * 3);
-    this.skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(this.skyColors, 3));
-    this.skyMat = new THREE.MeshBasicMaterial({
-      vertexColors: true,
+    this.skyUniforms = {
+      topColor:    { value: new THREE.Color(0x3068cc) },
+      bottomColor: { value: new THREE.Color(0x7ab0d8) },
+      fogColor:    { value: new THREE.Color(0x8ab4d0) },
+    };
+    this.skyMat = new THREE.ShaderMaterial({
+      uniforms: this.skyUniforms,
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPos.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform vec3 fogColor;
+        varying vec3 vWorldPosition;
+        void main() {
+          float h = normalize(vWorldPosition - cameraPosition).y;
+          float t = max(0.0, h);
+          // Horizon (t=0) = fog color, blends to sky bottom by t=0.2, then to sky top
+          vec3 col = mix(fogColor, bottomColor, smoothstep(0.0, 0.2, t));
+          col = mix(col, topColor, smoothstep(0.2, 1.0, t));
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
       side: THREE.BackSide,
-      fog: false,
       depthWrite: false,
+      depthTest: false,
     });
     this.skyMesh = new THREE.Mesh(this.skyGeo, this.skyMat);
     this.skyMesh.renderOrder = -2;
+    this.skyMesh.frustumCulled = false;
     scene.add(this.skyMesh);
 
-    // --- Sun disc ---
-    const sunGeo = new THREE.CircleGeometry(CONFIG.SUN_VISUAL_RADIUS, 16);
-    this.sunMat = new THREE.MeshBasicMaterial({ color: 0xfff4e0, fog: false, depthTest: false });
-    this.sunMesh = new THREE.Mesh(sunGeo, this.sunMat);
+    // --- Sun disc (soft glow sprite) ---
+    this.sunTexture = this._createSunTexture();
+    this.sunMat = new THREE.SpriteMaterial({
+      map: this.sunTexture,
+      color: 0xffee88,
+      fog: false,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.sunMesh = new THREE.Sprite(this.sunMat);
+    const sunScale = CONFIG.SUN_VISUAL_RADIUS * 3;
+    this.sunMesh.scale.set(sunScale, sunScale, 1);
     this.sunMesh.renderOrder = -1;
     scene.add(this.sunMesh);
 
@@ -214,6 +249,24 @@ export class DayNightSystem {
     }
   }
 
+  _createSunTexture() {
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const half = size / 2;
+    const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+    gradient.addColorStop(0, 'rgba(255,255,240,1)');
+    gradient.addColorStop(0.15, 'rgba(255,245,200,0.9)');
+    gradient.addColorStop(0.35, 'rgba(255,220,120,0.4)');
+    gradient.addColorStop(0.6, 'rgba(255,200,80,0.1)');
+    gradient.addColorStop(1, 'rgba(255,180,60,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(canvas);
+  }
+
   _createCloudTexture() {
     const size = 64;
     const canvas = document.createElement('canvas');
@@ -249,6 +302,9 @@ export class DayNightSystem {
     } else {
       hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
     }
+
+    // Apply manual time offset
+    hours += this.timeOffset;
 
     // Day of year
     const start = new Date(now.getFullYear(), 0, 0);
@@ -299,17 +355,17 @@ export class DayNightSystem {
   _getPalette(elevation) {
     if (elevation < -0.1) {
       return PALETTES.night;
-    } else if (elevation < 0.0) {
+    } else if (elevation < -0.02) {
       // Night to twilight
-      const t = (elevation + 0.1) / 0.1;
+      const t = (elevation + 0.1) / 0.08;
       return this._lerpPalette(PALETTES.night, PALETTES.twilight, t);
-    } else if (elevation < 0.05) {
+    } else if (elevation < 0.02) {
       // Twilight to golden
-      const t = elevation / 0.05;
+      const t = (elevation + 0.02) / 0.04;
       return this._lerpPalette(PALETTES.twilight, PALETTES.golden, t);
-    } else if (elevation < 0.2) {
-      // Golden to day
-      const t = (elevation - 0.05) / 0.15;
+    } else if (elevation < 0.1) {
+      // Golden to day (shorter transition — stays blue longer)
+      const t = (elevation - 0.02) / 0.08;
       return this._lerpPalette(PALETTES.golden, PALETTES.day, t);
     } else {
       return PALETTES.day;
@@ -332,9 +388,8 @@ export class DayNightSystem {
       Math.sin(azimuth) * Math.cos(altAngle) * CONFIG.SUN_DISTANCE
     );
 
-    // Sun disc follows player
+    // Sun disc follows player (Sprite auto-faces camera)
     this.sunMesh.position.copy(playerPos).add(_sunPos);
-    this.sunMesh.lookAt(playerPos);
     this.sunMat.color.copy(palette.sun);
     this.sunMesh.visible = elevation > -0.05;
 
@@ -371,12 +426,26 @@ export class DayNightSystem {
     // --- Ambient light ---
     this.ambientLight.intensity = palette.ambient;
 
-    // --- Fog ---
+    // --- Fog (distance adapts to time of day) ---
     this.scene.fog.color.copy(palette.fog);
     this.scene.background = palette.fog.clone();
+    // Fog stays distant until deep night, then closes in for darkness.
+    let fogNear, fogFar;
+    if (elevation > -0.08) {
+      // Day, golden, twilight — clear, no visible fog
+      fogNear = 120;
+      fogFar = 250;
+    } else {
+      // Night — lerp fog closer as it gets darker
+      const t = Math.min(1, (-0.08 - elevation) / 0.05); // 0 at -0.08, 1 at -0.13
+      fogNear = 120 - t * 100;  // 120 → 20
+      fogFar = 250 - t * 200;   // 250 → 50
+    }
+    this.scene.fog.near = fogNear;
+    this.scene.fog.far = fogFar;
 
-    // --- Sky dome vertex colors ---
-    this._updateSkyColors(palette.skyTop, palette.skyBottom, playerPos);
+    // --- Sky dome (sky blends to fog color at horizon) ---
+    this._updateSkyColors(palette.skyTop, palette.skyBottom, palette.fog, playerPos);
 
     // --- Clouds ---
     this._updateClouds(playerPos, palette, elevation);
@@ -385,20 +454,10 @@ export class DayNightSystem {
     this._updateShootingStars(playerPos, elevation);
   }
 
-  _updateSkyColors(topColor, bottomColor, playerPos) {
-    const posAttr = this.skyGeo.getAttribute('position');
-    const count = posAttr.count;
-
-    for (let i = 0; i < count; i++) {
-      const y = posAttr.getY(i);
-      const t = Math.max(0, y / CONFIG.SKY_RADIUS);
-      _color.lerpColors(bottomColor, topColor, t);
-      this.skyColors[i * 3] = _color.r;
-      this.skyColors[i * 3 + 1] = _color.g;
-      this.skyColors[i * 3 + 2] = _color.b;
-    }
-
-    this.skyGeo.getAttribute('color').needsUpdate = true;
+  _updateSkyColors(topColor, bottomColor, fogColor, playerPos) {
+    this.skyUniforms.topColor.value.copy(topColor);
+    this.skyUniforms.bottomColor.value.copy(bottomColor);
+    this.skyUniforms.fogColor.value.copy(fogColor);
     this.skyMesh.position.set(playerPos.x, 0, playerPos.z);
   }
 

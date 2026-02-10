@@ -85,7 +85,7 @@ export function createBirchBarkTexture(size = 128) {
 /**
  * Leafy canopy texture: dappled green with light/dark patches
  */
-export function createCanopyTexture(baseHex = 0x2d5a1e, size = 64) {
+export function createCanopyTexture(baseHex = 0x2d5a1e, size = 128, style = 'broad') {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -95,17 +95,80 @@ export function createCanopyTexture(baseHex = 0x2d5a1e, size = 64) {
   ctx.fillStyle = `rgb(${base.r}, ${base.g}, ${base.b})`;
   ctx.fillRect(0, 0, size, size);
 
-  // Dappled leaf clusters
-  for (let i = 0; i < 60; i++) {
-    const x = Math.random() * size;
-    const y = Math.random() * size;
-    const r = 2 + Math.random() * 6;
-    const bright = Math.random() > 0.4;
-    const shift = bright ? 25 + Math.random() * 20 : -(15 + Math.random() * 20);
-    ctx.fillStyle = `rgba(${clamp(base.r + shift)}, ${clamp(base.g + shift * 1.3)}, ${clamp(base.b + shift * 0.5)}, ${0.4 + Math.random() * 0.4})`;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
+  if (style === 'needle') {
+    // Pine: dense short needle strokes in varied directions
+    for (let i = 0; i < 300; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const len = 3 + Math.random() * 8;
+      const angle = Math.random() * Math.PI;
+      const bright = Math.random() > 0.4;
+      const shift = bright ? 15 + Math.random() * 25 : -(15 + Math.random() * 25);
+      ctx.strokeStyle = `rgba(${clamp(base.r + shift - 5)}, ${clamp(base.g + shift * 1.2)}, ${clamp(base.b + shift * 0.8)}, ${0.4 + Math.random() * 0.4})`;
+      ctx.lineWidth = 0.5 + Math.random() * 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+      ctx.stroke();
+    }
+    // Dark depth gaps
+    for (let i = 0; i < 40; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      ctx.fillStyle = `rgba(${clamp(base.r - 35)}, ${clamp(base.g - 30)}, ${clamp(base.b - 15)}, ${0.3 + Math.random() * 0.3})`;
+      ctx.fillRect(x, y, 1 + Math.random() * 3, 1 + Math.random() * 3);
+    }
+  } else if (style === 'broad') {
+    // Oak: larger overlapping leaf-like ellipses
+    for (let i = 0; i < 80; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const rx = 3 + Math.random() * 7;
+      const ry = rx * (0.5 + Math.random() * 0.5);
+      const rot = Math.random() * Math.PI;
+      const bright = Math.random() > 0.35;
+      const shift = bright ? 20 + Math.random() * 30 : -(20 + Math.random() * 25);
+      const hueShift = (Math.random() - 0.5) * 12;
+      ctx.fillStyle = `rgba(${clamp(base.r + shift + hueShift)}, ${clamp(base.g + shift * 1.3)}, ${clamp(base.b + shift * 0.4)}, ${0.35 + Math.random() * 0.45})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Leaf veins / dark gaps
+    for (let i = 0; i < 30; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = 1 + Math.random() * 3;
+      ctx.fillStyle = `rgba(${clamp(base.r - 40)}, ${clamp(base.g - 35)}, ${clamp(base.b - 15)}, ${0.25 + Math.random() * 0.3})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    // Birch: small round leaves, lighter, with yellow-green tint
+    for (let i = 0; i < 120; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = 1.5 + Math.random() * 4;
+      const bright = Math.random() > 0.3;
+      const shift = bright ? 20 + Math.random() * 40 : -(15 + Math.random() * 20);
+      // Birch leaves tend yellow-green
+      const yellowShift = Math.random() * 20;
+      ctx.fillStyle = `rgba(${clamp(base.r + shift + yellowShift)}, ${clamp(base.g + shift * 1.2 + yellowShift * 0.5)}, ${clamp(base.b + shift * 0.3)}, ${0.35 + Math.random() * 0.45})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Bright highlight spots (light filtering through)
+    for (let i = 0; i < 15; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = 2 + Math.random() * 4;
+      ctx.fillStyle = `rgba(${clamp(base.r + 50)}, ${clamp(base.g + 45)}, ${clamp(base.b + 10)}, ${0.15 + Math.random() * 0.2})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   const tex = new THREE.CanvasTexture(canvas);

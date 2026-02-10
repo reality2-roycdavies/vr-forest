@@ -34,6 +34,11 @@ export class AmbientAudio {
     // Rustle state
     this._activeRustles = 0;
     this._rustleCooldown = 0;
+
+    // Morepork (NZ owl) — nighttime call
+    this._moreporkBuffer = null;
+    this._moreporkTimer = 0;
+    this._moreporkNextTime = 20 + Math.random() * 40;
   }
 
   /**
@@ -61,6 +66,7 @@ export class AmbientAudio {
     this._createNoiseBuffer();
 
     this._startWind();
+    this._loadMorepork();
   }
 
   /**
@@ -91,6 +97,18 @@ export class AmbientAudio {
     // Crickets
     if (sunElevation !== undefined) {
       this._updateCrickets(sunElevation);
+    }
+
+    // Morepork — nighttime owl call
+    if (sunElevation !== undefined && sunElevation < -0.03) {
+      this._moreporkTimer += delta;
+      if (this._moreporkTimer >= this._moreporkNextTime) {
+        this._playMorepork(playerPos);
+        this._moreporkTimer = 0;
+        this._moreporkNextTime = 30 + Math.random() * 60;
+      }
+    } else {
+      this._moreporkTimer = 0;
     }
 
     // Rustling leaves — disabled, synthetic noise doesn't convincingly replicate leaves
@@ -260,7 +278,9 @@ export class AmbientAudio {
   }
 
   _playFootstep(groundType) {
-    if (groundType === 'rock') {
+    if (groundType === 'water') {
+      this._waterStep();
+    } else if (groundType === 'rock') {
       this._rockStep();
     } else {
       this._grassStep();
@@ -364,6 +384,89 @@ export class AmbientAudio {
     toeGain.connect(this.masterGain);
     toe.start(now + toeDelay);
     toe.stop(now + toeDelay + 0.06);
+  }
+
+  _waterStep() {
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const variation = 1 + (Math.random() - 0.5) * CONFIG.FOOTSTEP_PITCH_VARIATION * 2;
+    const vol = CONFIG.FOOTSTEP_VOLUME;
+
+    // 1. Primary slosh — bandpass noise in the watery mid range, no low-end
+    const slosh = ctx.createBufferSource();
+    slosh.buffer = this._noiseBuffer;
+    slosh.playbackRate.value = 0.6 + Math.random() * 0.3;
+
+    const sloshBP = ctx.createBiquadFilter();
+    sloshBP.type = 'bandpass';
+    sloshBP.frequency.setValueAtTime(900 * variation, now);
+    sloshBP.frequency.exponentialRampToValueAtTime(400, now + 0.4);
+    sloshBP.Q.value = 0.8;
+
+    // Cut the low end that causes drumming
+    const sloshHP = ctx.createBiquadFilter();
+    sloshHP.type = 'highpass';
+    sloshHP.frequency.value = 250;
+
+    const sloshGain = ctx.createGain();
+    sloshGain.gain.setValueAtTime(0, now);
+    sloshGain.gain.setTargetAtTime(vol * 2.5, now, 0.035);
+    sloshGain.gain.setTargetAtTime(0, now + 0.12, 0.1);
+
+    slosh.connect(sloshHP);
+    sloshHP.connect(sloshBP);
+    sloshBP.connect(sloshGain);
+    sloshGain.connect(this.masterGain);
+    slosh.start(now);
+    slosh.stop(now + 0.6);
+
+    // 2. Return slosh — delayed, slightly higher band, water settling
+    const ret = ctx.createBufferSource();
+    ret.buffer = this._noiseBuffer;
+    ret.playbackRate.value = 0.7 + Math.random() * 0.3;
+
+    const retBP = ctx.createBiquadFilter();
+    retBP.type = 'bandpass';
+    retBP.frequency.setValueAtTime(700 * variation, now + 0.1);
+    retBP.frequency.exponentialRampToValueAtTime(350, now + 0.5);
+    retBP.Q.value = 0.7;
+
+    const retHP = ctx.createBiquadFilter();
+    retHP.type = 'highpass';
+    retHP.frequency.value = 250;
+
+    const retGain = ctx.createGain();
+    retGain.gain.setValueAtTime(0, now);
+    retGain.gain.setTargetAtTime(vol * 1.8, now + 0.1, 0.04);
+    retGain.gain.setTargetAtTime(0, now + 0.22, 0.09);
+
+    ret.connect(retHP);
+    retHP.connect(retBP);
+    retBP.connect(retGain);
+    retGain.connect(this.masterGain);
+    ret.start(now + 0.08);
+    ret.stop(now + 0.65);
+
+    // 3. Droplet spray — higher frequency splash detail
+    const spray = ctx.createBufferSource();
+    spray.buffer = this._noiseBuffer;
+    spray.playbackRate.value = 1.0 + Math.random() * 0.5;
+
+    const sprayBP = ctx.createBiquadFilter();
+    sprayBP.type = 'bandpass';
+    sprayBP.frequency.value = 2200 * variation;
+    sprayBP.Q.value = 0.5;
+
+    const sprayGain = ctx.createGain();
+    sprayGain.gain.setValueAtTime(0, now);
+    sprayGain.gain.setTargetAtTime(vol * 0.5, now + 0.05, 0.025);
+    sprayGain.gain.setTargetAtTime(0, now + 0.15, 0.06);
+
+    spray.connect(sprayBP);
+    sprayBP.connect(sprayGain);
+    sprayGain.connect(this.masterGain);
+    spray.start(now + 0.03);
+    spray.stop(now + 0.5);
   }
 
   // ======== Crickets — night ambient, 4 sine voices with chirp bursts ========
@@ -788,5 +891,53 @@ export class AmbientAudio {
       this.ctx = null;
     }
     this.started = false;
+  }
+
+  // ======== Morepork (NZ owl) ========
+
+  _loadMorepork() {
+    fetch('assets/audio/morepork-single.mp3')
+      .then(r => {
+        if (!r.ok) throw new Error('morepork fetch failed: ' + r.status);
+        return r.arrayBuffer();
+      })
+      .then(buf => this.ctx.decodeAudioData(buf))
+      .then(decoded => {
+        this._moreporkBuffer = decoded;
+        console.log('Morepork audio loaded:', decoded.duration.toFixed(1) + 's');
+      })
+      .catch(e => { console.warn('Morepork load error:', e); });
+  }
+
+  _playMorepork(playerPos) {
+    if (!this._moreporkBuffer || !playerPos) return;
+    const ctx = this.ctx;
+
+    // Random distant position around the player
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 40 + Math.random() * 60; // 40-100m away
+    const px = playerPos.x + Math.cos(angle) * dist;
+    const pz = playerPos.z + Math.sin(angle) * dist;
+    const py = playerPos.y + 8 + Math.random() * 12; // up in trees
+
+    const source = ctx.createBufferSource();
+    source.buffer = this._moreporkBuffer;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.15 + Math.random() * 0.1;
+
+    const panner = ctx.createPanner();
+    panner.panningModel = 'HRTF';
+    panner.distanceModel = 'inverse';
+    panner.refDistance = 20;
+    panner.maxDistance = 150;
+    panner.rolloffFactor = 0.6;
+    panner.setPosition(px, py, pz);
+
+    source.connect(gain);
+    gain.connect(panner);
+    panner.connect(this.spatialBus);
+
+    source.start();
   }
 }

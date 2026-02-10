@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { createBarkTexture, createBirchBarkTexture, createCanopyTexture } from './textures.js';
+import { addWindToMaterial } from '../atmosphere/wind.js';
 
 const trunkGeometries = [];
 const canopyGeometries = [];
@@ -16,82 +17,98 @@ export function initTreeGeometries() {
   const barkTex = createBarkTexture('#5c3a1e', 128);
   const birchTex = createBirchBarkTexture(128);
   const canopyTexes = [
-    createCanopyTexture(0x2d5a1e, 64),
-    createCanopyTexture(0x3a6b2a, 64),
-    createCanopyTexture(0x4a8a2e, 64),
+    createCanopyTexture(0x18401a, 128, 'needle'),  // Pine: dark cool green needles
+    createCanopyTexture(0x386020, 128, 'broad'),    // Oak: warm rich green broad leaves
+    createCanopyTexture(0x5a9035, 128, 'small'),    // Birch: bright yellow-green small leaves
   ];
 
   const trunkMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: barkTex });
   const birchMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: birchTex });
+  addWindToMaterial(trunkMat, 'tree');
+  addWindToMaterial(birchMat, 'tree');
 
   // --- Type 0: Pine ---
   {
-    const trunk = buildTrunk(0.06, 0.13, 1.1, 6, 3, [
-      { height: 0.6, angle: 0.5, length: 0.25 },
-      { height: 0.85, angle: -0.7, length: 0.18 },
+    const trunk = buildTrunk(0.06, 0.13, 1.1, 8, 4, [
+      { height: 0.4, angle: 0.5, length: 0.25 },
+      { height: 0.6, angle: -0.7, length: 0.22 },
+      { height: 0.85, angle: 1.9, length: 0.18 },
     ]);
     addCylindricalUVs(trunk, 1.1);
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopyLobe(0, 1.0, 0, 0.75, 1.1, 7));
-    parts.push(makeCanopyLobe(0.05, 1.5, -0.03, 0.55, 0.85, 7));
-    parts.push(makeCanopyLobe(-0.03, 1.9, 0.04, 0.35, 0.6, 6));
+    parts.push(makeCanopyLobe(0, 0.85, 0, 0.8, 1.1, 9));
+    parts.push(makeCanopyLobe(0.1, 1.2, -0.08, 0.65, 0.9, 9));
+    parts.push(makeCanopyLobe(-0.08, 1.5, 0.06, 0.5, 0.75, 8));
+    parts.push(makeCanopyLobe(0.05, 1.8, -0.03, 0.38, 0.6, 7));
+    parts.push(makeCanopyLobe(-0.04, 2.05, 0.02, 0.25, 0.4, 6));
     const canopy = mergeAll(parts);
-    tintCanopyVertexColors(canopy, 0x2d5a1e, 0.15);
+    tintCanopyVertexColors(canopy, 0x18401a, 0.28);
     addSphericalUVs(canopy);
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(trunkMat);
-    canopyMaterials.push(new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[0] }));
+    const pineMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[0] });
+    addWindToMaterial(pineMat, 'canopy');
+    canopyMaterials.push(pineMat);
   }
 
   // --- Type 1: Oak ---
   {
-    const trunk = buildTrunk(0.09, 0.17, 0.95, 6, 3, [
-      { height: 0.5, angle: 0.8, length: 0.35 },
-      { height: 0.55, angle: -0.6, length: 0.3 },
-      { height: 0.75, angle: 1.8, length: 0.2 },
+    const trunk = buildTrunk(0.09, 0.17, 0.95, 8, 4, [
+      { height: 0.4, angle: 0.8, length: 0.35 },
+      { height: 0.5, angle: -0.6, length: 0.3 },
+      { height: 0.65, angle: 1.8, length: 0.25 },
+      { height: 0.8, angle: -1.2, length: 0.18 },
     ]);
     addCylindricalUVs(trunk, 0.95);
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopySphere(0, 1.45, 0, 0.55, 1));
-    parts.push(makeCanopySphere(0.3, 1.35, 0.15, 0.45, 1));
-    parts.push(makeCanopySphere(-0.25, 1.4, -0.2, 0.48, 1));
-    parts.push(makeCanopySphere(0.05, 1.65, -0.1, 0.4, 1));
+    parts.push(makeCanopySphere(0, 1.35, 0, 0.55, 2));
+    parts.push(makeCanopySphere(0.32, 1.25, 0.18, 0.45, 2));
+    parts.push(makeCanopySphere(-0.28, 1.3, -0.22, 0.48, 2));
+    parts.push(makeCanopySphere(0.05, 1.6, -0.12, 0.42, 2));
+    parts.push(makeCanopySphere(-0.15, 1.55, 0.25, 0.38, 2));
+    parts.push(makeCanopySphere(0.2, 1.5, -0.3, 0.35, 1));
     const canopy = mergeAll(parts);
-    tintCanopyVertexColors(canopy, 0x3a6b2a, 0.12);
+    tintCanopyVertexColors(canopy, 0x386020, 0.25);
     addSphericalUVs(canopy);
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(trunkMat);
-    canopyMaterials.push(new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[1] }));
+    const oakMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[1] });
+    addWindToMaterial(oakMat, 'canopy');
+    canopyMaterials.push(oakMat);
   }
 
   // --- Type 2: Birch ---
   {
-    const trunk = buildTrunk(0.04, 0.07, 1.3, 5, 4, [
-      { height: 0.7, angle: 0.6, length: 0.22 },
-      { height: 1.0, angle: -0.9, length: 0.18 },
-      { height: 1.15, angle: 1.5, length: 0.15 },
+    const trunk = buildTrunk(0.04, 0.07, 1.3, 6, 5, [
+      { height: 0.6, angle: 0.6, length: 0.22 },
+      { height: 0.85, angle: -0.9, length: 0.2 },
+      { height: 1.0, angle: 1.5, length: 0.18 },
+      { height: 1.15, angle: -0.3, length: 0.12 },
     ]);
     tintTrunkBirch(trunk);
     addCylindricalUVs(trunk, 1.3);
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopyLobe(0.15, 1.3, 0.1, 0.45, 0.7, 6));
-    parts.push(makeCanopyLobe(-0.2, 1.5, -0.1, 0.38, 0.55, 6));
-    parts.push(makeCanopyLobe(0.0, 1.75, 0.0, 0.3, 0.5, 5));
+    parts.push(makeCanopyLobe(0.18, 1.2, 0.12, 0.48, 0.7, 8));
+    parts.push(makeCanopyLobe(-0.22, 1.4, -0.12, 0.4, 0.6, 8));
+    parts.push(makeCanopyLobe(0.0, 1.65, 0.0, 0.33, 0.5, 7));
+    parts.push(makeCanopyLobe(0.1, 1.85, -0.08, 0.22, 0.35, 6));
     const canopy = mergeAll(parts);
-    tintCanopyVertexColors(canopy, 0x4a8a2e, 0.18);
+    tintCanopyVertexColors(canopy, 0x5a9035, 0.3);
     addSphericalUVs(canopy);
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(birchMat);
-    canopyMaterials.push(new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[2] }));
+    const birchCanopyMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[2] });
+    addWindToMaterial(birchCanopyMat, 'canopy');
+    canopyMaterials.push(birchCanopyMat);
   }
 }
 
@@ -110,8 +127,8 @@ function buildTrunk(radiusTop, radiusBot, height, radialSegs, heightSegs, branch
   for (let i = 0; i < posAttr.count; i++) {
     const y = posAttr.getY(i);
     const t = y / height;
-    // Slight S-curve bend
-    const bend = Math.sin(t * Math.PI) * 0.03;
+    // S-curve bend for organic feel
+    const bend = Math.sin(t * Math.PI) * 0.06 + Math.sin(t * Math.PI * 2.5) * 0.02;
     posAttr.setX(i, posAttr.getX(i) + bend);
   }
   posAttr.needsUpdate = true;
@@ -166,9 +183,8 @@ function tintTrunkBirch(geometry) {
  * A cone lobe for conifer-style canopies
  */
 function makeCanopyLobe(ox, oy, oz, radius, height, segments) {
-  const cone = new THREE.ConeGeometry(radius, height, segments);
-  // Jitter vertices slightly for organic feel
-  jitterVertices(cone, 0.04);
+  const cone = new THREE.ConeGeometry(radius, height, segments, 3, true); // openEnded: no flat base
+  jitterVertices(cone, 0.08);
   cone.translate(ox, oy + height * 0.35, oz);
   return cone;
 }
@@ -178,8 +194,7 @@ function makeCanopyLobe(ox, oy, oz, radius, height, segments) {
  */
 function makeCanopySphere(ox, oy, oz, radius, detail) {
   const sphere = new THREE.IcosahedronGeometry(radius, detail);
-  // Jitter for bumpiness
-  jitterVertices(sphere, 0.06);
+  jitterVertices(sphere, 0.1);
   sphere.translate(ox, oy, oz);
   return sphere;
 }

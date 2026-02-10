@@ -1,4 +1,4 @@
-// Locomotion + snap turn + terrain following + jump + walk bob + rock climbing
+// Locomotion + snap turn + terrain following + jump + walk bob + rock climbing + swimming
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { getTerrainHeight } from './terrain/noise.js';
@@ -24,6 +24,9 @@ export class MovementSystem {
     // Walk bob
     this.bobPhase = 0;
     this.bobActive = false;
+
+    // Swimming
+    this.isSwimming = false;
   }
 
   update(delta) {
@@ -32,7 +35,27 @@ export class MovementSystem {
     const left = this.input.leftStick;
     const right = this.input.rightStick;
 
+    // --- Calculate ground surface (terrain + rocks) ---
+    const px = dolly.position.x;
+    const pz = dolly.position.z;
+    const terrainY = getTerrainHeight(px, pz);
+    const rockY = this._getRockSurfaceY(px, pz);
+    const solidGroundY = Math.max(terrainY, rockY);
+
+    // --- Detect swimming: water deep enough to submerge player ---
+    const waterLevel = CONFIG.WATER_LEVEL;
+    const waterDepth = waterLevel - terrainY;
+    this.isSwimming = waterDepth > CONFIG.SWIM_DEPTH_THRESHOLD;
+
+    if (this.isSwimming) {
+      // Float on water surface: eyes just above water
+      this.currentGroundY = waterLevel + CONFIG.SWIM_EYE_ABOVE_WATER - CONFIG.TERRAIN_FOLLOW_OFFSET;
+    } else {
+      this.currentGroundY = solidGroundY;
+    }
+
     // --- Continuous locomotion (left stick) ---
+    const moveSpeed = this.isSwimming ? CONFIG.SWIM_SPEED : CONFIG.MOVE_SPEED;
     let isMoving = false;
     if (Math.abs(left.x) > 0 || Math.abs(left.y) > 0) {
       camera.getWorldDirection(_forward);
@@ -47,12 +70,12 @@ export class MovementSystem {
 
       if (_move.lengthSq() > 0) {
         _move.normalize();
-        _move.multiplyScalar(CONFIG.MOVE_SPEED * delta);
+        _move.multiplyScalar(moveSpeed * delta);
 
         const newX = dolly.position.x + _move.x;
         const newZ = dolly.position.z + _move.z;
 
-        if (!this._collidesWithTree(newX, newZ)) {
+        if (this.isSwimming || !this._collidesWithTree(newX, newZ)) {
           dolly.position.x = newX;
           dolly.position.z = newZ;
           isMoving = true;
@@ -72,7 +95,7 @@ export class MovementSystem {
     if (this.snapCooldown > 0) {
       this.snapCooldown -= delta;
     }
-    if (!this.input.pointerLocked && Math.abs(right.x) > CONFIG.SNAP_TURN_DEADZONE && this.snapCooldown <= 0) {
+    if (!this.input.pointerLocked && !this.input.rightGrip && Math.abs(right.x) > CONFIG.SNAP_TURN_DEADZONE && this.snapCooldown <= 0) {
       const angle = -Math.sign(right.x) * THREE.MathUtils.degToRad(CONFIG.SNAP_TURN_ANGLE);
       dolly.rotateY(angle);
       this.snapCooldown = CONFIG.SNAP_TURN_COOLDOWN;
@@ -81,21 +104,20 @@ export class MovementSystem {
     // --- Mouse look (desktop only) ---
     this.input.applyMouseLook(dolly, camera);
 
-    // --- Calculate ground surface (terrain + rocks) ---
-    const px = dolly.position.x;
-    const pz = dolly.position.z;
-    const terrainY = getTerrainHeight(px, pz);
-    const rockY = this._getRockSurfaceY(px, pz);
-    this.currentGroundY = Math.max(terrainY, rockY);
-
-    // --- Jump ---
-    if (this.input.jumpPressed && this.isGrounded) {
+    // --- Jump (disabled while swimming) ---
+    if (!this.isSwimming && this.input.jumpPressed && this.isGrounded) {
       this.velocityY = CONFIG.JUMP_VELOCITY;
       this.isGrounded = false;
     }
 
     // --- Vertical physics ---
-    if (!this.isGrounded) {
+    if (this.isSwimming) {
+      // Smoothly float to water surface
+      const targetY = this.currentGroundY;
+      dolly.position.y += (targetY - dolly.position.y) * Math.min(1, delta * 10);
+      this.velocityY = 0;
+      this.isGrounded = true;
+    } else if (!this.isGrounded) {
       this.velocityY -= CONFIG.GRAVITY * delta;
       dolly.position.y += this.velocityY * delta;
 
@@ -111,10 +133,12 @@ export class MovementSystem {
       dolly.position.y += (targetY - dolly.position.y) * Math.min(1, delta * 12);
     }
 
-    // --- Walk bob ---
+    // --- Walk / swim bob ---
     if (isMoving && this.isGrounded) {
-      this.bobPhase += delta * CONFIG.WALK_BOB_SPEED;
-      this.bobAmplitude = CONFIG.WALK_BOB_AMOUNT;
+      const bobSpeed = this.isSwimming ? CONFIG.SWIM_BOB_SPEED : CONFIG.WALK_BOB_SPEED;
+      const bobAmount = this.isSwimming ? CONFIG.SWIM_BOB_AMOUNT : CONFIG.WALK_BOB_AMOUNT;
+      this.bobPhase += delta * bobSpeed;
+      this.bobAmplitude = bobAmount;
     } else {
       // Decay amplitude to zero when stopped
       this.bobAmplitude = (this.bobAmplitude || 0) * Math.max(0, 1 - delta * 6);
@@ -132,7 +156,11 @@ export class MovementSystem {
 
     // Expose state for audio system
     this.isMoving = isMoving && this.isGrounded;
-    this.groundType = (rockY > terrainY + 0.01) ? 'rock' : 'grass';
+    if (terrainY < CONFIG.WATER_LEVEL + 0.1) {
+      this.groundType = 'water';
+    } else {
+      this.groundType = (rockY > terrainY + 0.01) ? 'rock' : 'grass';
+    }
   }
 
   /**

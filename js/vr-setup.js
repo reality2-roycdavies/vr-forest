@@ -31,7 +31,7 @@ export class VRSetup {
       70,
       window.innerWidth / window.innerHeight,
       0.1,
-      200
+      250
     );
     this.camera.position.set(0, CONFIG.TERRAIN_FOLLOW_OFFSET, 0);
 

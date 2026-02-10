@@ -3,9 +3,9 @@
 export const CONFIG = {
   // Terrain
   CHUNK_SIZE: 32,           // meters per chunk side
-  CHUNK_SEGMENTS: 15,       // vertices per side (16x16 grid = 15x15 quads = 450 tris)
-  LOAD_RADIUS: 3,           // chunks to load around player
-  UNLOAD_RADIUS: 5,         // chunks beyond this get recycled
+  CHUNK_SEGMENTS: 31,       // vertices per side (32x32 grid = 31x31 quads = 1922 tris)
+  LOAD_RADIUS: 5,           // chunks to load around player
+  UNLOAD_RADIUS: 7,         // chunks beyond this get recycled
   MAX_CHUNKS_PER_FRAME: 2,  // staggered loading
 
   // Terrain noise
@@ -31,7 +31,7 @@ export const CONFIG = {
   VEG_DENSITY_THRESHOLD: -0.1,
   VEG_GRASS_SCALE: 0.4,
   VEG_ROCK_SCALE: 0.3,
-  VEG_FERN_SCALE: 0.5,
+  VEG_FERN_SCALE: 1.2,
 
   // Movement
   MOVE_SPEED: 3.0,            // m/s
@@ -47,9 +47,9 @@ export const CONFIG = {
   ROCK_COLLISION_RADII: [0.15, 0.35, 0.7], // per size index
 
   // Atmosphere
-  FOG_NEAR: 30,
-  FOG_FAR: 90,
-  SKY_RADIUS: 500,
+  FOG_NEAR: 50,
+  FOG_FAR: 130,
+  SKY_RADIUS: 200,
   AMBIENT_VOLUME: 0.3,
   SUN_VISUAL_RADIUS: 5,        // visual sun disc size
   SUN_DISTANCE: 150,           // distance from player (within camera far plane)
@@ -74,6 +74,23 @@ export const CONFIG = {
   ROCK_DENSITY_THRESHOLD: 0.45, // noise threshold for rock placement
   ROCK_COLORS: [0x787878, 0x8a8580, 0x6e6e6e, 0x959085],
 
+  // Water / shore
+  WATER_LEVEL: -3.5,          // Y at or below = water (flattened to this Y)
+  SHORE_LEVEL: -2.0,          // Y below this = sandy shore (no vegetation)
+  SHORE_COLOR: { r: 0.82, g: 0.71, b: 0.55 },   // sandy beige
+  WATER_COLOR: { r: 0.05, g: 0.15, b: 0.28 },   // dark opaque water
+  SWIM_DEPTH_THRESHOLD: 1.2,  // water deeper than this triggers swimming
+  SWIM_SPEED: 1.8,            // m/s (slower than walking)
+  SWIM_BOB_SPEED: 0.6,        // slow undulating bob
+  SWIM_BOB_AMOUNT: 0.025,     // gentle subtle sway
+  SWIM_EYE_ABOVE_WATER: 0.45, // how far eyes peek above water surface
+
+  // Stream channels (ridge noise carving)
+  STREAM_SCALE: 0.009,        // lower frequency = longer continuous channels
+  STREAM_DEPTH: 6.0,          // deeper carving to push more below water level
+  STREAM_WARP: 22,            // more meander
+  STREAM_SHARPNESS: 2,        // wider channels (lower = broader)
+
   // Colors
   GROUND_LOW_COLOR: { r: 0.18, g: 0.32, b: 0.08 },   // dark green (low)
   GROUND_MID_COLOR: { r: 0.28, g: 0.45, b: 0.12 },   // mid green
@@ -85,10 +102,10 @@ export const CONFIG = {
   GRASS_COLOR: 0x4a7a2e,
   ROCK_COLOR: 0x888888,
   FERN_COLOR: 0x2d6a1e,
-  FLOWER_COLORS: [0xe84393, 0xfdcb6e, 0x6c5ce7, 0xf8a5c2, 0xffeaa7],
-  FLOWER_DENSITY_THRESHOLD: 0.55,
-  FLOWER_GRID_SPACING: 2.5,
-  FLOWER_SCALE: 0.3,
+  FLOWER_COLORS: [0xff4da6, 0xffe040, 0x8b6cf7, 0xff80b0, 0xffee55, 0xff6060],
+  FLOWER_DENSITY_THRESHOLD: 0.45,
+  FLOWER_GRID_SPACING: 2.0,
+  FLOWER_SCALE: 0.55,
 
   // Footsteps
   FOOTSTEP_VOLUME: 0.12,

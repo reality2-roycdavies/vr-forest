@@ -26,8 +26,12 @@ export function generateTerrainData(chunkX, chunkZ) {
   const dirt = CONFIG.GROUND_DIRT_COLOR;
   const dirtDark = CONFIG.GROUND_DIRT_DARK;
   const dirtThresh = CONFIG.GROUND_DIRT_THRESHOLD;
+  const waterLevel = CONFIG.WATER_LEVEL;
+  const shoreLevel = CONFIG.SHORE_LEVEL;
+  const waterCol = CONFIG.WATER_COLOR;
+  const shoreCol = CONFIG.SHORE_COLOR;
 
-  // Generate vertices + UVs
+  // Generate vertices + UVs (natural terrain height, no clamping)
   let minH = Infinity, maxH = -Infinity;
   for (let iz = 0; iz < verticesPerSide; iz++) {
     for (let ix = 0; ix < verticesPerSide; ix++) {
@@ -52,45 +56,61 @@ export function generateTerrainData(chunkX, chunkZ) {
     }
   }
 
-  // Assign vertex colors: blend grass/height gradient with dirt patches
-  const range = maxH - minH || 1;
+  // Assign vertex colors: water / shore / grass+dirt
+  // Use global fixed height range so colors match across chunk boundaries
+  const globalMin = -CONFIG.TERRAIN_HEIGHT;
+  const globalMax = CONFIG.TERRAIN_HEIGHT;
+  const range = globalMax - globalMin;
   for (let iz = 0; iz < verticesPerSide; iz++) {
     for (let ix = 0; ix < verticesPerSide; ix++) {
       const i = iz * verticesPerSide + ix;
-      const h = positions[i * 3 + 1];
-      const t = (h - minH) / range;
-
       const worldX = worldOffsetX + ix * step;
       const worldZ = worldOffsetZ + iz * step;
+      const rawHeight = getTerrainHeight(worldX, worldZ);
 
-      // Base grass color from height
       let gr, gg, gb;
-      if (t < 0.5) {
-        const s = t * 2;
-        gr = low.r + (mid.r - low.r) * s;
-        gg = low.g + (mid.g - low.g) * s;
-        gb = low.b + (mid.b - low.b) * s;
+
+      if (rawHeight <= waterLevel) {
+        // Underwater sandy bottom — darker wet sand, seen through water plane
+        gr = 0.45;
+        gg = 0.38;
+        gb = 0.25;
+      } else if (rawHeight <= shoreLevel) {
+        // Shore — lerp from shore color to grass low color
+        const st = (rawHeight - waterLevel) / (shoreLevel - waterLevel);
+        gr = shoreCol.r + (low.r - shoreCol.r) * st;
+        gg = shoreCol.g + (low.g - shoreCol.g) * st;
+        gb = shoreCol.b + (low.b - shoreCol.b) * st;
       } else {
-        const s = (t - 0.5) * 2;
-        gr = mid.r + (high.r - mid.r) * s;
-        gg = mid.g + (high.g - mid.g) * s;
-        gb = mid.b + (high.b - mid.b) * s;
-      }
+        // Normal grass/dirt coloring — t based on global height range
+        const h = rawHeight;
+        const t = (h - globalMin) / range;
 
-      // Dirt blending
-      const dirtAmt = getDirtAmount(worldX, worldZ);
-      if (dirtAmt > dirtThresh) {
-        // Smooth blend from grass to dirt
-        const blend = Math.min(1, (dirtAmt - dirtThresh) / (1 - dirtThresh) * 1.8);
-        // Mix dirt with darker variant based on height
-        const dt = t < 0.3 ? 0.4 : 0;
-        const dr = dirt.r + (dirtDark.r - dirt.r) * dt;
-        const dg = dirt.g + (dirtDark.g - dirt.g) * dt;
-        const db = dirt.b + (dirtDark.b - dirt.b) * dt;
+        if (t < 0.5) {
+          const s = t * 2;
+          gr = low.r + (mid.r - low.r) * s;
+          gg = low.g + (mid.g - low.g) * s;
+          gb = low.b + (mid.b - low.b) * s;
+        } else {
+          const s = (t - 0.5) * 2;
+          gr = mid.r + (high.r - mid.r) * s;
+          gg = mid.g + (high.g - mid.g) * s;
+          gb = mid.b + (high.b - mid.b) * s;
+        }
 
-        gr = gr + (dr - gr) * blend;
-        gg = gg + (dg - gg) * blend;
-        gb = gb + (db - gb) * blend;
+        // Dirt blending
+        const dirtAmt = getDirtAmount(worldX, worldZ);
+        if (dirtAmt > dirtThresh) {
+          const blend = Math.min(1, (dirtAmt - dirtThresh) / (1 - dirtThresh) * 1.8);
+          const dt = t < 0.3 ? 0.4 : 0;
+          const dr = dirt.r + (dirtDark.r - dirt.r) * dt;
+          const dg = dirt.g + (dirtDark.g - dirt.g) * dt;
+          const db = dirt.b + (dirtDark.b - dirt.b) * dt;
+
+          gr = gr + (dr - gr) * blend;
+          gg = gg + (dg - gg) * blend;
+          gb = gb + (db - gb) * blend;
+        }
       }
 
       // Subtle per-vertex variation

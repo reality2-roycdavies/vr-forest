@@ -93,6 +93,7 @@ export class Chunk {
           const jx = wx + jitter.x * CONFIG.TREE_JITTER;
           const jz = wz + jitter.z * CONFIG.TREE_JITTER;
           const y = getTerrainHeight(jx, jz);
+          if (y < CONFIG.SHORE_LEVEL) continue;
 
           const type = Math.abs(Math.floor(density * 30)) % CONFIG.TREE_TYPES;
           const scale = CONFIG.TREE_MIN_HEIGHT +
@@ -124,14 +125,28 @@ export class Chunk {
           const jx = wx + jitter.x * 0.5;
           const jz = wz + jitter.z * 0.5;
           const y = getTerrainHeight(jx, jz);
+          if (y < CONFIG.SHORE_LEVEL) continue;
 
-          // Type: 0=grass, 2=fern (rocks handled separately now)
+          // Type: 0=grass, 2=fern
           let type;
-          if (density > 0.5) type = 2;      // fern
-          else type = 0;                      // grass
+          if (density > 0.35) type = 2;      // fern (more common)
+          else type = 0;                       // grass
 
           const scale = 0.5 + density * 0.8;
           this.vegPositions.push({ x: jx, y, z: jz, type, scale });
+
+          // Fern clusters: add 2-3 more ferns nearby
+          if (type === 2 && density > 0.45) {
+            for (let c = 0; c < 3; c++) {
+              const cj = getJitter(wx + c * 33, wz + c * 77);
+              const cx = jx + cj.x * 0.6;
+              const cz = jz + cj.z * 0.6;
+              const cy = getTerrainHeight(cx, cz);
+              if (cy < CONFIG.SHORE_LEVEL) continue;
+              const cs = scale * (0.7 + Math.abs(cj.x) * 0.4);
+              this.vegPositions.push({ x: cx, y: cy, z: cz, type: 2, scale: cs });
+            }
+          }
         }
       }
     }
@@ -156,11 +171,25 @@ export class Chunk {
           const jx = wx + jitter.x * 0.8;
           const jz = wz + jitter.z * 0.8;
           const y = getTerrainHeight(jx, jz);
+          if (y < CONFIG.SHORE_LEVEL) continue;
 
+          // Same color for whole cluster
           const colorIdx = Math.abs(Math.floor((jx * 7.7 + jz * 3.3) * 100)) % numColors;
           const scale = CONFIG.FLOWER_SCALE + density * 0.3;
 
           this.flowerPositions.push({ x: jx, y, z: jz, colorIdx, scale });
+
+          // Cluster: add 3-5 more flowers nearby in same color
+          const clusterCount = 3 + Math.floor(density * 4);
+          for (let c = 0; c < clusterCount; c++) {
+            const cj = getJitter(wx + c * 41 + 200, wz + c * 67 + 200);
+            const cx = jx + cj.x * 0.4;
+            const cz = jz + cj.z * 0.4;
+            const cy = getTerrainHeight(cx, cz);
+            if (cy < CONFIG.SHORE_LEVEL) continue;
+            const cs = scale * (0.6 + Math.abs(cj.x + cj.z) * 0.5);
+            this.flowerPositions.push({ x: cx, y: cy, z: cz, colorIdx, scale: cs });
+          }
         }
       }
     }
@@ -184,6 +213,7 @@ export class Chunk {
           const jx = wx + jitter.x * 1.5;
           const jz = wz + jitter.z * 1.5;
           const y = getTerrainHeight(jx, jz);
+          if (y < CONFIG.SHORE_LEVEL) continue;
 
           // Size varies: 0=small, 1=medium, 2=large boulder
           let sizeIdx;

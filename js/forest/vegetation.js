@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { createRockTexture } from './textures.js';
+import { addWindToMaterial } from '../atmosphere/wind.js';
 
 const MAX_VEG_PER_TYPE = 5000;
 const MAX_FLOWERS = 3000;
@@ -30,6 +31,7 @@ export class VegetationPool {
       color: CONFIG.GRASS_COLOR,
       side: THREE.DoubleSide,
     });
+    addWindToMaterial(grassMat, 'vegetation');
     const grassMesh = new THREE.InstancedMesh(grassGeom, grassMat, MAX_VEG_PER_TYPE);
     grassMesh.count = 0;
     grassMesh.frustumCulled = false;
@@ -39,17 +41,28 @@ export class VegetationPool {
     // Slot 1: placeholder (rocks are separate now)
     this.meshes.push(null);
 
-    // --- Fern: fan of flat fronds ---
-    const fernGeom = this._createFernGeometry();
-    const fernMat = new THREE.MeshLambertMaterial({
-      color: CONFIG.FERN_COLOR,
-      side: THREE.DoubleSide,
-    });
-    const fernMesh = new THREE.InstancedMesh(fernGeom, fernMat, MAX_VEG_PER_TYPE);
-    fernMesh.count = 0;
-    fernMesh.frustumCulled = false;
-    this.scene.add(fernMesh);
-    this.meshes.push(fernMesh);
+    // --- Fern variants: 3 distinct shapes ---
+    // Slot 2 is used by rebuild for type===2, but we now split across fernMeshes[]
+    this.meshes.push(null); // slot 2 placeholder — ferns use this.fernVariants instead
+    this.fernVariants = [];
+    const fernParams = [
+      { fronds: 5, lenBase: 0.18, droopBase: 0.08, rise: 0.15 },  // compact upright
+      { fronds: 7, lenBase: 0.24, droopBase: 0.14, rise: 0.20 },  // full spreading
+      { fronds: 4, lenBase: 0.28, droopBase: 0.18, rise: 0.16 },  // tall droopy
+    ];
+    for (const fp of fernParams) {
+      const geom = this._createFernGeometry(fp);
+      const mat = new THREE.MeshLambertMaterial({
+        color: CONFIG.FERN_COLOR,
+        side: THREE.DoubleSide,
+      });
+      addWindToMaterial(mat, 'vegetation');
+      const mesh = new THREE.InstancedMesh(geom, mat, MAX_VEG_PER_TYPE);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+      this.fernVariants.push(mesh);
+    }
   }
 
   _createGrassGeometry() {
@@ -86,23 +99,99 @@ export class VegetationPool {
     return geom;
   }
 
-  _createFernGeometry() {
-    const fronds = 4;
+  _createFernGeometry(params = {}) {
+    const fronds = params.fronds || 6;
+    const lenBase = params.lenBase || 0.22;
+    const droopBase = params.droopBase || 0.12;
+    const riseAmt = params.rise || 0.18;
+    const segs = 6;        // segments per frond for smooth curve
     const verts = [];
     const norms = [];
 
     for (let i = 0; i < fronds; i++) {
-      const angle = (i / fronds) * Math.PI * 2;
+      const angle = (i / fronds) * Math.PI * 2 + (i * 0.25);
       const ca = Math.cos(angle);
       const sa = Math.sin(angle);
+      const len = lenBase + (i % 3) * 0.06;
+      const droopStr = droopBase + (i % 2) * 0.06;
+      const curlBack = 0.03 + (i % 3) * 0.015; // tips curl inward
 
-      const tx = ca * 0.25;
-      const tz = sa * 0.25;
-      const sx = ca * 0.1 - sa * 0.06;
-      const sz = sa * 0.1 + ca * 0.06;
+      // Build a smooth curved spine for this frond
+      const spine = [];
+      for (let s = 0; s <= segs; s++) {
+        const t = s / segs;
+        // Outward distance with slight ease-out
+        const outDist = len * (1 - (1 - t) * (1 - t)) * 0.95 + len * t * 0.05;
+        // Parabolic droop: rises then falls
+        const rise = riseAmt * Math.sin(t * Math.PI * 0.6);
+        const droop = droopStr * t * t;
+        // Curl: tip bends back slightly
+        const curl = curlBack * t * t * t;
+        const sx = ca * (outDist - curl) ;
+        const sz = sa * (outDist - curl);
+        const sy = rise - droop;
+        spine.push({ x: sx, y: sy, z: sz });
+      }
 
-      verts.push(0, 0.02, 0, tx, 0.12, tz, sx, 0.08, sz);
-      norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+      // Central stem strip: connect spine points with width tapering to tip
+      for (let s = 0; s < segs; s++) {
+        const t0 = s / segs;
+        const t1 = (s + 1) / segs;
+        const w0 = 0.005 * (1 - t0 * 0.7); // thin stem
+        const w1 = 0.005 * (1 - t1 * 0.7);
+        const p0 = spine[s], p1 = spine[s + 1];
+        const px0 = -sa * w0, pz0 = ca * w0;
+        const px1 = -sa * w1, pz1 = ca * w1;
+        verts.push(p0.x + px0, p0.y, p0.z + pz0, p0.x - px0, p0.y, p0.z - pz0, p1.x + px1, p1.y, p1.z + pz1);
+        verts.push(p0.x - px0, p0.y, p0.z - pz0, p1.x - px1, p1.y, p1.z - pz1, p1.x + px1, p1.y, p1.z + pz1);
+        for (let n = 0; n < 6; n++) norms.push(0, 0.85, 0.15);
+      }
+
+      // Dense leaflet pairs along the frond — interpolated between spine points
+      const leafletsPerSeg = 5;
+      for (let s = 0; s < segs; s++) {
+        const p0 = spine[s], p1 = spine[s + 1];
+        for (let li = 0; li < leafletsPerSeg; li++) {
+          const lt = (li + 0.5) / leafletsPerSeg;
+          const t = (s + lt) / segs;
+          if (t < 0.08 || t > 0.95) continue; // skip very base and very tip
+          // Interpolate position on spine
+          const px = p0.x + (p1.x - p0.x) * lt;
+          const py = p0.y + (p1.y - p0.y) * lt;
+          const pz = p0.z + (p1.z - p0.z) * lt;
+          // Leaflet size: small at base, largest at 40%, tapers to tip
+          const sizeCurve = Math.sin(t * Math.PI) * (1 - t * 0.3);
+          const leafW = 0.07 * sizeCurve;
+          const leafL = 0.04 * sizeCurve; // length along frond direction
+          const leafDroop = -0.02 * t * t;
+          // Perpendicular to frond (left/right)
+          const lpx = -sa * leafW;
+          const lpz = ca * leafW;
+          // Forward along frond for leaf length
+          const flx = ca * leafL;
+          const flz = sa * leafL;
+          // Left leaflet: two triangles (base-mid-tip shape)
+          const lmx = px + lpx * 0.6 + flx * 0.5;
+          const lmz = pz + lpz * 0.6 + flz * 0.5;
+          const lmy = py + leafDroop * 0.5;
+          const ltx = px + lpx + flx;
+          const ltz = pz + lpz + flz;
+          const lty = py + leafDroop;
+          verts.push(px, py, pz, lmx, lmy, lmz, px + flx, py + leafDroop * 0.3, pz + flz);
+          verts.push(lmx, lmy, lmz, ltx, lty, ltz, px + flx, py + leafDroop * 0.3, pz + flz);
+          for (let n = 0; n < 6; n++) norms.push(0, 0.85, 0.15);
+          // Right leaflet: mirror
+          const rmx = px - lpx * 0.6 + flx * 0.5;
+          const rmz = pz - lpz * 0.6 + flz * 0.5;
+          const rmy = py + leafDroop * 0.5;
+          const rtx = px - lpx + flx;
+          const rtz = pz - lpz + flz;
+          const rty = py + leafDroop;
+          verts.push(px, py, pz, rmx, rmy, rmz, px + flx, py + leafDroop * 0.3, pz + flz);
+          verts.push(rmx, rmy, rmz, rtx, rty, rtz, px + flx, py + leafDroop * 0.3, pz + flz);
+          for (let n = 0; n < 6; n++) norms.push(0, 0.85, 0.15);
+        }
+      }
     }
 
     const geom = new THREE.BufferGeometry();
@@ -165,48 +254,149 @@ export class VegetationPool {
   }
 
   _createFlowerMeshes() {
-    const flowerGeom = this._createFlowerGeometry();
+    // 3 flower geometry variants
+    const flowerParams = [
+      { petals: 5, stemH: 0.15, petalLen: 0.08, basalLen: 0.09 },  // standard
+      { petals: 4, stemH: 0.10, petalLen: 0.06, basalLen: 0.07 },  // small & low
+      { petals: 6, stemH: 0.18, petalLen: 0.10, basalLen: 0.11 },  // tall & showy
+    ];
+    const flowerGeoms = flowerParams.map(p => this._createFlowerGeometry(p));
+
+    // For each color, create 3 variant meshes
+    // flowerMeshes becomes [color0_v0, color0_v1, color0_v2, color1_v0, ...]
+    this.flowerMeshes = [];
+    this.flowerVariantCount = flowerGeoms.length;
     for (const color of CONFIG.FLOWER_COLORS) {
-      const mat = new THREE.MeshLambertMaterial({
-        color,
-        side: THREE.DoubleSide,
-      });
-      const mesh = new THREE.InstancedMesh(flowerGeom, mat, MAX_FLOWERS);
-      mesh.count = 0;
-      mesh.frustumCulled = false;
-      this.scene.add(mesh);
-      this.flowerMeshes.push(mesh);
+      for (const geom of flowerGeoms) {
+        const mat = new THREE.MeshLambertMaterial({
+          color,
+          vertexColors: true,
+          side: THREE.DoubleSide,
+        });
+        addWindToMaterial(mat, 'vegetation');
+        const mesh = new THREE.InstancedMesh(geom, mat, MAX_FLOWERS);
+        mesh.count = 0;
+        mesh.frustumCulled = false;
+        this.scene.add(mesh);
+        this.flowerMeshes.push(mesh);
+      }
     }
   }
 
-  _createFlowerGeometry() {
+  _createFlowerGeometry(params = {}) {
     const verts = [];
     const norms = [];
-    const stemH = 0.18;
+    const colors = []; // vertex colors: green for stem/leaves, white for petals
+    const stemH = params.stemH || 0.15;
+    const green = [0.2, 0.45, 0.12];
+    const white = [1, 1, 1];
 
-    verts.push(-0.005, 0, 0, 0.005, 0, 0, 0.005, stemH, 0);
-    verts.push(-0.005, 0, 0, 0.005, stemH, 0, -0.005, stemH, 0);
-    norms.push(0, 0, 1, 0, 0, 1, 0, 0, 1);
-    norms.push(0, 0, 1, 0, 0, 1, 0, 0, 1);
+    // Stem — curved, multi-segment for natural look — green
+    const stemSegs = 4;
+    const stemW = 0.008;
+    // Gentle S-curve offsets
+    const curveX = 0.02;
+    const curveZ = 0.015;
+    for (let si = 0; si < stemSegs; si++) {
+      const t0 = si / stemSegs;
+      const t1 = (si + 1) / stemSegs;
+      const y0 = t0 * stemH;
+      const y1 = t1 * stemH;
+      // S-curve bend
+      const x0 = Math.sin(t0 * Math.PI) * curveX;
+      const x1 = Math.sin(t1 * Math.PI) * curveX;
+      const z0 = Math.sin(t0 * Math.PI * 1.5) * curveZ;
+      const z1 = Math.sin(t1 * Math.PI * 1.5) * curveZ;
+      // Two triangles per segment
+      verts.push(x0 - stemW, y0, z0, x0 + stemW, y0, z0, x1 + stemW, y1, z1);
+      verts.push(x0 - stemW, y0, z0, x1 + stemW, y1, z1, x1 - stemW, y1, z1);
+      norms.push(0, 0, 1, 0, 0, 1, 0, 0, 1);
+      norms.push(0, 0, 1, 0, 0, 1, 0, 0, 1);
+      for (let i = 0; i < 6; i++) colors.push(...green);
+    }
+    // Adjust stemTop position to follow the curve
+    const stemTopX = Math.sin(Math.PI) * curveX; // ~0
+    const stemTopZ = Math.sin(Math.PI * 1.5) * curveZ;
 
-    const petals = 5;
-    const petalLen = 0.045;
-    const petalW = 0.025;
+    // Basal leaves — larger, low, spreading outward (2-3 per flower)
+    const basalCount = 3;
+    const basalLen = params.basalLen || 0.09;
+    const basalW = 0.04;
+    for (let bi = 0; bi < basalCount; bi++) {
+      const ba = (bi / basalCount) * Math.PI * 2 + 0.4; // offset so not aligned with stem curve
+      const bca = Math.cos(ba);
+      const bsa = Math.sin(ba);
+      const baseY = 0.01 + bi * 0.008; // just above ground, slightly staggered
+      // Leaf shape: base at stem, widens to mid, tapers to tip; droops slightly
+      const midX = bca * basalLen * 0.5;
+      const midZ = bsa * basalLen * 0.5;
+      const midY = baseY + 0.02;
+      const tipX = bca * basalLen;
+      const tipZ = bsa * basalLen;
+      const tipY = baseY + 0.005; // droops at tip
+      const perpX = -bsa * basalW;
+      const perpZ = bca * basalW;
+      // Two triangles: base→mid (wide), mid→tip (narrow)
+      verts.push(0, baseY, 0, midX + perpX, midY, midZ + perpZ, midX - perpX, midY, midZ - perpZ);
+      norms.push(0, 0.9, 0.1, 0, 0.9, 0.1, 0, 0.9, 0.1);
+      for (let i = 0; i < 3; i++) colors.push(...green);
+      verts.push(midX + perpX, midY, midZ + perpZ, midX - perpX, midY, midZ - perpZ, tipX, tipY, tipZ);
+      norms.push(0, 0.9, 0.1, 0, 0.9, 0.1, 0, 0.9, 0.1);
+      for (let i = 0; i < 3; i++) colors.push(...green);
+    }
+
+    // Two small stem leaves, following the curve
+    const leafLen = 0.04;
+    const leafW = 0.02;
+    // Leaf 1 at 40% height
+    const l1t = 0.4;
+    const l1x = Math.sin(l1t * Math.PI) * curveX;
+    const l1z = Math.sin(l1t * Math.PI * 1.5) * curveZ;
+    const l1y = l1t * stemH;
+    verts.push(l1x, l1y, l1z, l1x + leafLen, l1y + leafW, l1z + leafW * 0.3, l1x + leafLen * 0.4, l1y + leafLen * 0.6, l1z);
+    norms.push(0, 0.6, 0.4, 0, 0.6, 0.4, 0, 0.6, 0.4);
+    for (let i = 0; i < 3; i++) colors.push(...green);
+    // Leaf 2 at 65% height, opposite side
+    const l2t = 0.65;
+    const l2x = Math.sin(l2t * Math.PI) * curveX;
+    const l2z = Math.sin(l2t * Math.PI * 1.5) * curveZ;
+    const l2y = l2t * stemH;
+    verts.push(l2x, l2y, l2z, l2x - leafLen, l2y + leafW, l2z - leafW * 0.3, l2x - leafLen * 0.4, l2y + leafLen * 0.6, l2z);
+    norms.push(0, 0.6, -0.4, 0, 0.6, -0.4, 0, 0.6, -0.4);
+    for (let i = 0; i < 3; i++) colors.push(...green);
+
+    // Petals at stem top, following curve — white vertex color (material color shows through)
+    const petals = params.petals || 5;
+    const petalLen = params.petalLen || 0.08;
+    const petalW2 = 0.04;
     for (let i = 0; i < petals; i++) {
       const angle = (i / petals) * Math.PI * 2;
       const ca = Math.cos(angle);
       const sa = Math.sin(angle);
-      const tx = ca * petalLen;
-      const tz = sa * petalLen;
-      const perpX = -sa * petalW;
-      const perpZ = ca * petalW;
-      verts.push(perpX, stemH, perpZ, -perpX, stemH, -perpZ, tx, stemH + 0.01, tz);
+      const tx = stemTopX + ca * petalLen;
+      const tz = stemTopZ + sa * petalLen;
+      const perpX = -sa * petalW2;
+      const perpZ = ca * petalW2;
+      verts.push(stemTopX + perpX, stemH, stemTopZ + perpZ, stemTopX - perpX, stemH, stemTopZ - perpZ, tx, stemH + 0.03, tz);
+      norms.push(0, 0.8, 0.2, 0, 0.8, 0.2, 0, 0.8, 0.2);
+      for (let j = 0; j < 3; j++) colors.push(...white);
+    }
+
+    // Center dot (small triangle cluster) — yellow-ish
+    const centerColor = [1, 0.9, 0.4];
+    const cR = 0.015;
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2;
+      const na = ((i + 1) / 3) * Math.PI * 2;
+      verts.push(stemTopX, stemH + 0.02, stemTopZ, stemTopX + Math.cos(a) * cR, stemH + 0.015, stemTopZ + Math.sin(a) * cR, stemTopX + Math.cos(na) * cR, stemH + 0.015, stemTopZ + Math.sin(na) * cR);
       norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+      for (let j = 0; j < 3; j++) colors.push(...centerColor);
     }
 
     const geom = new THREE.BufferGeometry();
     geom.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
     geom.setAttribute('normal', new THREE.Float32BufferAttribute(norms, 3));
+    geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     return geom;
   }
 
@@ -250,31 +440,55 @@ export class VegetationPool {
       }
     }
 
-    // Rebuild grass and fern (slots 0 and 2, slot 1 is null)
-    for (let type = 0; type < 3; type++) {
-      const mesh = this.meshes[type];
-      if (!mesh) continue;
-
-      const veg = allVeg[type];
+    // Rebuild grass (slot 0 only, slot 1 null, slot 2 null — ferns use fernVariants)
+    {
+      const mesh = this.meshes[0];
+      const veg = allVeg[0];
       mesh.count = veg.length;
-
       for (let i = 0; i < veg.length; i++) {
         const v = veg[i];
         _position.set(v.x, v.y, v.z);
-
         const angle = (v.x * 13.37 + v.z * 7.13) % (Math.PI * 2);
         _euler.set(0, angle, 0);
         _quaternion.setFromEuler(_euler);
-
         const s = v.scale;
-        if (type === 0) _scale.set(s * CONFIG.VEG_GRASS_SCALE, s * CONFIG.VEG_GRASS_SCALE, s * CONFIG.VEG_GRASS_SCALE);
-        else _scale.set(s * CONFIG.VEG_FERN_SCALE, s * CONFIG.VEG_FERN_SCALE, s * CONFIG.VEG_FERN_SCALE);
-
+        _scale.set(s * CONFIG.VEG_GRASS_SCALE, s * CONFIG.VEG_GRASS_SCALE, s * CONFIG.VEG_GRASS_SCALE);
         _matrix.compose(_position, _quaternion, _scale);
         mesh.setMatrixAt(i, _matrix);
       }
-
       if (veg.length > 0) mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    // Rebuild ferns — distribute across 3 variant meshes
+    {
+      const ferns = allVeg[2];
+      const variantBuckets = [[], [], []];
+      for (const v of ferns) {
+        const vi = Math.abs(Math.floor((v.x * 7.3 + v.z * 13.7) * 100)) % 3;
+        variantBuckets[vi].push(v);
+      }
+      for (let vi = 0; vi < 3; vi++) {
+        const mesh = this.fernVariants[vi];
+        const bucket = variantBuckets[vi];
+        mesh.count = bucket.length;
+        for (let i = 0; i < bucket.length; i++) {
+          const v = bucket[i];
+          _position.set(v.x, v.y, v.z);
+          const angle = (v.x * 13.37 + v.z * 7.13) % (Math.PI * 2);
+          const tiltX = Math.sin(v.x * 47.3 + v.z * 19.1) * 0.2;
+          const tiltZ = Math.sin(v.x * 29.7 + v.z * 53.3) * 0.2;
+          _euler.set(tiltX, angle, tiltZ);
+          _quaternion.setFromEuler(_euler);
+          const s = v.scale;
+          const sv = s * CONFIG.VEG_FERN_SCALE;
+          const stretchX = 0.75 + (Math.sin(v.x * 37.1 + v.z * 11.3) * 0.5 + 0.5) * 0.5;
+          const stretchZ = 0.75 + (Math.sin(v.x * 23.7 + v.z * 43.9) * 0.5 + 0.5) * 0.5;
+          _scale.set(sv * stretchX, sv * (0.8 + Math.sin(v.x * 17.9) * 0.3), sv * stretchZ);
+          _matrix.compose(_position, _quaternion, _scale);
+          mesh.setMatrixAt(i, _matrix);
+        }
+        if (bucket.length > 0) mesh.instanceMatrix.needsUpdate = true;
+      }
     }
 
     // Rebuild rocks
@@ -308,27 +522,36 @@ export class VegetationPool {
       if (rocks.length > 0) mesh.instanceMatrix.needsUpdate = true;
     }
 
-    // Rebuild flowers
+    // Rebuild flowers — distribute across 3 variants per color
+    const vc = this.flowerVariantCount;
     for (let ci = 0; ci < CONFIG.FLOWER_COLORS.length; ci++) {
       const flowers = allFlowers[ci];
-      const mesh = this.flowerMeshes[ci];
-      mesh.count = flowers.length;
-
-      for (let i = 0; i < flowers.length; i++) {
-        const f = flowers[i];
-        _position.set(f.x, f.y, f.z);
-
-        const angle = (f.x * 17.3 + f.z * 11.7) % (Math.PI * 2);
-        _euler.set(0, angle, 0);
-        _quaternion.setFromEuler(_euler);
-
-        const s = f.scale;
-        _scale.set(s, s, s);
-        _matrix.compose(_position, _quaternion, _scale);
-        mesh.setMatrixAt(i, _matrix);
+      // Split into variant buckets
+      const buckets = [];
+      for (let vi = 0; vi < vc; vi++) buckets.push([]);
+      for (const f of flowers) {
+        const vi = Math.abs(Math.floor((f.x * 11.3 + f.z * 7.7) * 100)) % vc;
+        buckets[vi].push(f);
       }
-
-      if (flowers.length > 0) mesh.instanceMatrix.needsUpdate = true;
+      for (let vi = 0; vi < vc; vi++) {
+        const mesh = this.flowerMeshes[ci * vc + vi];
+        const bucket = buckets[vi];
+        mesh.count = bucket.length;
+        for (let i = 0; i < bucket.length; i++) {
+          const f = bucket[i];
+          _position.set(f.x, f.y, f.z);
+          const angle = (f.x * 17.3 + f.z * 11.7) % (Math.PI * 2);
+          const tiltX = Math.sin(f.x * 31.7 + f.z * 17.3) * 0.25;
+          const tiltZ = Math.sin(f.x * 23.1 + f.z * 41.9) * 0.25;
+          _euler.set(tiltX, angle, tiltZ);
+          _quaternion.setFromEuler(_euler);
+          const s = f.scale;
+          _scale.set(s, s, s);
+          _matrix.compose(_position, _quaternion, _scale);
+          mesh.setMatrixAt(i, _matrix);
+        }
+        if (bucket.length > 0) mesh.instanceMatrix.needsUpdate = true;
+      }
     }
   }
 }

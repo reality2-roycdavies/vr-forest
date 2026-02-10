@@ -1,0 +1,173 @@
+# VR Endless Forest
+
+A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — no external assets or textures required.
+
+## Features
+
+### Infinite Procedural Terrain
+- Seamless chunked terrain streaming around the player (32m chunks, 5-chunk load radius)
+- Multi-octave simplex noise with configurable persistence, lacunarity, and seed
+- Stream channels carved by domain-warped ridge noise creating natural waterways
+- Vertex-coloured ground with height-based grass gradients and dirt patch blending
+- Procedural grass texture with blade strokes, soil speckles, and pebble details
+
+### Water System
+- Ponds and streams fill low terrain areas (below configurable water level)
+- Real-time wave displacement shader with 10+ sinusoidal waves
+- Height-tinted crests and troughs with drifting surface flecks
+- Sandy shore zones with smooth colour transitions
+- Swimming physics: buoyancy, reduced speed, gentle bobbing, no jumping
+
+### Three Procedural Tree Types
+- **Pine**: Stacked cone canopy lobes, dark cool-green needle texture, tapered trunk
+- **Oak**: Clustered spherical canopy lobes, warm broad-leaf texture, thick trunk with branch stubs
+- **Birch**: Narrow cone lobes, bright yellow-green small-leaf texture, white bark with dark bands
+- All trees have organic S-curve trunk bends, vertex colour gradients, and per-type procedural canvas textures
+- Instanced rendering (up to 2000 per type)
+
+### Vegetation
+- **Grass tufts**: 5-blade clusters scattered by density noise
+- **Ferns** (3 geometry variants): Multi-segment curved fronds with dense leaflet pairs, drooping tips, and tip curl. Variants: compact upright, full spreading, tall droopy
+- **Flowers** (3 geometry variants, 6 colours): Curved stems with basal rosette leaves, stem leaves, cupped petals, and yellow centres. Green stems via vertex colours. Variants: small/standard/showy
+- **Rocks** (3 sizes): Jagged icosahedron geometry with vertex colour variation and procedural stone texture
+- All vegetation placed by noise-driven density with jitter, clustering, and shore exclusion
+
+### Real-World Day/Night Cycle
+- Sun position calculated from actual device time, date, and geolocation (London fallback)
+- Four colour palettes smoothly interpolated: night, twilight, golden hour, day
+- Sky dome with 3-stop ShaderMaterial gradient (fog colour at horizon, sky bottom, sky top)
+- Sun rendered as soft-glow sprite; moon disc on opposite side
+- 300 stars visible at night; occasional shooting stars
+- 30 cloud puffs at altitude with time-of-day colour tinting
+- Dynamic fog distance (distant during day, closes in at night for darkness effect)
+- Manual time scrubbing: VR (right grip + right stick Y), desktop (bracket keys)
+- Time offset HUD overlay with auto-fade
+
+### Wind Animation
+- Vertex shader displacement injected via `onBeforeCompile` on all plant materials
+- Three wind profiles: tree trunks (slow sway), canopy (sway + rustle + flutter), vegetation (gentle grass sway)
+- Wind direction slowly drifts over time for natural feel
+- Subtle movement — gentle breeze, not a gale
+
+### Bird Flocks
+- 5 flocks of 8 birds orbiting at 18–40m altitude
+- Swept-wing body geometry with fat diamond body
+- Crow-like flight: slow flap phase then extended glide with wings held up
+- Per-bird drift within flock for organic scattered movement
+- Crow caw audio: layered sawtooth + square oscillators, bandpass filtered, spatialised via HRTF
+- Daytime only — birds disappear at night
+
+### Wildlife Encounters
+- Bear, lion, and Wally (Where's Waldo) peek from behind trees
+- Random spawn every 5–10 seconds near the player
+- Smooth fade in/out with accompanying growl sounds
+- Procedurally built geometry (no models)
+
+### Fireflies
+- 30 subtle glowing particles at night
+- Two-layer rendering: dim glow halo + bright core point
+- Individual pulse timing, drift orbits, and vertical bob
+- Yellow and green colour variants with additive blending
+- Fade in at sunset, disappear at sunrise
+
+### Immersive Audio (All Procedural)
+- **Spatial 3D audio** via Web Audio API PannerNodes (HRTF)
+- **Footsteps**: Surface-aware (grass thud + swish, rock tap + ping, water splash + slosh)
+- **Bird chirps**: Synthesised melodic tones on random schedule
+- **Crow caws**: Harsh nasal oscillators from bird flock directions
+- **Crickets**: 4-voice chorus, frequency 4200–5400 Hz, active at dusk/night only
+- **Morepork (NZ owl)**: Single distant calls from random directions at night (30–90 second intervals)
+- **Wind**: Continuous filtered noise backdrop
+
+### Movement & Physics
+- Smooth analogue locomotion (VR left stick / WASD)
+- Snap turning (30-degree increments with cooldown)
+- Desktop mouse look with pointer lock
+- Jumping with gravity (4.0 m/s up, 9.8 m/s² down)
+- Tree trunk and rock collision with slide-along
+- Rock surface standing (3 size classes with different heights)
+- Terrain height following with smooth lerp
+- Walk bobbing synchronised to footstep audio
+
+### Performance
+- Instanced rendering for all repeated geometry (trees, vegetation, rocks, flowers, birds, fireflies)
+- Chunk recycling pool — geometry reused, not recreated
+- Staggered chunk loading (max 2 per frame)
+- Distance fog hides chunk pop-in
+- Quest foveated rendering support
+- All textures procedurally generated on canvas at startup (no network requests)
+
+## Controls
+
+### VR (Quest / any WebXR headset)
+| Control | Action |
+|---------|--------|
+| Left stick | Move (forward/back/strafe) |
+| Right stick X | Snap turn (30 degrees) |
+| Right grip + right stick Y | Scrub time of day |
+| Either grip button | Jump |
+
+### Desktop
+| Control | Action |
+|---------|--------|
+| WASD | Move |
+| Mouse (click to lock) | Look around |
+| Q / E | Snap turn |
+| Space | Jump |
+| [ / ] | Scrub time of day |
+
+## Running
+
+Serve the project root with any static HTTP server:
+
+```bash
+# Python
+python3 -m http.server 8000
+
+# Node
+npx http-server -p 8000
+
+# PHP
+php -S localhost:8000
+```
+
+Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS connection is required (use a tunnel or self-signed cert).
+
+## Technical Details
+
+- **Engine**: Three.js r170 (loaded from CDN via import map)
+- **Noise**: simplex-noise 4.0.3 (CDN)
+- **Audio**: Web Audio API (no audio libraries)
+- **Rendering**: WebGL 2 with WebXR
+- **Textures**: All procedurally generated on HTML5 Canvas
+- **Geometry**: All built from Three.js primitives (no 3D models)
+- **Lines of code**: ~5,500+ lines of JavaScript across 25 modules
+
+## Project Structure
+
+```
+js/
+├── main.js              # Scene bootstrap, render loop, system orchestration
+├── config.js            # All tunable constants (~140 parameters)
+├── vr-setup.js          # WebXR renderer, camera rig, controllers
+├── input.js             # VR gamepad + keyboard/mouse input
+├── movement.js          # Player locomotion, physics, collision
+├── terrain/
+│   ├── chunk-manager.js # Dynamic chunk loading/unloading
+│   ├── chunk.js         # Per-chunk mesh + object placement
+│   ├── noise.js         # Seeded simplex noise (8 instances)
+│   ├── terrain-generator.js  # Height, colour, normal generation
+│   └── ground-material.js    # Shared ground material + texture
+├── forest/
+│   ├── tree-factory.js  # 3 procedural tree geometries + materials
+│   ├── tree-pool.js     # InstancedMesh tree rendering
+│   ├── vegetation.js    # Grass, ferns (3 variants), flowers (3×6), rocks
+│   ├── textures.js      # Procedural canvas textures (bark, leaves, rock)
+│   ├── birds.js         # Bird flock visual + crow audio
+│   └── wildlife.js      # Bear, lion, Wally peek encounters
+└── atmosphere/
+    ├── day-night.js     # Sun/moon/stars, sky dome, palettes, clouds
+    ├── audio.js         # All procedural audio (footsteps, crickets, morepork, etc.)
+    ├── fireflies.js     # Night-time glowing particles
+    └── wind.js          # Vertex shader wind displacement
+```

@@ -1,10 +1,10 @@
 // Fireflies that appear at night - glowing particles around the player
 import * as THREE from 'three';
 
-const COUNT = 80;
-const SPREAD = 25;
-const HEIGHT_MIN = 0.3;
-const HEIGHT_MAX = 3.5;
+const COUNT = 30;
+const SPREAD = 30;
+const HEIGHT_MIN = 0.5;
+const HEIGHT_MAX = 3.0;
 
 export class FireflySystem {
   constructor(scene) {
@@ -31,8 +31,8 @@ export class FireflySystem {
     }
 
     // Two layers: a larger dim glow + a smaller bright core
-    this.glowMesh = this._createLayer(0.4, 0.35);
-    this.coreMesh = this._createLayer(0.12, 0.9);
+    this.glowMesh = this._createLayer(0.2, 0.25);
+    this.coreMesh = this._createLayer(0.06, 0.7);
 
     this.glowMesh.visible = false;
     this.coreMesh.visible = false;

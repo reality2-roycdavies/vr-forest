@@ -10,6 +10,8 @@ export class InputManager {
     this.leftStick = { x: 0, y: 0 };
     this.rightStick = { x: 0, y: 0 };
     this.jumpPressed = false;
+    this.timeAdjust = 0; // -1..1 for time scrubbing
+    this.rightGrip = false;
 
     // Mouse look state (desktop only)
     this.mouseYaw = 0;    // accumulated yaw (applied to dolly)
@@ -49,12 +51,21 @@ export class InputManager {
     this.rightStick.x = 0;
     this.rightStick.y = 0;
     this.jumpPressed = false;
+    this.timeAdjust = 0;
+    this.rightGrip = false;
 
     if (this.vrSetup.isInVR()) {
       this._pollGamepads();
+      // Right grip + right stick Y = time scrub
+      if (this.rightGrip && Math.abs(this.rightStick.y) > 0) {
+        this.timeAdjust = -this.rightStick.y; // push forward = advance time
+      }
     } else {
       this._pollKeyboard();
       this._processMouseLook();
+      // [ and ] keys for desktop time adjustment
+      if (this.keys['BracketLeft']) this.timeAdjust = -1;
+      else if (this.keys['BracketRight']) this.timeAdjust = 1;
     }
   }
 
@@ -110,6 +121,8 @@ export class InputManager {
         if ((buttons[4] && buttons[4].pressed) || (buttons[3] && buttons[3].pressed)) {
           this.jumpPressed = true;
         }
+        // Right grip = button 1
+        this.rightGrip = buttons[1] && buttons[1].pressed;
       }
     }
   }
