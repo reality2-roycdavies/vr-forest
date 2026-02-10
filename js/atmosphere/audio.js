@@ -93,11 +93,11 @@ export class AmbientAudio {
       this._updateCrickets(sunElevation);
     }
 
-    // Rustling leaves
-    if (nearbyTrees && playerPos) {
-      this._rustleCooldown = Math.max(0, this._rustleCooldown - delta);
-      this._updateRustles(playerPos, nearbyTrees);
-    }
+    // Rustling leaves — disabled, synthetic noise doesn't convincingly replicate leaves
+    // if (nearbyTrees && playerPos) {
+    //   this._rustleCooldown = Math.max(0, this._rustleCooldown - delta);
+    //   this._updateRustles(playerPos, nearbyTrees);
+    // }
   }
 
   // ======== Shared noise buffer ========
