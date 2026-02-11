@@ -29,6 +29,7 @@ export class VegetationPool {
     const grassGeom = this._createGrassGeometry();
     const grassMat = new THREE.MeshLambertMaterial({
       color: CONFIG.GRASS_COLOR,
+      emissive: new THREE.Color(CONFIG.GRASS_COLOR).multiplyScalar(0.08),
       side: THREE.DoubleSide,
     });
     addWindToMaterial(grassMat, 'vegetation');
@@ -54,6 +55,7 @@ export class VegetationPool {
       const geom = this._createFernGeometry(fp);
       const mat = new THREE.MeshLambertMaterial({
         color: CONFIG.FERN_COLOR,
+        emissive: new THREE.Color(CONFIG.FERN_COLOR).multiplyScalar(0.08),
         side: THREE.DoubleSide,
       });
       addWindToMaterial(mat, 'vegetation');
@@ -270,8 +272,11 @@ export class VegetationPool {
     this.flowerVariantCount = flowerGeoms.length;
     for (const color of CONFIG.FLOWER_COLORS) {
       for (const geom of flowerGeoms) {
-        const mat = new THREE.MeshLambertMaterial({
+        const mat = new THREE.MeshPhongMaterial({
           color,
+          emissive: 0x1a1a10,
+          specular: 0x444444,
+          shininess: 20,
           vertexColors: true,
           side: THREE.DoubleSide,
         });
@@ -320,76 +325,138 @@ export class VegetationPool {
     const stemTopX = Math.sin(Math.PI) * curveX; // ~0
     const stemTopZ = Math.sin(Math.PI * 1.5) * curveZ;
 
-    // Basal leaves — larger, low, spreading outward (2-3 per flower)
+    // Basal leaves — smooth multi-segment, spreading outward
     const basalCount = 3;
     const basalLen = params.basalLen || 0.09;
     const basalW = 0.04;
+    const basalSegs = 4;
     for (let bi = 0; bi < basalCount; bi++) {
-      const ba = (bi / basalCount) * Math.PI * 2 + 0.4; // offset so not aligned with stem curve
+      const ba = (bi / basalCount) * Math.PI * 2 + 0.4;
       const bca = Math.cos(ba);
       const bsa = Math.sin(ba);
-      const baseY = 0.01 + bi * 0.008; // just above ground, slightly staggered
-      // Leaf shape: base at stem, widens to mid, tapers to tip; droops slightly
-      const midX = bca * basalLen * 0.5;
-      const midZ = bsa * basalLen * 0.5;
-      const midY = baseY + 0.02;
-      const tipX = bca * basalLen;
-      const tipZ = bsa * basalLen;
-      const tipY = baseY + 0.005; // droops at tip
-      const perpX = -bsa * basalW;
-      const perpZ = bca * basalW;
-      // Two triangles: base→mid (wide), mid→tip (narrow)
-      verts.push(0, baseY, 0, midX + perpX, midY, midZ + perpZ, midX - perpX, midY, midZ - perpZ);
-      norms.push(0, 0.9, 0.1, 0, 0.9, 0.1, 0, 0.9, 0.1);
-      for (let i = 0; i < 3; i++) colors.push(...green);
-      verts.push(midX + perpX, midY, midZ + perpZ, midX - perpX, midY, midZ - perpZ, tipX, tipY, tipZ);
-      norms.push(0, 0.9, 0.1, 0, 0.9, 0.1, 0, 0.9, 0.1);
-      for (let i = 0; i < 3; i++) colors.push(...green);
+      const baseY = 0.01 + bi * 0.008;
+      // Build leaf spine with width tapering at both ends
+      const leafPts = [];
+      for (let s = 0; s <= basalSegs; s++) {
+        const t = s / basalSegs;
+        const dist = basalLen * t;
+        const w = basalW * Math.sin(t * Math.PI); // zero at base/tip, widest at mid
+        const h = baseY + 0.02 * Math.sin(t * Math.PI * 0.7) - 0.015 * t * t; // rise then droop
+        leafPts.push({ x: bca * dist, y: h, z: bsa * dist, w });
+      }
+      for (let s = 0; s < basalSegs; s++) {
+        const p0 = leafPts[s], p1 = leafPts[s + 1];
+        const l0x = p0.x - bsa * p0.w, l0z = p0.z + bca * p0.w;
+        const l1x = p1.x - bsa * p1.w, l1z = p1.z + bca * p1.w;
+        const r0x = p0.x + bsa * p0.w, r0z = p0.z - bca * p0.w;
+        const r1x = p1.x + bsa * p1.w, r1z = p1.z - bca * p1.w;
+        verts.push(l0x, p0.y, l0z, l1x, p1.y, l1z, r1x, p1.y, r1z);
+        verts.push(l0x, p0.y, l0z, r1x, p1.y, r1z, r0x, p0.y, r0z);
+        norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+        norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+        for (let j = 0; j < 6; j++) colors.push(...green);
+      }
     }
 
-    // Two small stem leaves, following the curve
-    const leafLen = 0.04;
-    const leafW = 0.02;
-    // Leaf 1 at 40% height
-    const l1t = 0.4;
-    const l1x = Math.sin(l1t * Math.PI) * curveX;
-    const l1z = Math.sin(l1t * Math.PI * 1.5) * curveZ;
-    const l1y = l1t * stemH;
-    verts.push(l1x, l1y, l1z, l1x + leafLen, l1y + leafW, l1z + leafW * 0.3, l1x + leafLen * 0.4, l1y + leafLen * 0.6, l1z);
-    norms.push(0, 0.6, 0.4, 0, 0.6, 0.4, 0, 0.6, 0.4);
-    for (let i = 0; i < 3; i++) colors.push(...green);
-    // Leaf 2 at 65% height, opposite side
-    const l2t = 0.65;
-    const l2x = Math.sin(l2t * Math.PI) * curveX;
-    const l2z = Math.sin(l2t * Math.PI * 1.5) * curveZ;
-    const l2y = l2t * stemH;
-    verts.push(l2x, l2y, l2z, l2x - leafLen, l2y + leafW, l2z - leafW * 0.3, l2x - leafLen * 0.4, l2y + leafLen * 0.6, l2z);
-    norms.push(0, 0.6, -0.4, 0, 0.6, -0.4, 0, 0.6, -0.4);
-    for (let i = 0; i < 3; i++) colors.push(...green);
+    // Two small stem leaves — multi-segment smooth
+    const stemLeafSegs = 3;
+    const stemLeafParams = [
+      { t: 0.4, dir: 1 },
+      { t: 0.65, dir: -1 },
+    ];
+    for (const sl of stemLeafParams) {
+      const slx = Math.sin(sl.t * Math.PI) * curveX;
+      const slz = Math.sin(sl.t * Math.PI * 1.5) * curveZ;
+      const sly = sl.t * stemH;
+      const slLen = 0.04;
+      const slW = 0.02;
+      // Leaf direction perpendicular to stem, angled outward+up
+      const ldx = sl.dir * 0.8, ldy = 0.5, ldz = sl.dir * 0.3;
+      const llen = Math.sqrt(ldx * ldx + ldy * ldy + ldz * ldz);
+      const ndx = ldx / llen, ndy = ldy / llen, ndz = ldz / llen;
+      // Perpendicular for width
+      const wpx = -ndz, wpz = ndx;
+      const leafPts = [];
+      for (let s = 0; s <= stemLeafSegs; s++) {
+        const t = s / stemLeafSegs;
+        const w = slW * Math.sin(t * Math.PI);
+        leafPts.push({
+          x: slx + ndx * slLen * t,
+          y: sly + ndy * slLen * t,
+          z: slz + ndz * slLen * t,
+          w
+        });
+      }
+      for (let s = 0; s < stemLeafSegs; s++) {
+        const p0 = leafPts[s], p1 = leafPts[s + 1];
+        verts.push(
+          p0.x - wpx * p0.w, p0.y, p0.z - wpz * p0.w,
+          p1.x - wpx * p1.w, p1.y, p1.z - wpz * p1.w,
+          p1.x + wpx * p1.w, p1.y, p1.z + wpz * p1.w
+        );
+        verts.push(
+          p0.x - wpx * p0.w, p0.y, p0.z - wpz * p0.w,
+          p1.x + wpx * p1.w, p1.y, p1.z + wpz * p1.w,
+          p0.x + wpx * p0.w, p0.y, p0.z + wpz * p0.w
+        );
+        norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+        norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+        for (let j = 0; j < 6; j++) colors.push(...green);
+      }
+    }
 
-    // Petals at stem top, following curve — white vertex color (material color shows through)
+    // Petals at stem top — rounded multi-segment fan per petal
     const petals = params.petals || 5;
     const petalLen = params.petalLen || 0.08;
-    const petalW2 = 0.04;
+    const petalW = 0.04;
+    const petalSegs = 4; // segments per petal for rounded shape
     for (let i = 0; i < petals; i++) {
       const angle = (i / petals) * Math.PI * 2;
       const ca = Math.cos(angle);
       const sa = Math.sin(angle);
-      const tx = stemTopX + ca * petalLen;
-      const tz = stemTopZ + sa * petalLen;
-      const perpX = -sa * petalW2;
-      const perpZ = ca * petalW2;
-      verts.push(stemTopX + perpX, stemH, stemTopZ + perpZ, stemTopX - perpX, stemH, stemTopZ - perpZ, tx, stemH + 0.03, tz);
-      norms.push(0, 0.8, 0.2, 0, 0.8, 0.2, 0, 0.8, 0.2);
-      for (let j = 0; j < 3; j++) colors.push(...white);
+      // Build rounded petal outline points (elliptical arc)
+      const petalPts = [];
+      for (let s = 0; s <= petalSegs; s++) {
+        const t = s / petalSegs;
+        // Radial distance: rises to petalLen then back (ellipse-like)
+        const r = petalLen * Math.sin(t * Math.PI);
+        // Width: widest at middle, zero at base and tip
+        const w = petalW * Math.sin(t * Math.PI);
+        // Height: slight dome
+        const h = 0.03 * Math.sin(t * Math.PI);
+        // Along petal direction
+        const dist = petalLen * t;
+        const px = stemTopX + ca * dist;
+        const pz = stemTopZ + sa * dist;
+        const py = stemH + h;
+        petalPts.push({ x: px, y: py, z: pz, w });
+      }
+      // Fan triangles from center to petal outline edges
+      for (let s = 0; s < petalSegs; s++) {
+        const p0 = petalPts[s];
+        const p1 = petalPts[s + 1];
+        // Left edge
+        const l0x = p0.x - sa * p0.w, l0z = p0.z + ca * p0.w;
+        const l1x = p1.x - sa * p1.w, l1z = p1.z + ca * p1.w;
+        // Right edge
+        const r0x = p0.x + sa * p0.w, r0z = p0.z - ca * p0.w;
+        const r1x = p1.x + sa * p1.w, r1z = p1.z - ca * p1.w;
+        // Two quads (4 triangles) per segment
+        verts.push(l0x, p0.y, l0z, l1x, p1.y, l1z, r1x, p1.y, r1z);
+        verts.push(l0x, p0.y, l0z, r1x, p1.y, r1z, r0x, p0.y, r0z);
+        norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+        norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+        for (let j = 0; j < 6; j++) colors.push(...white);
+      }
     }
 
-    // Center dot (small triangle cluster) — yellow-ish
+    // Center dot (hexagonal) — yellow-ish
     const centerColor = [1, 0.9, 0.4];
-    const cR = 0.015;
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI * 2;
-      const na = ((i + 1) / 3) * Math.PI * 2;
+    const cR = 0.018;
+    const cSegs = 6;
+    for (let i = 0; i < cSegs; i++) {
+      const a = (i / cSegs) * Math.PI * 2;
+      const na = ((i + 1) / cSegs) * Math.PI * 2;
       verts.push(stemTopX, stemH + 0.02, stemTopZ, stemTopX + Math.cos(a) * cR, stemH + 0.015, stemTopZ + Math.sin(a) * cR, stemTopX + Math.cos(na) * cR, stemH + 0.015, stemTopZ + Math.sin(na) * cR);
       norms.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
       for (let j = 0; j < 3; j++) colors.push(...centerColor);

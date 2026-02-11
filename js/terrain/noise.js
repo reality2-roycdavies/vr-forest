@@ -105,11 +105,11 @@ export function getVegDensity(worldX, worldZ) {
 /**
  * Jitter noise for natural placement offsets
  */
+const _jitterResult = { x: 0, z: 0 };
 export function getJitter(worldX, worldZ) {
-  return {
-    x: jitterNoise2D(worldX * 0.7, worldZ * 0.7),
-    z: jitterNoise2D(worldX * 0.7 + 100, worldZ * 0.7 + 100),
-  };
+  _jitterResult.x = jitterNoise2D(worldX * 0.7, worldZ * 0.7);
+  _jitterResult.z = jitterNoise2D(worldX * 0.7 + 100, worldZ * 0.7 + 100);
+  return _jitterResult;
 }
 
 /**

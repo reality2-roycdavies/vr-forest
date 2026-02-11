@@ -214,7 +214,8 @@ export class AmbientAudio {
     if (!this.started || !this.ctx) return;
     const now = this.ctx.currentTime;
     const duration = 3 + Math.random() * 5;
-    const targetGain = 0.03 + Math.random() * 0.08;
+    const duck = this._windDuck !== undefined ? this._windDuck : 1;
+    const targetGain = (0.03 + Math.random() * 0.08) * duck;
     const targetFreq = 250 + Math.random() * 400;
 
     this.windGain.gain.linearRampToValueAtTime(targetGain, now + duration);
@@ -584,36 +585,44 @@ export class AmbientAudio {
       // Start water ambient
       this._waterActive = true;
 
-      // Main low-mid layer: bandpass noise for gentle lapping wash (300-800 Hz)
+      // Main layer: low resonant wash — slow playback + lowpass to remove hiss
       this._waterSource = ctx.createBufferSource();
       this._waterSource.buffer = this._noiseBuffer;
       this._waterSource.loop = true;
+      this._waterSource.playbackRate.value = 0.4; // slow = smoother, less hissy
 
       this._waterFilter = ctx.createBiquadFilter();
       this._waterFilter.type = 'bandpass';
-      this._waterFilter.frequency.value = 450;
-      this._waterFilter.Q.value = 0.6;
+      this._waterFilter.frequency.value = 350;
+      this._waterFilter.Q.value = 1.2; // more resonant, less white-noise
+
+      this._waterLowpass = ctx.createBiquadFilter();
+      this._waterLowpass.type = 'lowpass';
+      this._waterLowpass.frequency.value = 600;
+      this._waterLowpass.Q.value = 0.5;
 
       this._waterGain = ctx.createGain();
       this._waterGain.gain.value = 0;
 
       this._waterSource.connect(this._waterFilter);
-      this._waterFilter.connect(this._waterGain);
+      this._waterFilter.connect(this._waterLowpass);
+      this._waterLowpass.connect(this._waterGain);
       this._waterGain.connect(this.masterGain);
       this._waterSource.start();
 
       // Slow modulation for organic lapping character
       this._modulateWater();
 
-      // Higher shimmer layer (1200-2500 Hz) for surface sparkle
+      // Splash layer — narrow band, only audible during wave arrival
       this._waterShimmerSource = ctx.createBufferSource();
       this._waterShimmerSource.buffer = this._noiseBuffer;
       this._waterShimmerSource.loop = true;
+      this._waterShimmerSource.playbackRate.value = 0.6;
 
       this._waterShimmerFilter = ctx.createBiquadFilter();
       this._waterShimmerFilter.type = 'bandpass';
-      this._waterShimmerFilter.frequency.value = 1800;
-      this._waterShimmerFilter.Q.value = 0.4;
+      this._waterShimmerFilter.frequency.value = 900;
+      this._waterShimmerFilter.Q.value = 2.0; // narrow resonant splash
 
       this._waterShimmerGain = ctx.createGain();
       this._waterShimmerGain.gain.value = 0;
@@ -622,8 +631,6 @@ export class AmbientAudio {
       this._waterShimmerFilter.connect(this._waterShimmerGain);
       this._waterShimmerGain.connect(this.masterGain);
       this._waterShimmerSource.start();
-
-      this._modulateWaterShimmer();
     } else if (!shouldBeActive && this._waterActive) {
       // Stop water ambient
       this._waterActive = false;
@@ -646,35 +653,52 @@ export class AmbientAudio {
       }, 1200);
     }
 
-    // Update volume based on proximity
-    if (this._waterActive && this._waterGain) {
-      const targetVol = waterProximity * 0.06;
-      const now = ctx.currentTime;
-      this._waterGain.gain.setTargetAtTime(targetVol, now, 0.15);
-      if (this._waterShimmerGain) {
-        this._waterShimmerGain.gain.setTargetAtTime(targetVol * 0.3, now, 0.15);
-      }
+    // Update base volume based on proximity (used by wave scheduling)
+    if (this._waterActive) {
+      this._waterBaseVol = waterProximity * 0.22;
+    }
+
+    // Duck wind near water so lapping sounds come through
+    if (this.windGain) {
+      const windScale = 1 - waterProximity * 0.5;
+      this._windDuck = windScale;
     }
   }
 
   _modulateWater() {
-    if (!this._waterActive || !this._waterFilter) return;
-    const now = this.ctx.currentTime;
-    // Sweep filter frequency slowly for lapping wave character
-    const duration = 3 + Math.random() * 3;
-    const targetFreq = 200 + Math.random() * 400;
-    this._waterFilter.frequency.linearRampToValueAtTime(targetFreq, now + duration);
-    this._waterModTimeout = setTimeout(() => this._modulateWater(), duration * 1000);
+    if (!this._waterActive || !this._waterGain) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const vol = this._waterBaseVol || 0.1;
+
+    // Schedule a single "wave lap" — volume swells up then fades away
+    const attack = 0.2 + Math.random() * 0.25;   // wave arrives
+    const sustain = 0.1 + Math.random() * 0.2;   // wash sustains
+    const release = 0.3 + Math.random() * 0.5;   // wave recedes
+    const gap = 0.4 + Math.random() * 1.2;        // quiet between waves
+    const waveDur = attack + sustain + release;
+    const peakVol = vol * (0.6 + Math.random() * 0.4);
+
+    // Main wash — swell up, hold, fade
+    this._waterGain.gain.setTargetAtTime(peakVol, now, attack * 0.4);
+    this._waterGain.gain.setTargetAtTime(peakVol * 0.7, now + attack, sustain * 0.5);
+    this._waterGain.gain.setTargetAtTime(vol * 0.05, now + attack + sustain, release * 0.4);
+
+    // Filter sweeps higher during wave arrival (splashier), lower as it recedes
+    this._waterFilter.frequency.setTargetAtTime(600 + Math.random() * 300, now, attack * 0.3);
+    this._waterFilter.frequency.setTargetAtTime(250 + Math.random() * 100, now + attack + sustain, release * 0.5);
+
+    // Shimmer — brief splash on wave arrival
+    if (this._waterShimmerGain) {
+      this._waterShimmerGain.gain.setTargetAtTime(peakVol * 0.4, now, attack * 0.2);
+      this._waterShimmerGain.gain.setTargetAtTime(0, now + attack * 0.8, 0.15);
+    }
+
+    // Schedule next wave
+    this._waterModTimeout = setTimeout(() => this._modulateWater(), (waveDur + gap) * 1000);
   }
 
-  _modulateWaterShimmer() {
-    if (!this._waterActive || !this._waterShimmerFilter) return;
-    const now = this.ctx.currentTime;
-    const duration = 4 + Math.random() * 4;
-    const targetFreq = 1200 + Math.random() * 1300;
-    this._waterShimmerFilter.frequency.linearRampToValueAtTime(targetFreq, now + duration);
-    this._waterShimmerModTimeout = setTimeout(() => this._modulateWaterShimmer(), duration * 1000);
-  }
+  // Shimmer modulation now handled by wave pulses in _modulateWater()
 
   // ======== Rustling leaves — proximity-triggered, spatially positioned ========
 
@@ -1141,7 +1165,9 @@ export class AmbientAudio {
     panner.refDistance = 20;
     panner.maxDistance = 150;
     panner.rolloffFactor = 0.6;
-    panner.setPosition(position.x, position.y, position.z);
+    panner.positionX.value = position.x;
+    panner.positionY.value = position.y;
+    panner.positionZ.value = position.z;
 
     source.connect(gain);
     gain.connect(panner);

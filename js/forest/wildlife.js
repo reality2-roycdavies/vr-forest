@@ -5,6 +5,7 @@ import { getTerrainHeight } from '../terrain/noise.js';
 
 const _cameraDir = new THREE.Vector3();
 const _toTree = new THREE.Vector3();
+const _white = new THREE.Color(0xffffff);
 
 export class WildlifeSystem {
   constructor(scene, camera) {
@@ -359,12 +360,12 @@ export class WildlifeSystem {
     const side = Math.random() > 0.5 ? 1 : -1;
     const perpX = -toPlayerZ * side;
     const perpZ = toPlayerX * side;
-    const peekOffset = 0.8;
+    const peekOffset = 0.5;
 
-    mesh.userData.hideX = tree.x - toPlayerX * 0.5;
-    mesh.userData.hideZ = tree.z - toPlayerZ * 0.5;
-    mesh.userData.peekX = tree.x + perpX * peekOffset - toPlayerX * 0.1;
-    mesh.userData.peekZ = tree.z + perpZ * peekOffset - toPlayerZ * 0.1;
+    mesh.userData.hideX = tree.x - toPlayerX * 0.9;
+    mesh.userData.hideZ = tree.z - toPlayerZ * 0.9;
+    mesh.userData.peekX = tree.x + perpX * peekOffset - toPlayerX * 0.15;
+    mesh.userData.peekZ = tree.z + perpZ * peekOffset - toPlayerZ * 0.15;
 
     // Sample terrain height at actual hide/peek positions
     mesh.userData.hideY = getTerrainHeight(mesh.userData.hideX, mesh.userData.hideZ);
@@ -412,7 +413,7 @@ export class WildlifeSystem {
 
       // Brighten colour toward white at night for glow effect
       shine.material.color.set(baseColor);
-      shine.material.color.lerp(new THREE.Color(0xffffff), darkness * 0.4);
+      shine.material.color.lerp(_white, darkness * 0.4);
     }
   }
 

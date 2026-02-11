@@ -2,7 +2,7 @@
 
 ## How This Project Was Built
 
-This project was built entirely in a single day (10 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
+This project was built over two days (10–11 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
 
 The human's role was creative director: providing high-level vision, testing in the VR headset, and giving experiential feedback. Claude's role was the entire development studio: architecture, implementation, debugging, and iteration.
 
@@ -88,6 +88,57 @@ The final personal touch: at night, from somewhere in the distant trees, the cal
 
 ---
 
+## Day 2: Astronomical Realism and Polish (11 February 2026)
+
+Day 2 began with a comprehensive performance audit and evolved into a deep polish pass touching nearly every system.
+
+### Phase 9: Performance Audit
+
+The session opened with a systematic analysis of every JavaScript module — 27 specific performance issues were identified and fixed across the codebase. These ranged from replacing deprecated Web Audio API calls (`panner.setPosition()` → `positionX/Y/Z.value`) to eliminating string parsing in hot paths (chunk coordinate lookup), guarding unnecessary `needsUpdate` flags on bird instance matrices, and caching terrain height lookups to avoid redundant noise evaluations.
+
+The terrain resolution was doubled (32×32 to 64×64 vertices per chunk) for smoother ground, and the shore colour blending was improved with smooth gradient transitions between grass, sand, and water.
+
+### Phase 10: The Real Moon
+
+Day 1's moon was a flat grey disc with a procedural texture placed opposite the sun. Day 2 replaced this entirely:
+
+- **Astronomical positioning**: A simplified Meeus lunar ephemeris computes the moon's ecliptic longitude and latitude from six principal terms, converts through equatorial to horizontal coordinates using the device's latitude and longitude. The moon now rises and sets at astronomically correct times and positions (~1 degree accuracy).
+- **Real photograph**: A Wikipedia full moon image replaced the procedural texture (with the procedural version kept as a fallback if the image fails to load).
+- **Phase shader**: A custom ShaderMaterial reconstructs sphere normals from the disc UV, computes illumination from the actual scene sun-to-moon geometry, and renders the phase terminator with smooth blending and earthshine on the dark limb.
+- **Moonlight shadows**: Rather than adding a second shadow-casting light, the existing sunlight DirectionalLight is repurposed at night — as the sun fades below the horizon, the light smoothly transitions to the moon's position with a cool blue-white tint and reduced intensity, providing subtle moonlit shadows from the same shadow map.
+
+### Phase 11: Vegetation Lighting
+
+Testing revealed that vegetation had a harshly contrasting light and dark side. The issue was subtle: with `DoubleSide` rendering, Three.js uses different light calculations for front-facing and back-facing fragments. When instances are randomly tilted, some faces that appear "on top" are actually backfaces receiving different (dimmer) lighting.
+
+The fix required shader-level intervention:
+- For Lambert materials (grass, ferns): patching the fragment shader to always use `vLightFront` instead of selecting between front and back lighting
+- For Phong materials (flowers): patching `faceDirection` to always be `1.0`, preventing normal flipping on backfaces
+- A subtle emissive baseline (8% of base colour for grass/ferns, neutral warm tone for flowers) lifts the darkest areas without washing out the lighting
+
+### Phase 12: Flower and Leaf Geometry
+
+The user noted flowers were "quite angular" — single triangles per petal. A complete geometry rewrite followed:
+- **Petals**: Replaced with multi-segment rounded fans (4 segments per petal, 8 triangles each) using elliptical width profiles
+- **Basal leaves**: Multi-segment smooth shapes (4 segments) with width tapering at base and tip
+- **Stem leaves**: Multi-segment (3 segments) with natural taper
+- **Centre**: Upgraded from 3 to 6 triangles for a hexagonal shape
+- **Material**: Switched from MeshLambertMaterial to MeshPhongMaterial with specular highlights
+
+### Phase 13: Water Ambient Sound
+
+Adding ambient water sounds near lakes and streams proved deceptively difficult. The initial implementation — continuous bandpass-filtered noise — was completely inaudible, drowned out by the wind ambience. After tripling the volume and adding wind ducking (50% wind reduction near water), the sound was audible but indistinguishable from the wind: "I'm really not hearing the water... if it sounds like the wind..."
+
+The breakthrough was abandoning continuous noise in favour of **rhythmic wave pulses**: each "lapping" wave has a fast attack, brief sustain, and slow release, followed by a random gap. This creates the recognisable temporal pattern of water meeting a shore. Combined with a slow playback rate (0.4x), narrow resonant bandpass (Q 1.2 at 350 Hz), and a lowpass at 600 Hz to kill high-frequency hiss, the result is a warm, distinctly aquatic sound.
+
+A second higher "splash" layer (900 Hz, Q 2.0) adds occasional sparkle. Both layers modulate independently, and the wind ambience automatically ducks when the player is near water.
+
+### Phase 14: Wildlife Fixes
+
+The wildlife peek encounters (bear, lion, Wally) were spawning at incorrect heights due to terrain coordinate misalignment. Spawn positioning was corrected to use the terrain height at the actual spawn point, and the fade-in was adjusted to prevent pop-in artifacts.
+
+---
+
 ## Thematic Analysis
 
 ### "Show It's Possible"
@@ -150,19 +201,42 @@ The human provided highly structured, detailed implementation plans for major fe
 
 This hybrid approach -- engineering discipline for architecture, artistic intuition for polish -- was remarkably effective. It suggests a model for AI-assisted creative development: let the AI handle the structural engineering, then guide the aesthetics through experiential feedback.
 
+### The Polish Paradox (Day 2)
+
+Day 2 was entirely about polish — and it increased the codebase by ~35%. No new major systems were added, yet the work was arguably more impactful than Day 1's feature sprint. Accurate moon positioning, uniform vegetation lighting, rhythmic water sounds, and smoother flower geometry all address things that most people wouldn't consciously notice are *wrong*, but would unconsciously feel were *off*.
+
+This is the paradox of polish: the less visible the improvement, the more important it often is for immersion. A player won't think "the moon is at the wrong ecliptic longitude," but they will feel that the night sky looks somehow *right* — or doesn't.
+
+### The Shader Boundary
+
+Day 2 repeatedly crossed the boundary between JavaScript and GLSL — patching fragment shaders to fix vegetation lighting, writing a custom phase shader for the moon, coordinating between the main render loop and GPU-side uniforms. This represents a qualitative shift from Day 1, where most work stayed within Three.js's API surface.
+
+The AI handled this transition seamlessly, but it highlights something important: as procedural generation becomes more sophisticated, the work moves deeper into the rendering pipeline. The conversation shifted from "make a tree" to "force `faceDirection = 1.0` in the Phong fragment shader to prevent normal flipping on backfaces." The human couldn't have specified this; they could only describe the symptom ("the undersides of the flowers appear brighter than the tops"), and the AI had to diagnose and fix the root cause in the shader.
+
+### Hearing Is Believing
+
+The water ambient sound saga reinforced Day 1's lesson about procedural audio. Three separate approaches were needed before the sound was recognisably "water":
+1. Continuous bandpass noise → inaudible (drowned by wind)
+2. Louder continuous noise with wind ducking → audible but indistinguishable from wind
+3. Rhythmic pulse envelope with resonant filtering → finally sounds like lapping water
+
+The key insight: what makes water sound like water isn't a frequency spectrum — it's a *temporal pattern*. The rhythmic advance-and-retreat of waves meeting a shore is what the brain recognises. No amount of spectral filtering on continuous noise will produce this. The solution required moving from the frequency domain to the time domain.
+
 ---
 
 ## By the Numbers
 
-- **Development time**: ~10 hours in a single day
-- **Conversation sessions**: 5 (3 in parent project, 2 in VR forest project)
-- **User feedback messages**: ~100+
+- **Development time**: ~16 hours over two days
+- **Conversation sessions**: 7 (3 in parent project, 4 in VR forest project)
+- **User feedback messages**: ~150+
 - **Major features**: 15+ distinct systems
-- **Lines of JavaScript**: ~5,500+
+- **Lines of JavaScript**: ~7,400+
 - **JavaScript modules**: 25
 - **External dependencies**: 2 (Three.js, simplex-noise, both from CDN)
-- **External art assets**: 0 (all procedural)
+- **External art assets**: 1 (moon photograph from Wikipedia, with procedural fallback)
 - **External audio assets**: 1 (morepork.mp3, trimmed from a recording)
+- **Performance issues fixed (Day 2)**: 27 across all modules
 - **Features abandoned**: 1 (leaf rustling -- "just sounds completely wrong")
 - **Most-iterated feature**: Sky/fog rendering (~8 iterations)
 - **Most-rewritten feature**: Footstep audio (~5 complete rewrites)
+- **Day 2 most-iterated**: Vegetation lighting (~8 iterations across shader patches, emissive tuning, and material changes)

@@ -44,8 +44,7 @@ export class ChunkManager {
 
     // Unload chunks that are too far
     for (const [key, chunk] of this.activeChunks) {
-      const [kcx, kcz] = key.split(',').map(Number);
-      const dist = Math.max(Math.abs(kcx - cx), Math.abs(kcz - cz));
+      const dist = Math.max(Math.abs(chunk.cx - cx), Math.abs(chunk.cz - cz));
       if (dist > unloadR) {
         chunk.deactivate();
         this.chunkPool.push(chunk);
@@ -82,6 +81,8 @@ export class ChunkManager {
 
       const chunk = this._getChunk();
       chunk.build(cx, cz);
+      chunk.cx = cx;
+      chunk.cz = cz;
 
       if (!chunk.mesh.parent) {
         this.scene.add(chunk.mesh);

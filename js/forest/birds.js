@@ -187,7 +187,9 @@ export class BirdFlockSystem {
         instanceIdx++;
       }
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
+    if (visibility > 0) {
+      this.mesh.instanceMatrix.needsUpdate = true;
+    }
 
     // Crow caws — only during day
     if (isDay) {
@@ -255,7 +257,9 @@ export class BirdFlockSystem {
     panner.refDistance = 30;
     panner.maxDistance = 200;
     panner.rolloffFactor = 0.5;
-    panner.setPosition(sx, sy, sz);
+    panner.positionX.value = sx;
+    panner.positionY.value = sy;
+    panner.positionZ.value = sz;
 
     const dest = this.spatialBus || ctx.destination;
     osc.connect(bp);

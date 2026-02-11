@@ -1,8 +1,8 @@
 # VR Endless Forest
 
-A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — one external audio asset (morepork owl call), everything else procedurally generated.
+A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — two external assets (morepork owl call, moon photograph), everything else procedurally generated.
 
-This project was created using AI (Claude) as an educational exercise in human-AI collaborative development. For a detailed account of the creation process and a thematic analysis of the human-AI dialogue, see [CREATION_PROCESS.md](CREATION_PROCESS.md).
+This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over two days. For a detailed account of the creation process and a thematic analysis of the human-AI dialogue, see [CREATION_PROCESS.md](CREATION_PROCESS.md).
 
 **Try it now:** [https://reality2-roycdavies.github.io/vr-forest/](https://reality2-roycdavies.github.io/vr-forest/)
 
@@ -11,7 +11,7 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 ## Features
 
 ### Infinite Procedural Terrain
-- Seamless chunked terrain streaming around the player (32m chunks, 5-chunk load radius)
+- Seamless chunked terrain streaming around the player (32m chunks, 64x64 vertices, 5-chunk load radius)
 - Multi-octave simplex noise with configurable persistence, lacunarity, and seed
 - Stream channels carved by domain-warped ridge noise creating natural waterways
 - Vertex-coloured ground with height-based grass gradients and dirt patch blending
@@ -32,21 +32,26 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 - Instanced rendering (up to 2000 per type)
 
 ### Vegetation
-- **Grass tufts**: 5-blade clusters scattered by density noise
+- **Grass tufts**: 5-blade clusters scattered by density noise, subtle emissive lift for uniform lighting
 - **Ferns** (3 geometry variants): Multi-segment curved fronds with dense leaflet pairs, drooping tips, and tip curl. Variants: compact upright, full spreading, tall droopy
-- **Flowers** (3 geometry variants, 6 colours): Curved stems with basal rosette leaves, stem leaves, cupped petals, and yellow centres. Green stems via vertex colours. Variants: small/standard/showy
-- **Rocks** (3 sizes): Jagged icosahedron geometry with vertex colour variation and procedural stone texture
+- **Flowers** (3 geometry variants, 6 colours): Multi-segment rounded petals (elliptical fan geometry), curved S-bend stems with basal rosette leaves and stem leaves. Phong shading with specular highlights. Variants: small/standard/showy
+- **Rocks** (3 sizes): Jagged icosahedron geometry with vertex colour variation and procedural stone texture; cast shadows
 - All vegetation placed by noise-driven density with jitter, clustering, and shore exclusion
+- Shader-patched double-sided lighting (front-face normals forced on backfaces) for uniform vegetation appearance
 
 ### Real-World Day/Night Cycle
-- Sun position calculated from actual device time, date, and geolocation (London fallback)
+- Sun position calculated from actual device time, date, and geolocation (Auckland fallback)
 - Four colour palettes smoothly interpolated: night, twilight, golden hour, day
 - Sky dome with 3-stop ShaderMaterial gradient (fog colour at horizon, sky bottom, sky top)
-- Sun rendered as soft-glow sprite; moon disc on opposite side
+- Sun rendered as soft-glow sprite
+- Astronomically-positioned moon with simplified Meeus lunar ephemeris (~1 degree accuracy)
+- Real moon photograph with phase shader: reconstructed sphere normals, smooth terminator, earthshine
+- Moon illumination direction computed from actual scene sun-to-moon geometry
+- Subtle moonlight shadows at night via DirectionalLight crossfade (cool blue-white tint)
 - 300 stars visible at night; occasional shooting stars
 - 30 cloud puffs at altitude with time-of-day colour tinting
 - Dynamic fog distance (distant during day, closes in at night for darkness effect)
-- Manual time scrubbing: VR (right grip + right stick Y), desktop (bracket keys)
+- Manual time scrubbing: VR (right grip + right stick Y), desktop (bracket keys), clamped to +/- 12 hours
 - Time offset HUD overlay with auto-fade
 
 ### Wind Animation
@@ -83,7 +88,8 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 - **Crow caws**: Harsh nasal oscillators from bird flock directions
 - **Crickets**: 4-voice chorus, frequency 4200–5400 Hz, active at dusk/night only
 - **Morepork (NZ owl)**: Single distant calls from random directions at night (30–90 second intervals)
-- **Wind**: Continuous filtered noise backdrop
+- **Water ambient**: Rhythmic lapping waves near water bodies (bandpass-filtered noise with pulse envelope, wind ducking)
+- **Wind**: Continuous filtered noise backdrop (auto-ducked near water)
 
 ### Movement & Physics
 - Smooth analogue locomotion (VR left stick / WASD)
@@ -101,7 +107,7 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 - Staggered chunk loading (max 2 per frame)
 - Distance fog hides chunk pop-in
 - Quest foveated rendering support
-- All textures procedurally generated on canvas at startup (no network requests)
+- All textures procedurally generated on canvas at startup (one external image: moon photograph)
 
 ## Controls
 
@@ -145,9 +151,9 @@ Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS 
 - **Noise**: simplex-noise 4.0.3 (CDN)
 - **Audio**: Web Audio API (all procedural except morepork owl call — single external recording)
 - **Rendering**: WebGL 2 with WebXR
-- **Textures**: All procedurally generated on HTML5 Canvas
+- **Textures**: All procedurally generated on HTML5 Canvas (moon photo loaded externally with procedural fallback)
 - **Geometry**: All built from Three.js primitives (no 3D models)
-- **Lines of code**: ~5,500+ lines of JavaScript across 25 modules
+- **Lines of code**: ~7,400+ lines of JavaScript across 25 modules
 
 ## Project Structure
 

@@ -34,10 +34,12 @@ export function getGroundMaterial() {
         '#include <common>',
         '#include <common>\nuniform float shoreLevel;\nuniform float waterLevel;\nvarying float vWorldY;'
       );
-      // Below shore level: replace grass texture with plain sandy vertex color
+      // Shore transition: smoothly blend grass texture out over a 1.5m band
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
-        '#include <map_fragment>\nif (vWorldY <= shoreLevel) { diffuseColor.rgb = vColor; }'
+        `#include <map_fragment>
+         float shoreMix = smoothstep(shoreLevel - 0.5, shoreLevel + 1.0, vWorldY);
+         diffuseColor.rgb = mix(vColor, diffuseColor.rgb, shoreMix);`
       );
       // Below water level: remove shadows — use uniform ambient lighting
       shader.fragmentShader = shader.fragmentShader.replace(

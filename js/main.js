@@ -38,7 +38,7 @@ const chunkManager = new ChunkManager(scene);
 movement.chunkManager = chunkManager;
 
 // --- Water surface with wave displacement ---
-const waterGeom = new THREE.PlaneGeometry(180, 180, 720, 720);
+const waterGeom = new THREE.PlaneGeometry(180, 180, 360, 360);
 waterGeom.rotateX(-Math.PI / 2);
 const waterMat = new THREE.MeshPhongMaterial({
   color: new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b),
@@ -212,8 +212,10 @@ chunkManager.forceLoadAll(0, 0);
 // --- Nearby tree helper for audio rustling ---
 const _cameraDir = new THREE.Vector3();
 
+const _nearbyTrees = [];
 function getNearbyTrees(playerPos, radius) {
-  const trees = [];
+  _nearbyTrees.length = 0;
+  const trees = _nearbyTrees;
   const cx = Math.floor(playerPos.x / CONFIG.CHUNK_SIZE);
   const cz = Math.floor(playerPos.z / CONFIG.CHUNK_SIZE);
   const radiusSq = radius * radius;
@@ -260,7 +262,10 @@ vrTimeSprite.position.set(0, -0.08, -0.3); // below center of view, close
 vrTimeSprite.visible = false;
 vr.camera.add(vrTimeSprite);
 
+let _lastHudText = '';
 function updateVrTimeHud(text) {
+  if (text === _lastHudText) return;
+  _lastHudText = text;
   vrTimeCtx.clearRect(0, 0, 256, 64);
   if (text) {
     vrTimeCtx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -303,10 +308,11 @@ function onFrame() {
   // Time scrubbing (right grip + stick Y in VR, [ ] on desktop)
   if (input.timeAdjust !== 0) {
     dayNight.timeOffset += input.timeAdjust * delta * 3; // 3 hours per second
+    dayNight.timeOffset = Math.max(-12, Math.min(12, dayNight.timeOffset));
   }
 
   // Update day/night cycle (sky, sun, lights, fog, clouds, moon)
-  dayNight.update(pos, vr.camera);
+  dayNight.update(pos, vr.camera, delta);
 
   // Show time offset indicator (visible while adjusting, fades out after)
   const isAdjusting = input.timeAdjust !== 0;

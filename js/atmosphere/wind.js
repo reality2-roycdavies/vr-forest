@@ -108,6 +108,27 @@ export function addWindToMaterial(material, type) {
       '#include <begin_vertex>',
       '#include <begin_vertex>\n' + windChunk
     );
+
+    // For vegetation: force backfaces to use front-face lighting so both
+    // sides of leaves/fronds light identically (no harsh dark underside)
+    if (type === 'vegetation') {
+      // Lambert materials: pick front lighting for both sides
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '( gl_FrontFacing ) ? vLightFront : vLightBack',
+          'vLightFront'
+        )
+        .replace(
+          '( gl_FrontFacing ) ? vIndirectFront : vIndirectBack',
+          'vIndirectFront'
+        );
+      // Phong/Standard materials: prevent normal flip on backfaces
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          'float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;',
+          'float faceDirection = 1.0;'
+        );
+    }
   };
 
   // Force recompilation

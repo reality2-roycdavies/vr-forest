@@ -4,11 +4,31 @@ import { CONFIG } from '../config.js';
 
 const _color = new THREE.Color();
 const _sunPos = new THREE.Vector3();
+const _sunDir = new THREE.Vector3();
+const _moonDir = new THREE.Vector3();
 const _moonToSun = new THREE.Vector3();
 const _camRight = new THREE.Vector3();
 const _camUp = new THREE.Vector3();
 const _camFwd = new THREE.Vector3();
 const _moonPos = new THREE.Vector3();
+const _cloudNightColor = new THREE.Color(0x222233);
+const _cloudTwilightColor = new THREE.Color(0xe8a070);
+
+// Pre-allocated mutable palette for transitions (avoids 7 Color clones per frame)
+const _blendPalette = {
+  skyTop: new THREE.Color(), skyBottom: new THREE.Color(),
+  fog: new THREE.Color(), sun: new THREE.Color(),
+  sunIntensity: 0,
+  hemiSky: new THREE.Color(), hemiGround: new THREE.Color(),
+  hemiIntensity: 0, ambient: 0,
+};
+
+// Cache ?time= param once (URL doesn't change during session)
+const _fakeTimeParam = new URLSearchParams(window.location.search).get('time');
+const _fakeTimeHours = _fakeTimeParam ? (() => {
+  const [h, m] = _fakeTimeParam.split(':').map(Number);
+  return (h || 0) + (m || 0) / 60;
+})() : null;
 
 // Color palettes for different times of day
 const PALETTES = {
@@ -126,8 +146,12 @@ export class DayNightSystem {
     this.sunMesh.renderOrder = -1;
     scene.add(this.sunMesh);
 
-    // --- Moon disc (phase shader with cratered texture) ---
+    // --- Moon disc (phase shader with photo texture, procedural fallback) ---
     this.moonTexture = this._createMoonTexture();
+    new THREE.TextureLoader().load('assets/textures/moon.jpg', (tex) => {
+      this.moonTexture = tex;
+      this.moonMat.uniforms.moonMap.value = tex;
+    });
     const moonGeo = new THREE.CircleGeometry(CONFIG.MOON_VISUAL_RADIUS, 32);
     this.moonMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -181,6 +205,7 @@ export class DayNightSystem {
 
     // --- Stars (for night) ---
     this.stars = this._createStars();
+    this.stars.material.transparent = true;
     scene.add(this.stars);
 
     // --- Shooting stars ---
@@ -195,10 +220,10 @@ export class DayNightSystem {
     this.sunLight.shadow.mapSize.height = 2048;
     this.sunLight.shadow.camera.near = 0.5;
     this.sunLight.shadow.camera.far = 150;
-    this.sunLight.shadow.camera.left = -60;
-    this.sunLight.shadow.camera.right = 60;
-    this.sunLight.shadow.camera.top = 60;
-    this.sunLight.shadow.camera.bottom = -60;
+    this.sunLight.shadow.camera.left = -40;
+    this.sunLight.shadow.camera.right = 40;
+    this.sunLight.shadow.camera.top = 40;
+    this.sunLight.shadow.camera.bottom = -40;
     this.sunLight.shadow.bias = -0.001;
     scene.add(this.sunLight);
     scene.add(this.sunLight.target);
@@ -468,33 +493,29 @@ export class DayNightSystem {
    * Simplified Meeus lunar ephemeris — ~1 degree accuracy.
    * Returns { altitude, azimuth, phase } in the observer's sky.
    */
-  _getMoonPosition() {
-    const now = new Date();
-
+  _getMoonPosition(now) {
     // Get the effective time (respecting ?time= override and timeOffset)
-    const params = new URLSearchParams(window.location.search);
-    const fakeTime = params.get('time');
     let hours;
-    if (fakeTime) {
-      const [h, m] = fakeTime.split(':').map(Number);
-      hours = (h || 0) + (m || 0) / 60;
+    if (_fakeTimeHours !== null) {
+      hours = _fakeTimeHours;
     } else {
       hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
     }
     hours += this.timeOffset;
 
-    // Build a Date-like timestamp for Julian date
-    // Use the current date but with the effective hours (in local time)
-    const effectiveDate = new Date(now);
+    // Compute Julian date directly from UTC components + hour offset
+    // Avoid creating extra Date objects
     const wholeHours = Math.floor(hours);
     const fracMinutes = (hours - wholeHours) * 60;
-    effectiveDate.setHours(wholeHours, Math.floor(fracMinutes), Math.floor((fracMinutes % 1) * 60));
+    // Adjust the now Date in-place temporarily for UTC extraction
+    const savedH = now.getHours(), savedM = now.getMinutes(), savedS = now.getSeconds();
+    now.setHours(wholeHours, Math.floor(fracMinutes), Math.floor((fracMinutes % 1) * 60));
 
     // Julian date from UTC
-    const y = effectiveDate.getUTCFullYear();
-    const m = effectiveDate.getUTCMonth() + 1;
-    const d = effectiveDate.getUTCDate() + (effectiveDate.getUTCHours() +
-              effectiveDate.getUTCMinutes() / 60 + effectiveDate.getUTCSeconds() / 3600) / 24;
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth() + 1;
+    const d = now.getUTCDate() + (now.getUTCHours() +
+              now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600) / 24;
     const a = Math.floor((14 - m) / 12);
     const y2 = y + 4800 - a;
     const m2 = m + 12 * a - 3;
@@ -570,6 +591,9 @@ export class DayNightSystem {
     const daysSinceNew = JD - newMoonEpochJD;
     const phase = ((daysSinceNew % synodicPeriod) + synodicPeriod) % synodicPeriod / synodicPeriod;
 
+    // Restore the shared Date object
+    now.setHours(savedH, savedM, savedS);
+
     return { altitude: sinAlt, azimuth, phase };
   }
 
@@ -577,16 +601,11 @@ export class DayNightSystem {
    * Calculate sun elevation and azimuth from real time + latitude.
    * Returns { elevation: -1..1 (sin of altitude angle), azimuth: radians }
    */
-  _getSunPosition() {
-    const now = new Date();
-
-    // Allow ?time=HH:MM override (e.g. ?time=22:30 for night)
-    const params = new URLSearchParams(window.location.search);
-    const fakeTime = params.get('time');
+  _getSunPosition(now) {
+    // Get effective hours (respecting cached ?time= override)
     let hours;
-    if (fakeTime) {
-      const [h, m] = fakeTime.split(':').map(Number);
-      hours = (h || 0) + (m || 0) / 60;
+    if (_fakeTimeHours !== null) {
+      hours = _fakeTimeHours;
     } else {
       hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
     }
@@ -594,9 +613,11 @@ export class DayNightSystem {
     // Apply manual time offset
     hours += this.timeOffset;
 
-    // Day of year
-    const start = new Date(now.getFullYear(), 0, 0);
-    const dayOfYear = Math.floor((now - start) / 86400000);
+    // Day of year (computed from month/date to avoid extra Date allocation)
+    const daysInMonth = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+    const mo = now.getMonth(); // 0-based
+    const isLeap = (now.getFullYear() % 4 === 0) && (now.getFullYear() % 100 !== 0 || now.getFullYear() % 400 === 0);
+    const dayOfYear = daysInMonth[mo] + now.getDate() + (isLeap && mo > 1 ? 1 : 0);
 
     // Solar declination (simplified)
     const declination = -23.44 * Math.cos(2 * Math.PI * (dayOfYear + 10) / 365) * Math.PI / 180;
@@ -624,17 +645,16 @@ export class DayNightSystem {
    * Blend between two palettes
    */
   _lerpPalette(a, b, t) {
-    return {
-      skyTop: _color.copy(a.skyTop).lerp(b.skyTop, t).clone(),
-      skyBottom: _color.copy(a.skyBottom).lerp(b.skyBottom, t).clone(),
-      fog: _color.copy(a.fog).lerp(b.fog, t).clone(),
-      sun: _color.copy(a.sun).lerp(b.sun, t).clone(),
-      sunIntensity: a.sunIntensity + (b.sunIntensity - a.sunIntensity) * t,
-      hemiSky: _color.copy(a.hemiSky).lerp(b.hemiSky, t).clone(),
-      hemiGround: _color.copy(a.hemiGround).lerp(b.hemiGround, t).clone(),
-      hemiIntensity: a.hemiIntensity + (b.hemiIntensity - a.hemiIntensity) * t,
-      ambient: a.ambient + (b.ambient - a.ambient) * t,
-    };
+    _blendPalette.skyTop.copy(a.skyTop).lerp(b.skyTop, t);
+    _blendPalette.skyBottom.copy(a.skyBottom).lerp(b.skyBottom, t);
+    _blendPalette.fog.copy(a.fog).lerp(b.fog, t);
+    _blendPalette.sun.copy(a.sun).lerp(b.sun, t);
+    _blendPalette.sunIntensity = a.sunIntensity + (b.sunIntensity - a.sunIntensity) * t;
+    _blendPalette.hemiSky.copy(a.hemiSky).lerp(b.hemiSky, t);
+    _blendPalette.hemiGround.copy(a.hemiGround).lerp(b.hemiGround, t);
+    _blendPalette.hemiIntensity = a.hemiIntensity + (b.hemiIntensity - a.hemiIntensity) * t;
+    _blendPalette.ambient = a.ambient + (b.ambient - a.ambient) * t;
+    return _blendPalette;
   }
 
   /**
@@ -663,8 +683,9 @@ export class DayNightSystem {
   /**
    * Call each frame with player position
    */
-  update(playerPos, camera) {
-    const { elevation, azimuth } = this._getSunPosition();
+  update(playerPos, camera, delta) {
+    const now = new Date();
+    const { elevation, azimuth } = this._getSunPosition(now);
     this.sunElevation = elevation;
     const palette = this._getPalette(elevation);
 
@@ -682,7 +703,7 @@ export class DayNightSystem {
     this.sunMesh.visible = elevation > -0.05;
 
     // Moon — astronomically positioned with phase
-    const moon = this._getMoonPosition();
+    const moon = this._getMoonPosition(now);
     this.moonPhase = moon.phase;
     this.moonAltitude = moon.altitude;
     const moonAltAngle = Math.asin(Math.max(-0.3, Math.min(1, moon.altitude)));
@@ -715,28 +736,26 @@ export class DayNightSystem {
     // Stars visibility
     this.stars.position.copy(playerPos);
     this.stars.material.opacity = Math.max(0, Math.min(1, (-elevation + 0.05) / 0.15));
-    this.stars.material.transparent = true;
     this.stars.visible = elevation < 0.1;
 
     // --- Sun/moon light + shadow (reuse single DirectionalLight) ---
-    const sunDir = _sunPos.clone().normalize();
+    _sunDir.copy(_sunPos).normalize();
     // Crossfade: during day use sun direction/color, at night use moon
     const moonUp = moon.altitude > 0.05;
     if (elevation > 0.0) {
       // Daytime — sun drives the directional light
-      this.sunLight.position.copy(playerPos).addScaledVector(sunDir, 70);
+      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 70);
       this.sunLight.target.position.copy(playerPos);
       this.sunLight.color.copy(palette.sun);
       this.sunLight.intensity = palette.sunIntensity;
     } else if (moonUp) {
       // Night with moon — moonlight drives the directional light
-      const moonDir = _moonPos.clone().normalize();
-      const moonIntensity = Math.min(0.22, 0.22 * Math.min(1, moon.altitude / 0.3));
+      _moonDir.copy(_moonPos).normalize();
+      const moonIntensity = Math.min(0.08, 0.08 * Math.min(1, moon.altitude / 0.3));
       // Smooth crossfade during twilight
       const twilightBlend = Math.max(0, Math.min(1, -elevation / 0.1));
-      this.sunLight.position.copy(playerPos).addScaledVector(
-        sunDir.lerp(moonDir, twilightBlend), 70
-      );
+      _sunDir.lerp(_moonDir, twilightBlend);
+      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 70);
       this.sunLight.target.position.copy(playerPos);
       // Cool blue-white moonlight tint
       this.sunLight.color.setRGB(
@@ -747,7 +766,7 @@ export class DayNightSystem {
       this.sunLight.intensity = palette.sunIntensity * (1 - twilightBlend) + moonIntensity * twilightBlend;
     } else {
       // Night, no moon
-      this.sunLight.position.copy(playerPos).addScaledVector(sunDir, 70);
+      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 70);
       this.sunLight.target.position.copy(playerPos);
       this.sunLight.color.copy(palette.sun);
       this.sunLight.intensity = palette.sunIntensity;
@@ -763,7 +782,8 @@ export class DayNightSystem {
 
     // --- Fog (distance adapts to time of day) ---
     this.scene.fog.color.copy(palette.fog);
-    this.scene.background = palette.fog.clone();
+    if (!this.scene.background) this.scene.background = new THREE.Color();
+    this.scene.background.copy(palette.fog);
     // Fog stays distant until deep night, then closes in for darkness.
     let fogNear, fogFar;
     if (elevation > -0.08) {
@@ -786,7 +806,7 @@ export class DayNightSystem {
     this._updateClouds(playerPos, palette, elevation);
 
     // --- Shooting stars ---
-    this._updateShootingStars(playerPos, elevation);
+    this._updateShootingStars(playerPos, elevation, delta || 0.016);
   }
 
   _updateSkyColors(topColor, bottomColor, fogColor, playerPos) {
@@ -823,8 +843,8 @@ export class DayNightSystem {
         } else if (isTwilight) {
           const t = (elevation + 0.05) / 0.15;
           puff.material.color.lerpColors(
-            new THREE.Color(0x222233),
-            new THREE.Color(0xe8a070),
+            _cloudNightColor,
+            _cloudTwilightColor,
             t
           );
           puff.material.opacity = basePuffOpacity * (0.5 + t * 0.5);
@@ -836,7 +856,7 @@ export class DayNightSystem {
     }
   }
 
-  _updateShootingStars(playerPos, elevation) {
+  _updateShootingStars(playerPos, elevation, delta) {
     // Only at night
     if (elevation > 0.05) {
       // Clean up any active ones
@@ -852,7 +872,7 @@ export class DayNightSystem {
     const nightStrength = Math.max(0, Math.min(1, (0.05 - elevation) / 0.1));
 
     // Spawn new shooting stars
-    this.shootingStarTimer += 0.016; // ~per frame
+    this.shootingStarTimer += delta;
     if (this.shootingStarTimer > this.shootingStarInterval) {
       this.shootingStarTimer = 0;
       this.shootingStarInterval = 3 + Math.random() * 10;
@@ -862,7 +882,7 @@ export class DayNightSystem {
     // Update active shooting stars
     for (let i = this.shootingStars.length - 1; i >= 0; i--) {
       const s = this.shootingStars[i];
-      s.life += 0.016;
+      s.life += delta;
       const t = s.life / s.duration;
 
       if (t >= 1) {
@@ -874,7 +894,7 @@ export class DayNightSystem {
       }
 
       // Move along direction
-      s.head.addScaledVector(s.velocity, 0.016);
+      s.head.addScaledVector(s.velocity, delta);
 
       // Update line: tail fades behind head
       const tailLen = Math.min(s.tailLength, s.life * s.speed);

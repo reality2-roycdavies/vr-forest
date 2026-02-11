@@ -32,6 +32,8 @@ export function generateTerrainData(chunkX, chunkZ) {
   const shoreCol = CONFIG.SHORE_COLOR;
 
   // Generate vertices + UVs (natural terrain height, no clamping)
+  // Cache heights to avoid double getTerrainHeight calls
+  const heightCache = new Float32Array(vertexCount);
   let minH = Infinity, maxH = -Infinity;
   for (let iz = 0; iz < verticesPerSide; iz++) {
     for (let ix = 0; ix < verticesPerSide; ix++) {
@@ -42,6 +44,7 @@ export function generateTerrainData(chunkX, chunkZ) {
       const worldZ = worldOffsetZ + localZ;
 
       const height = getTerrainHeight(worldX, worldZ);
+      heightCache[idx] = height;
       if (height < minH) minH = height;
       if (height > maxH) maxH = height;
 
@@ -66,7 +69,7 @@ export function generateTerrainData(chunkX, chunkZ) {
       const i = iz * verticesPerSide + ix;
       const worldX = worldOffsetX + ix * step;
       const worldZ = worldOffsetZ + iz * step;
-      const rawHeight = getTerrainHeight(worldX, worldZ);
+      const rawHeight = heightCache[i];
 
       let gr, gg, gb;
 
@@ -78,9 +81,11 @@ export function generateTerrainData(chunkX, chunkZ) {
       } else if (rawHeight <= shoreLevel) {
         // Shore — lerp from shore color to grass low color
         const st = (rawHeight - waterLevel) / (shoreLevel - waterLevel);
-        gr = shoreCol.r + (low.r - shoreCol.r) * st;
-        gg = shoreCol.g + (low.g - shoreCol.g) * st;
-        gb = shoreCol.b + (low.b - shoreCol.b) * st;
+        // Smooth ease-in so the transition doesn't appear as a hard line
+        const sts = st * st * (3 - 2 * st); // smoothstep
+        gr = shoreCol.r + (low.r - shoreCol.r) * sts;
+        gg = shoreCol.g + (low.g - shoreCol.g) * sts;
+        gb = shoreCol.b + (low.b - shoreCol.b) * sts;
       } else {
         // Normal grass/dirt coloring — t based on global height range
         const h = rawHeight;
@@ -96,6 +101,16 @@ export function generateTerrainData(chunkX, chunkZ) {
           gr = mid.r + (high.r - mid.r) * s;
           gg = mid.g + (high.g - mid.g) * s;
           gb = mid.b + (high.b - mid.b) * s;
+        }
+
+        // Blend shore color into the grass zone just above shoreLevel
+        const shoreBlendWidth = 1.5; // meters above shoreLevel to blend
+        if (rawHeight < shoreLevel + shoreBlendWidth) {
+          const sb = (rawHeight - shoreLevel) / shoreBlendWidth; // 0 at shore, 1 at full grass
+          const sbs = sb * sb * (3 - 2 * sb); // smoothstep
+          gr = low.r + (gr - low.r) * sbs;
+          gg = low.g + (gg - low.g) * sbs;
+          gb = low.b + (gb - low.b) * sbs;
         }
 
         // Dirt blending

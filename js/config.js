@@ -3,7 +3,7 @@
 export const CONFIG = {
   // Terrain
   CHUNK_SIZE: 32,           // meters per chunk side
-  CHUNK_SEGMENTS: 31,       // vertices per side (32x32 grid = 31x31 quads = 1922 tris)
+  CHUNK_SEGMENTS: 63,       // vertices per side (64x64 grid = 63x63 quads = 7938 tris)
   LOAD_RADIUS: 5,           // chunks to load around player
   UNLOAD_RADIUS: 7,         // chunks beyond this get recycled
   MAX_CHUNKS_PER_FRAME: 2,  // staggered loading
