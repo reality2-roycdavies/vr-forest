@@ -111,7 +111,7 @@ export function addWindToMaterial(material, type) {
 
     // For vegetation: force backfaces to use front-face lighting so both
     // sides of leaves/fronds light identically (no harsh dark underside)
-    if (type === 'vegetation') {
+    if (type === 'vegetation' || type === 'canopy') {
       // Lambert materials: pick front lighting for both sides
       shader.fragmentShader = shader.fragmentShader
         .replace(

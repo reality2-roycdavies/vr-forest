@@ -49,7 +49,7 @@ export function initTreeGeometries() {
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(trunkMat);
-    const pineMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[0] });
+    const pineMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[0], side: THREE.DoubleSide });
     addWindToMaterial(pineMat, 'canopy');
     canopyMaterials.push(pineMat);
   }
@@ -78,7 +78,7 @@ export function initTreeGeometries() {
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(trunkMat);
-    const oakMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[1] });
+    const oakMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[1], side: THREE.DoubleSide });
     addWindToMaterial(oakMat, 'canopy');
     canopyMaterials.push(oakMat);
   }
@@ -106,7 +106,7 @@ export function initTreeGeometries() {
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(birchMat);
-    const birchCanopyMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[2] });
+    const birchCanopyMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[2], side: THREE.DoubleSide });
     addWindToMaterial(birchCanopyMat, 'canopy');
     canopyMaterials.push(birchCanopyMat);
   }
