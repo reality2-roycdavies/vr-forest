@@ -216,14 +216,14 @@ export class DayNightSystem {
     // --- Directional sun light ---
     this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
+    this.sunLight.shadow.mapSize.width = 4096;
+    this.sunLight.shadow.mapSize.height = 4096;
     this.sunLight.shadow.camera.near = 0.5;
     this.sunLight.shadow.camera.far = 200;
-    this.sunLight.shadow.camera.left = -80;
-    this.sunLight.shadow.camera.right = 80;
-    this.sunLight.shadow.camera.top = 80;
-    this.sunLight.shadow.camera.bottom = -80;
+    this.sunLight.shadow.camera.left = -70;
+    this.sunLight.shadow.camera.right = 70;
+    this.sunLight.shadow.camera.top = 70;
+    this.sunLight.shadow.camera.bottom = -70;
     this.sunLight.shadow.bias = -0.001;
     scene.add(this.sunLight);
     scene.add(this.sunLight.target);
