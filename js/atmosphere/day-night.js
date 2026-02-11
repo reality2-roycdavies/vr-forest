@@ -219,11 +219,11 @@ export class DayNightSystem {
     this.sunLight.shadow.mapSize.width = 2048;
     this.sunLight.shadow.mapSize.height = 2048;
     this.sunLight.shadow.camera.near = 0.5;
-    this.sunLight.shadow.camera.far = 150;
-    this.sunLight.shadow.camera.left = -40;
-    this.sunLight.shadow.camera.right = 40;
-    this.sunLight.shadow.camera.top = 40;
-    this.sunLight.shadow.camera.bottom = -40;
+    this.sunLight.shadow.camera.far = 200;
+    this.sunLight.shadow.camera.left = -80;
+    this.sunLight.shadow.camera.right = 80;
+    this.sunLight.shadow.camera.top = 80;
+    this.sunLight.shadow.camera.bottom = -80;
     this.sunLight.shadow.bias = -0.001;
     scene.add(this.sunLight);
     scene.add(this.sunLight.target);
@@ -744,7 +744,7 @@ export class DayNightSystem {
     const moonUp = moon.altitude > 0.05;
     if (elevation > 0.0) {
       // Daytime — sun drives the directional light
-      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 70);
+      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 100);
       this.sunLight.target.position.copy(playerPos);
       this.sunLight.color.copy(palette.sun);
       this.sunLight.intensity = palette.sunIntensity;
@@ -755,7 +755,7 @@ export class DayNightSystem {
       // Smooth crossfade during twilight
       const twilightBlend = Math.max(0, Math.min(1, -elevation / 0.1));
       _sunDir.lerp(_moonDir, twilightBlend);
-      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 70);
+      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 100);
       this.sunLight.target.position.copy(playerPos);
       // Cool blue-white moonlight tint
       this.sunLight.color.setRGB(
@@ -766,7 +766,7 @@ export class DayNightSystem {
       this.sunLight.intensity = palette.sunIntensity * (1 - twilightBlend) + moonIntensity * twilightBlend;
     } else {
       // Night, no moon
-      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 70);
+      this.sunLight.position.copy(playerPos).addScaledVector(_sunDir, 100);
       this.sunLight.target.position.copy(playerPos);
       this.sunLight.color.copy(palette.sun);
       this.sunLight.intensity = palette.sunIntensity;

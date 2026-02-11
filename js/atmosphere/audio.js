@@ -589,17 +589,17 @@ export class AmbientAudio {
       this._waterSource = ctx.createBufferSource();
       this._waterSource.buffer = this._noiseBuffer;
       this._waterSource.loop = true;
-      this._waterSource.playbackRate.value = 0.4; // slow = smoother, less hissy
+      this._waterSource.playbackRate.value = 0.3; // very slow = deep, smooth character
 
       this._waterFilter = ctx.createBiquadFilter();
       this._waterFilter.type = 'bandpass';
-      this._waterFilter.frequency.value = 350;
-      this._waterFilter.Q.value = 1.2; // more resonant, less white-noise
+      this._waterFilter.frequency.value = 280;
+      this._waterFilter.Q.value = 2.0; // tight resonance, strongly tonal
 
       this._waterLowpass = ctx.createBiquadFilter();
       this._waterLowpass.type = 'lowpass';
-      this._waterLowpass.frequency.value = 600;
-      this._waterLowpass.Q.value = 0.5;
+      this._waterLowpass.frequency.value = 400;
+      this._waterLowpass.Q.value = 0.7;
 
       this._waterGain = ctx.createGain();
       this._waterGain.gain.value = 0;
@@ -617,12 +617,12 @@ export class AmbientAudio {
       this._waterShimmerSource = ctx.createBufferSource();
       this._waterShimmerSource.buffer = this._noiseBuffer;
       this._waterShimmerSource.loop = true;
-      this._waterShimmerSource.playbackRate.value = 0.6;
+      this._waterShimmerSource.playbackRate.value = 0.4;
 
       this._waterShimmerFilter = ctx.createBiquadFilter();
       this._waterShimmerFilter.type = 'bandpass';
-      this._waterShimmerFilter.frequency.value = 900;
-      this._waterShimmerFilter.Q.value = 2.0; // narrow resonant splash
+      this._waterShimmerFilter.frequency.value = 600;
+      this._waterShimmerFilter.Q.value = 3.0; // very narrow — just a hint of splash
 
       this._waterShimmerGain = ctx.createGain();
       this._waterShimmerGain.gain.value = 0;
@@ -655,7 +655,7 @@ export class AmbientAudio {
 
     // Update base volume based on proximity (used by wave scheduling)
     if (this._waterActive) {
-      this._waterBaseVol = waterProximity * 0.22;
+      this._waterBaseVol = waterProximity * 0.12;
     }
 
     // Duck wind near water so lapping sounds come through
@@ -690,7 +690,7 @@ export class AmbientAudio {
 
     // Shimmer — brief splash on wave arrival
     if (this._waterShimmerGain) {
-      this._waterShimmerGain.gain.setTargetAtTime(peakVol * 0.4, now, attack * 0.2);
+      this._waterShimmerGain.gain.setTargetAtTime(peakVol * 0.2, now, attack * 0.2);
       this._waterShimmerGain.gain.setTargetAtTime(0, now + attack * 0.8, 0.15);
     }
 
