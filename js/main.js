@@ -52,9 +52,38 @@ const waterMat = new THREE.MeshPhongMaterial({
   opacity: 0.92,
   depthWrite: false,
 });
+// --- Terrain heightmap for water shore fade ---
+const HMAP_RES = 256;
+const HMAP_SIZE = 300; // matches water plane size
+const hmapData = new Float32Array(HMAP_RES * HMAP_RES);
+const hmapTex = new THREE.DataTexture(hmapData, HMAP_RES, HMAP_RES, THREE.RedFormat, THREE.FloatType);
+hmapTex.wrapS = hmapTex.wrapT = THREE.ClampToEdgeWrapping;
+hmapTex.magFilter = THREE.LinearFilter;
+hmapTex.minFilter = THREE.LinearFilter;
+const hmapCenter = { x: 0, z: 0 };
+function updateHeightmap(cx, cz) {
+  const half = HMAP_SIZE / 2;
+  const step = HMAP_SIZE / HMAP_RES;
+  for (let iz = 0; iz < HMAP_RES; iz++) {
+    for (let ix = 0; ix < HMAP_RES; ix++) {
+      const wx = cx - half + ix * step;
+      const wz = cz - half + iz * step;
+      hmapData[iz * HMAP_RES + ix] = getTerrainHeight(wx, wz);
+    }
+  }
+  hmapTex.needsUpdate = true;
+  hmapCenter.x = cx;
+  hmapCenter.z = cz;
+}
+
 const waterTimeUniform = { value: 0 };
+const hmapCenterUniform = { value: new THREE.Vector2(0, 0) };
 waterMat.onBeforeCompile = (shader) => {
   shader.uniforms.uTime = waterTimeUniform;
+  shader.uniforms.uHeightmap = { value: hmapTex };
+  shader.uniforms.uHmapCenter = hmapCenterUniform;
+  shader.uniforms.uHmapSize = { value: HMAP_SIZE };
+  shader.uniforms.uWaterLevel = { value: CONFIG.WATER_LEVEL };
 
   // --- Shared GLSL noise functions ---
   const noiseGLSL = `
@@ -130,10 +159,14 @@ waterMat.onBeforeCompile = (shader) => {
     transformed.y += wH;`
   );
 
-  // --- Fragment shader: surface flecks ---
+  // --- Fragment shader: surface flecks + shore fade ---
   shader.fragmentShader = shader.fragmentShader.replace(
     '#include <common>',
-    '#include <common>\n' + noiseGLSL
+    `#include <common>
+    uniform sampler2D uHeightmap;
+    uniform vec2 uHmapCenter;
+    uniform float uHmapSize;
+    uniform float uWaterLevel;\n` + noiseGLSL
   );
   shader.fragmentShader = shader.fragmentShader.replace(
     '#include <dithering_fragment>',
@@ -155,6 +188,12 @@ waterMat.onBeforeCompile = (shader) => {
     float crestNoise = wSurface(wPos * 3.0 + vec2(uTime * 0.08, -uTime * 0.06));
     crestFoam *= smoothstep(0.45, 0.65, crestNoise);
     gl_FragColor.rgb += crestFoam * 0.04;
+    // Shore fade — very tight to soften waterline without revealing chunk seams
+    vec2 hmUV = (vWorldPos.xz - uHmapCenter) / uHmapSize + 0.5;
+    float terrainH = texture2D(uHeightmap, hmUV).r;
+    float shoreProx = terrainH - uWaterLevel;
+    float shoreFade = 1.0 - smoothstep(-0.2, 0.15, shoreProx);
+    gl_FragColor.a *= shoreFade;
     // Fade out at edges so water plane boundary is invisible
     float edgeDist = max(abs(vLocalPos.x), abs(vLocalPos.z));
     float edgeFade = 1.0 - smoothstep(120.0, 148.0, edgeDist);
@@ -495,6 +534,9 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
 let timeHudFade = 0;
 const clock = new THREE.Clock();
 
+// Initial heightmap generation
+updateHeightmap(0, 0);
+
 function onFrame() {
   const delta = Math.min(clock.getDelta(), 0.1); // Cap delta to avoid jumps
 
@@ -512,7 +554,14 @@ function onFrame() {
   waterPlane.position.x = pos.x;
   waterPlane.position.z = pos.z;
   waterTimeUniform.value += delta;
+  // Update terrain heightmap when player moves significantly
+  const hmDx = pos.x - hmapCenter.x, hmDz = pos.z - hmapCenter.z;
+  if (hmDx * hmDx + hmDz * hmDz > 25) { // >5m moved
+    updateHeightmap(pos.x, pos.z);
+    hmapCenterUniform.value.set(pos.x, pos.z);
+  }
   updateGroundTime(waterTimeUniform.value);
+  vegPool.updateFoamTime(waterTimeUniform.value);
 
   // Wind animation
   updateWind(delta);

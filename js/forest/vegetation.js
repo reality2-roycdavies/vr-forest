@@ -1,6 +1,7 @@
 // Grass, ferns, flowers, and rocks via instanced rendering
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { getTerrainHeight } from '../terrain/noise.js';
 import { createRockTexture } from './textures.js';
 import { addWindToMaterial } from '../atmosphere/wind.js';
 
@@ -22,6 +23,8 @@ export class VegetationPool {
     this._createMeshes();
     this._createFlowerMeshes();
     this._createRockMeshes();
+    this.foamTimeUniform = { value: 0 };
+    this._createFoamStrip();
   }
 
   _createMeshes() {
@@ -29,10 +32,18 @@ export class VegetationPool {
     const grassGeom = this._createGrassGeometry();
     const grassMat = new THREE.MeshLambertMaterial({
       color: CONFIG.GRASS_COLOR,
-      emissive: new THREE.Color(CONFIG.GRASS_COLOR).multiplyScalar(0.08),
+      emissive: new THREE.Color(CONFIG.GRASS_COLOR).multiplyScalar(0.03),
       side: THREE.DoubleSide,
     });
     addWindToMaterial(grassMat, 'vegetation');
+    const grassWindCompile = grassMat.onBeforeCompile;
+    grassMat.onBeforeCompile = (shader) => {
+      grassWindCompile(shader);
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_begin>',
+        'vec3 normal = normalize(vNormal);'
+      );
+    };
     const grassMesh = new THREE.InstancedMesh(grassGeom, grassMat, MAX_VEG_PER_TYPE);
     grassMesh.count = 0;
     grassMesh.frustumCulled = false;
@@ -55,10 +66,20 @@ export class VegetationPool {
       const geom = this._createFernGeometry(fp);
       const mat = new THREE.MeshLambertMaterial({
         color: CONFIG.FERN_COLOR,
-        emissive: new THREE.Color(CONFIG.FERN_COLOR).multiplyScalar(0.08),
+        emissive: new THREE.Color(CONFIG.FERN_COLOR).multiplyScalar(0.03),
         side: THREE.DoubleSide,
       });
       addWindToMaterial(mat, 'vegetation');
+      // Chain onto wind's onBeforeCompile to force normal up (prevents DoubleSide flip)
+      const windCompile = mat.onBeforeCompile;
+      mat.onBeforeCompile = (shader) => {
+        windCompile(shader);
+        // Keep geometry normal but skip the DoubleSide backface flip
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <normal_fragment_begin>',
+          'vec3 normal = normalize(vNormal);'
+        );
+      };
       const mesh = new THREE.InstancedMesh(geom, mat, MAX_VEG_PER_TYPE);
       mesh.count = 0;
       mesh.frustumCulled = false;
@@ -69,31 +90,51 @@ export class VegetationPool {
   }
 
   _createGrassGeometry() {
-    const blades = 5;
+    const blades = 9;
     const verts = [];
     const norms = [];
 
     for (let i = 0; i < blades; i++) {
-      const angle = (i / blades) * Math.PI;
+      // Full circle with golden-angle offset to avoid symmetry
+      const angle = (i / blades) * Math.PI * 2 + i * 0.4;
       const ca = Math.cos(angle);
       const sa = Math.sin(angle);
 
-      const halfW = 0.03 + (i % 3) * 0.01;
-      const height = 0.2 + (i % 3) * 0.08;
-      const leanX = ca * 0.03 * ((i % 2) ? 1 : -1);
-      const leanZ = sa * 0.03 * ((i % 2) ? 1 : -1);
-      const offX = ca * 0.02;
-      const offZ = sa * 0.02;
+      const halfW = 0.008 + (i % 3) * 0.004; // thin blades
+      const height = 0.12 + (i % 4) * 0.06;  // varied heights
+      // Blades lean outward from centre
+      const lean = 0.06 + (i % 3) * 0.03;
+      const leanX = ca * lean;
+      const leanZ = sa * lean;
+      // Slight radial offset from centre
+      const offX = ca * 0.01;
+      const offZ = sa * 0.01;
 
+      // Base vertices (perpendicular to blade direction)
       const bx1 = offX - sa * halfW;
       const bz1 = offZ + ca * halfW;
       const bx2 = offX + sa * halfW;
       const bz2 = offZ - ca * halfW;
+      // Tip leans outward
       const tx = offX + leanX;
       const tz = offZ + leanZ;
 
-      verts.push(bx1, 0, bz1, bx2, 0, bz2, tx, height, tz);
-      norms.push(ca, 0.3, sa, ca, 0.3, sa, ca, 0.3, sa);
+      // Two triangles for a tapered blade (base → mid → tip)
+      const midH = height * 0.5;
+      const midW = halfW * 0.6;
+      const mx = offX + leanX * 0.4;
+      const mz = offZ + leanZ * 0.4;
+      const mx1 = mx - sa * midW;
+      const mz1 = mz + ca * midW;
+      const mx2 = mx + sa * midW;
+      const mz2 = mz - ca * midW;
+
+      verts.push(bx1, 0, bz1, bx2, 0, bz2, mx1, midH, mz1);
+      verts.push(bx2, 0, bz2, mx2, midH, mz2, mx1, midH, mz1);
+      verts.push(mx1, midH, mz1, mx2, midH, mz2, tx, height, tz);
+
+      // Normals point generally up with slight outward lean
+      for (let n = 0; n < 9; n++) norms.push(ca * 0.3, 0.9, sa * 0.3);
     }
 
     const geom = new THREE.BufferGeometry();
@@ -136,6 +177,24 @@ export class VegetationPool {
         spine.push({ x: sx, y: sy, z: sz });
       }
 
+      // Compute per-segment normals from spine tangent (shared by left+right leaflets)
+      const segNormals = [];
+      for (let s = 0; s < segs; s++) {
+        const p0 = spine[s], p1 = spine[s + 1];
+        // Tangent along frond
+        const tx = p1.x - p0.x, ty = p1.y - p0.y, tz = p1.z - p0.z;
+        // Cross tangent with frond's perpendicular (-sa, 0, ca) to get "up" at this point
+        // Exaggerate tangent Y to increase gradient along frond
+        let nx = 0 * tz - ca * (ty * 2.0);
+        let ny = ca * tx - (-sa) * tz;
+        let nz = (-sa) * (ty * 2.0) - 0 * tx;
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+        nx /= len; ny /= len; nz /= len;
+        // Ensure normal points generally upward
+        if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        segNormals.push({ x: nx, y: ny, z: nz });
+      }
+
       // Central stem strip: connect spine points with width tapering to tip
       for (let s = 0; s < segs; s++) {
         const t0 = s / segs;
@@ -147,13 +206,15 @@ export class VegetationPool {
         const px1 = -sa * w1, pz1 = ca * w1;
         verts.push(p0.x + px0, p0.y, p0.z + pz0, p0.x - px0, p0.y, p0.z - pz0, p1.x + px1, p1.y, p1.z + pz1);
         verts.push(p0.x - px0, p0.y, p0.z - pz0, p1.x - px1, p1.y, p1.z - pz1, p1.x + px1, p1.y, p1.z + pz1);
-        for (let n = 0; n < 6; n++) norms.push(0, 0.85, 0.15);
+        const sn = segNormals[s];
+        for (let n = 0; n < 6; n++) norms.push(sn.x, sn.y, sn.z);
       }
 
       // Dense leaflet pairs along the frond — interpolated between spine points
       const leafletsPerSeg = 5;
       for (let s = 0; s < segs; s++) {
         const p0 = spine[s], p1 = spine[s + 1];
+        const sn = segNormals[s];
         for (let li = 0; li < leafletsPerSeg; li++) {
           const lt = (li + 0.5) / leafletsPerSeg;
           const t = (s + lt) / segs;
@@ -162,37 +223,45 @@ export class VegetationPool {
           const px = p0.x + (p1.x - p0.x) * lt;
           const py = p0.y + (p1.y - p0.y) * lt;
           const pz = p0.z + (p1.z - p0.z) * lt;
-          // Leaflet size: small at base, largest at 40%, tapers to tip
-          const sizeCurve = Math.sin(t * Math.PI) * (1 - t * 0.3);
-          const leafW = 0.07 * sizeCurve;
-          const leafL = 0.04 * sizeCurve; // length along frond direction
-          const leafDroop = -0.02 * t * t;
-          // Perpendicular to frond (left/right)
-          const lpx = -sa * leafW;
-          const lpz = ca * leafW;
-          // Forward along frond for leaf length
-          const flx = ca * leafL;
-          const flz = sa * leafL;
-          // Left leaflet: two triangles (base-mid-tip shape)
-          const lmx = px + lpx * 0.6 + flx * 0.5;
-          const lmz = pz + lpz * 0.6 + flz * 0.5;
-          const lmy = py + leafDroop * 0.5;
-          const ltx = px + lpx + flx;
-          const ltz = pz + lpz + flz;
-          const lty = py + leafDroop;
-          verts.push(px, py, pz, lmx, lmy, lmz, px + flx, py + leafDroop * 0.3, pz + flz);
-          verts.push(lmx, lmy, lmz, ltx, lty, ltz, px + flx, py + leafDroop * 0.3, pz + flz);
-          for (let n = 0; n < 6; n++) norms.push(0, 0.85, 0.15);
-          // Right leaflet: mirror
-          const rmx = px - lpx * 0.6 + flx * 0.5;
-          const rmz = pz - lpz * 0.6 + flz * 0.5;
-          const rmy = py + leafDroop * 0.5;
-          const rtx = px - lpx + flx;
-          const rtz = pz - lpz + flz;
-          const rty = py + leafDroop;
-          verts.push(px, py, pz, rmx, rmy, rmz, px + flx, py + leafDroop * 0.3, pz + flz);
-          verts.push(rmx, rmy, rmz, rtx, rty, rtz, px + flx, py + leafDroop * 0.3, pz + flz);
-          for (let n = 0; n < 6; n++) norms.push(0, 0.85, 0.15);
+          // Pinna size: small at base, largest at ~40%, tapers to tip
+          const sizeCurve = Math.min(1, t * 5) * (1 - t * t);
+          const pinnaW = 0.09 * sizeCurve;   // perpendicular extent
+          const pinnaL = 0.035 * sizeCurve;  // width along rachis
+          const pinnaDroop = -0.025 * t * t;
+          // Perpendicular to frond (left/right) — pinna extends sideways
+          const lpx = -sa * pinnaW;
+          const lpz = ca * pinnaW;
+          // Forward along frond — narrow attachment
+          const flx = ca * pinnaL;
+          const flz = sa * pinnaL;
+          // Left pinna: broader tapered shape (base → mid → tip)
+          const lmx = px + lpx * 0.55 + flx * 0.4;
+          const lmz = pz + lpz * 0.55 + flz * 0.4;
+          const lmy = py + pinnaDroop * 0.4;
+          const ltx = px + lpx;
+          const ltz = pz + lpz;
+          const lty = py + pinnaDroop;
+          verts.push(px, py, pz, lmx, lmy, lmz, px + flx, py + pinnaDroop * 0.2, pz + flz);
+          verts.push(lmx, lmy, lmz, ltx, lty, ltz, px + flx, py + pinnaDroop * 0.2, pz + flz);
+          // Left leaflet: slight outward tilt from spine normal
+          const tilt = 0.25;
+          let lnx = sn.x - sa * tilt, lny = sn.y, lnz = sn.z + ca * tilt;
+          let ll = Math.sqrt(lnx*lnx + lny*lny + lnz*lnz);
+          lnx /= ll; lny /= ll; lnz /= ll;
+          for (let n = 0; n < 6; n++) norms.push(lnx, lny, lnz);
+          // Right pinna: mirror
+          const rmx = px - lpx * 0.55 + flx * 0.4;
+          const rmz = pz - lpz * 0.55 + flz * 0.4;
+          const rmy = py + pinnaDroop * 0.4;
+          const rtx = px - lpx;
+          const rtz = pz - lpz;
+          const rty = py + pinnaDroop;
+          verts.push(px, py, pz, rmx, rmy, rmz, px + flx, py + pinnaDroop * 0.2, pz + flz);
+          verts.push(rmx, rmy, rmz, rtx, rty, rtz, px + flx, py + pinnaDroop * 0.2, pz + flz);
+          let rnx = sn.x + sa * tilt, rny = sn.y, rnz = sn.z - ca * tilt;
+          let rl = Math.sqrt(rnx*rnx + rny*rny + rnz*rnz);
+          rnx /= rl; rny /= rl; rnz /= rl;
+          for (let n = 0; n < 6; n++) norms.push(rnx, rny, rnz);
         }
       }
     }
@@ -257,6 +326,178 @@ export class VegetationPool {
     }
   }
 
+  _createFoamStrip() {
+    const MAX_SEGS = 8000;
+    this._maxFoamVerts = MAX_SEGS * 6;
+    this._foamPosArr = new Float32Array(this._maxFoamVerts * 3);
+    this._foamUvArr = new Float32Array(this._maxFoamVerts * 2);
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(this._foamPosArr, 3).setUsage(THREE.DynamicDrawUsage));
+    geom.setAttribute('uv', new THREE.BufferAttribute(this._foamUvArr, 2).setUsage(THREE.DynamicDrawUsage));
+    geom.setDrawRange(0, 0);
+
+    const mat = this._createFoamStripMaterial();
+    this.foamMesh = new THREE.Mesh(geom, mat);
+    this.foamMesh.frustumCulled = false;
+    this.foamMesh.renderOrder = 1;
+    this.scene.add(this.foamMesh);
+  }
+
+  _createFoamStripMaterial() {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x9aacb8,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      stencilWrite: true,
+      stencilFunc: THREE.EqualStencilFunc,
+      stencilRef: 0,
+      stencilZPass: THREE.IncrementStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilFail: THREE.KeepStencilOp,
+    });
+    mat.defines = { 'USE_UV': '' };
+
+    const self = this;
+    mat.customProgramCacheKey = () => 'shore-foam-strip';
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = self.foamTimeUniform;
+
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        varying vec3 vFoamWorld;
+        varying float vWaveH;`
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vec3 fwp = (modelMatrix * vec4(transformed, 1.0)).xyz;
+        vFoamWorld = fwp;
+        // Full wave function — matches water vertex shader exactly
+        float fwh = 0.0;
+        fwh += sin(dot(fwp.xz, vec2( 0.38,  0.12)) + uTime * 0.35) * 0.045;
+        fwh += sin(dot(fwp.xz, vec2(-0.15,  0.35)) + uTime * 0.28) * 0.040;
+        fwh += sin(dot(fwp.xz, vec2( 0.27, -0.22)) + uTime * 0.42) * 0.030;
+        fwh += sin(dot(fwp.xz, vec2( 0.45, -0.55)) + uTime * 0.55) * 0.020;
+        fwh += sin(dot(fwp.xz, vec2(-0.50,  0.30)) + uTime * 0.48) * 0.018;
+        fwh += sin(dot(fwp.xz, vec2( 0.60,  0.40)) + uTime * 0.65) * 0.015;
+        fwh += sin(dot(fwp.xz, vec2(-0.35, -0.60)) + uTime * 0.58) * 0.012;
+        fwh += sin(dot(fwp.xz, vec2( 1.70,  1.10)) + uTime * 1.00) * 0.007;
+        fwh += sin(dot(fwp.xz, vec2(-1.30,  1.80)) + uTime * 0.90) * 0.006;
+        fwh += sin(dot(fwp.xz, vec2( 2.10, -0.90)) + uTime * 1.20) * 0.005;
+        fwh += sin(dot(fwp.xz, vec2(-0.80, -2.20)) + uTime * 1.10) * 0.004;
+        fwh += sin(dot(fwp.xz, vec2( 2.80,  1.50)) + uTime * 1.40) * 0.003;
+        fwh += sin(dot(fwp.xz, vec2(-1.70,  2.80)) + uTime * 1.30) * 0.002;
+        vWaveH = fwh;
+        transformed.y += fwh;`
+      );
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        varying vec3 vFoamWorld;
+        varying float vWaveH;
+        float _fHash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float _fNoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = _fHash(i);
+          float b = _fHash(i + vec2(1.0, 0.0));
+          float c = _fHash(i + vec2(0.0, 1.0));
+          float d = _fHash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }`
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>
+        // Geometry edge fade — always fades at mesh boundaries regardless of wave
+        float rawV = vUv.y;
+        float geoFade = smoothstep(0.0, 0.06, rawV) * (1.0 - smoothstep(0.7, 1.0, rawV));
+        // Wave-shifted v for shore-side lapping
+        float waveShift = vWaveH * 1.5;
+        float v = rawV + waveShift;
+        // Ruffled shore edge — noise displaces the cutoff for organic look
+        float shoreNoise = _fNoise(vFoamWorld.xz * 6.0 + vec2(uTime * 0.04, uTime * 0.03));
+        float shoreNoise2 = _fNoise(vFoamWorld.xz * 15.0 + vec2(-uTime * 0.06, uTime * 0.05) + 30.0);
+        float ruffleOffset = (shoreNoise * 0.6 + shoreNoise2 * 0.4) * 0.25;
+        float stripFade = geoFade * smoothstep(ruffleOffset, ruffleOffset + 0.18, v) * (1.0 - smoothstep(0.5, 0.85, v));
+        // Soft lapping pattern
+        float fn1 = _fNoise(vFoamWorld.xz * 5.0 + vec2(uTime * 0.08, uTime * 0.05));
+        float fn2 = _fNoise(vFoamWorld.xz * 10.0 + vec2(-uTime * 0.06, uTime * 0.09) + 50.0);
+        float bubble = 0.6 + 0.4 * smoothstep(0.25, 0.55, fn1 * 0.6 + fn2 * 0.4);
+        float shimmer = 0.9 + 0.1 * sin(uTime * 0.3 + vFoamWorld.x * 0.7 + vFoamWorld.z * 0.5);
+        gl_FragColor.a *= stripFade * bubble * shimmer;
+        if (gl_FragColor.a < 0.02) discard;`
+      );
+    };
+
+    return mat;
+  }
+
+  updateFoamTime(time) {
+    this.foamTimeUniform.value = time;
+  }
+
+  _rebuildFoamStrip(segments) {
+    const pos = this._foamPosArr;
+    const uvs = this._foamUvArr;
+    const waterY = CONFIG.WATER_LEVEL + 0.07;
+    const shoreW = CONFIG.FOAM_SHORE_WIDTH;
+    const waterW = CONFIG.FOAM_WATER_WIDTH;
+    let vi = 0;
+
+    for (const seg of segments) {
+      if (vi + 6 > this._maxFoamVerts) break;
+
+      const { x1, z1, x2, z2, nx1, nz1, nx2, nz2 } = seg;
+
+      // Shore-side and water-side offsets using per-vertex normals
+      const s1x = x1 - nx1 * shoreW, s1z = z1 - nz1 * shoreW;
+      const w1x = x1 + nx1 * waterW, w1z = z1 + nz1 * waterW;
+      const s2x = x2 - nx2 * shoreW, s2z = z2 - nz2 * shoreW;
+      const w2x = x2 + nx2 * waterW, w2z = z2 + nz2 * waterW;
+
+      // Shore-side Y follows terrain so foam sits on top, not clipped by it
+      const s1y = Math.max(waterY, getTerrainHeight(s1x, s1z) + 0.01);
+      const s2y = Math.max(waterY, getTerrainHeight(s2x, s2z) + 0.01);
+
+      // Triangle 1: s1, w1, s2
+      pos[vi * 3] = s1x; pos[vi * 3 + 1] = s1y; pos[vi * 3 + 2] = s1z;
+      uvs[vi * 2] = 0; uvs[vi * 2 + 1] = 0; vi++;
+      pos[vi * 3] = w1x; pos[vi * 3 + 1] = waterY; pos[vi * 3 + 2] = w1z;
+      uvs[vi * 2] = 0; uvs[vi * 2 + 1] = 1; vi++;
+      pos[vi * 3] = s2x; pos[vi * 3 + 1] = s2y; pos[vi * 3 + 2] = s2z;
+      uvs[vi * 2] = 1; uvs[vi * 2 + 1] = 0; vi++;
+
+      // Triangle 2: w1, w2, s2
+      pos[vi * 3] = w1x; pos[vi * 3 + 1] = waterY; pos[vi * 3 + 2] = w1z;
+      uvs[vi * 2] = 0; uvs[vi * 2 + 1] = 1; vi++;
+      pos[vi * 3] = w2x; pos[vi * 3 + 1] = waterY; pos[vi * 3 + 2] = w2z;
+      uvs[vi * 2] = 1; uvs[vi * 2 + 1] = 1; vi++;
+      pos[vi * 3] = s2x; pos[vi * 3 + 1] = s2y; pos[vi * 3 + 2] = s2z;
+      uvs[vi * 2] = 1; uvs[vi * 2 + 1] = 0; vi++;
+    }
+
+    const geom = this.foamMesh.geometry;
+    geom.getAttribute('position').needsUpdate = true;
+    geom.getAttribute('uv').needsUpdate = true;
+    geom.setDrawRange(0, vi);
+    geom.computeBoundingSphere();
+    this.foamMesh.visible = vi > 0;
+  }
+
   _createFlowerMeshes() {
     // 3 flower geometry variants
     const flowerParams = [
@@ -274,7 +515,7 @@ export class VegetationPool {
       for (const geom of flowerGeoms) {
         const mat = new THREE.MeshPhongMaterial({
           color,
-          emissive: 0x1a1a10,
+          emissive: 0x060604,
           specular: 0x444444,
           shininess: 20,
           vertexColors: true,
@@ -479,6 +720,7 @@ export class VegetationPool {
     const allFlowers = CONFIG.FLOWER_COLORS.map(() => []);
     const rockCounts = [0, 0, 0];
     const allRocks = [[], [], []];
+    const allFoamSegments = [];
 
     for (const chunk of chunkIterator) {
       if (!chunk.active) continue;
@@ -505,6 +747,12 @@ export class VegetationPool {
             allRocks[r.sizeIdx].push(r);
             rockCounts[r.sizeIdx]++;
           }
+        }
+      }
+
+      if (chunk.foamSegments) {
+        for (const seg of chunk.foamSegments) {
+          allFoamSegments.push(seg);
         }
       }
     }
@@ -622,5 +870,8 @@ export class VegetationPool {
         if (bucket.length > 0) mesh.instanceMatrix.needsUpdate = true;
       }
     }
+
+    // Rebuild foam strip along waterline contour
+    this._rebuildFoamStrip(allFoamSegments);
   }
 }

@@ -110,19 +110,7 @@ export function getGroundMaterial() {
            h += sin(dot(p, vec2(-0.50,  0.30)) + t * 0.48) * 0.018;
            return h;
          }
-         float causticPattern(vec2 p, float time) {
-           vec2 i = p;
-           float c = 1.0;
-           float intensity = 0.005;
-           for (int n = 0; n < 3; n++) {
-             float t = time * (1.0 - 0.15 * float(n));
-             i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
-             c += 1.0 / length(vec2(p.x / (sin(i.x + t) / intensity), p.y / (cos(i.y + t) / intensity)));
-           }
-           c /= 3.0;
-           c = 1.17 - pow(c, 1.4);
-           return clamp(pow(abs(c), 8.0), 0.0, 1.0);
-         }`
+         `
       );
 
       // Per-pixel terrain color + anti-tiling texture + shore/grass blend
@@ -233,20 +221,7 @@ export function getGroundMaterial() {
         `#include <aomap_fragment>
          float dynWL = waterLevel + _waveH(vWorldPos.xz, uTime);
          float shadowSuppress = smoothstep(dynWL - 1.5, dynWL + 2.0, vWorldPos.y);
-         reflectedLight.directDiffuse = mix(reflectedLight.indirectDiffuse * 0.6, reflectedLight.directDiffuse, shadowSuppress);
-
-         // Procedural caustics on underwater terrain
-         float causticDepth = smoothstep(dynWL, dynWL - 0.5, vWorldPos.y);
-         if (causticDepth > 0.01) {
-           float nWarp = _vnoise(vWorldPos.xz * 0.2 + uTime * 0.02);
-           vec2 cUV = vWorldPos.xz + nWarp * 3.0;
-           float c1 = causticPattern(cUV * 6.0, uTime * 0.4);
-           vec2 cUV2 = vec2(cUV.y * 0.7 - cUV.x * 0.7, cUV.x * 0.7 + cUV.y * 0.7);
-           float c2 = causticPattern(cUV2 * 7.1 + 40.0, uTime * 0.3);
-           float caustic = min(c1, c2);
-           float cStrength = causticDepth * (1.0 - smoothstep(dynWL - 0.5, dynWL - 2.5, vWorldPos.y));
-           reflectedLight.directDiffuse += caustic * cStrength * 0.2;
-         }`
+         reflectedLight.directDiffuse = mix(reflectedLight.indirectDiffuse * 0.6, reflectedLight.directDiffuse, shadowSuppress);`
       );
     };
   }

@@ -15,6 +15,7 @@ export class Chunk {
     this.flowerPositions = []; // { x, y, z, colorIdx, scale }
     this.rockPositions = [];   // { x, y, z, sizeIdx, rotSeed }
     this.collectiblePositions = []; // { x, y, z }
+    this.foamSegments = [];         // { x1, z1, x2, z2, nx, nz }
     this.active = false;
   }
 
@@ -43,14 +44,15 @@ export class Chunk {
     this._generateFlowers(chunkX, chunkZ);
     this._generateRocks(chunkX, chunkZ);
     this._generateCollectibles(chunkX, chunkZ);
+    this._generateFoam(chunkX, chunkZ);
   }
 
   _createMesh(data) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(data.positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(data.colors, 3));
     geometry.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
     geometry.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
+    geometry.setAttribute('treeDensity', new THREE.BufferAttribute(data.treeDensityAttr, 1));
     geometry.setIndex(new THREE.BufferAttribute(data.indices, 1));
 
     this.mesh = new THREE.Mesh(geometry, getGroundMaterial());
@@ -65,8 +67,8 @@ export class Chunk {
     geom.getAttribute('position').set(data.positions);
     geom.getAttribute('position').needsUpdate = true;
 
-    geom.getAttribute('color').set(data.colors);
-    geom.getAttribute('color').needsUpdate = true;
+    geom.getAttribute('treeDensity').set(data.treeDensityAttr);
+    geom.getAttribute('treeDensity').needsUpdate = true;
 
     geom.getAttribute('normal').set(data.normals);
     geom.getAttribute('normal').needsUpdate = true;
@@ -127,15 +129,33 @@ export class Chunk {
           const jx = wx + jitter.x * 0.5;
           const jz = wz + jitter.z * 0.5;
           const y = getTerrainHeight(jx, jz);
-          if (y < CONFIG.SHORE_LEVEL) continue;
+          if (y < CONFIG.SHORE_LEVEL + 2.5) continue; // no vegetation on sand
 
           // Type: 0=grass, 2=fern
+          // Skip grass on dirt areas (high tree density)
+          const treeDens = getTreeDensity(jx, jz);
           let type;
-          if (density > 0.35) type = 2;      // fern (more common)
+          // Ferns mostly under trees, some in open areas at high density
+          if (density > 0.35 && (treeDens > 0.1 || density > 0.6)) type = 2;
+          else if (treeDens > 0.3) continue;  // no grass on dirt under trees
           else type = 0;                       // grass
 
           const scale = 0.5 + density * 0.8;
           this.vegPositions.push({ x: jx, y, z: jz, type, scale });
+
+          // Grass clusters: add 2-4 more tufts nearby
+          if (type === 0) {
+            const clumpCount = 2 + Math.floor(Math.abs(density) * 4);
+            for (let c = 0; c < clumpCount; c++) {
+              const cj = getJitter(wx + c * 17, wz + c * 43);
+              const cx = jx + cj.x * 0.4;
+              const cz = jz + cj.z * 0.4;
+              const cy = getTerrainHeight(cx, cz);
+              if (cy < CONFIG.SHORE_LEVEL) continue;
+              const cs = scale * (0.6 + Math.abs(cj.x) * 0.5);
+              this.vegPositions.push({ x: cx, y: cy, z: cz, type: 0, scale: cs });
+            }
+          }
 
           // Fern clusters: add 2-3 more ferns nearby
           if (type === 2 && density > 0.45) {
@@ -257,6 +277,68 @@ export class Chunk {
     }
   }
 
+  _generateFoam(chunkX, chunkZ) {
+    this.foamSegments.length = 0;
+    const step = CONFIG.FOAM_GRID_SPACING;
+    const size = CONFIG.CHUNK_SIZE;
+    const ox = chunkX * size;
+    const oz = chunkZ * size;
+    const wl = CONFIG.WATER_LEVEL;
+
+    for (let gz = 0; gz < size; gz += step) {
+      for (let gx = 0; gx < size; gx += step) {
+        const wx = ox + gx;
+        const wz = oz + gz;
+        const h00 = getTerrainHeight(wx, wz) - wl;
+        const h10 = getTerrainHeight(wx + step, wz) - wl;
+        const h01 = getTerrainHeight(wx, wz + step) - wl;
+        const h11 = getTerrainHeight(wx + step, wz + step) - wl;
+
+        // Find edge crossings (marching squares)
+        const cx = [];
+        if (h00 * h10 < 0) {
+          const t = h00 / (h00 - h10);
+          cx.push(wx + t * step, wz);
+        }
+        if (h10 * h11 < 0) {
+          const t = h10 / (h10 - h11);
+          cx.push(wx + step, wz + t * step);
+        }
+        if (h01 * h11 < 0) {
+          const t = h01 / (h01 - h11);
+          cx.push(wx + t * step, wz + step);
+        }
+        if (h00 * h01 < 0) {
+          const t = h00 / (h00 - h01);
+          cx.push(wx, wz + t * step);
+        }
+
+        if (cx.length >= 4) {
+          const x1 = cx[0], z1 = cx[1], x2 = cx[2], z2 = cx[3];
+          const dx = x2 - x1, dz = z2 - z1;
+          const len = Math.sqrt(dx * dx + dz * dz);
+          if (len < 0.01) continue;
+
+          // Per-vertex normals from terrain gradient at each crossing point
+          // This ensures shared crossing points get identical offsets
+          const eps = 0.15;
+          const g1x = getTerrainHeight(x1 + eps, z1) - getTerrainHeight(x1 - eps, z1);
+          const g1z = getTerrainHeight(x1, z1 + eps) - getTerrainHeight(x1, z1 - eps);
+          const l1 = Math.sqrt(g1x * g1x + g1z * g1z) || 1;
+          const g2x = getTerrainHeight(x2 + eps, z2) - getTerrainHeight(x2 - eps, z2);
+          const g2z = getTerrainHeight(x2, z2 + eps) - getTerrainHeight(x2, z2 - eps);
+          const l2 = Math.sqrt(g2x * g2x + g2z * g2z) || 1;
+
+          this.foamSegments.push({
+            x1, z1, x2, z2,
+            nx1: -g1x / l1, nz1: -g1z / l1,
+            nx2: -g2x / l2, nz2: -g2z / l2,
+          });
+        }
+      }
+    }
+  }
+
   deactivate() {
     this.active = false;
     if (this.mesh) this.mesh.visible = false;
@@ -265,6 +347,7 @@ export class Chunk {
     this.flowerPositions.length = 0;
     this.rockPositions.length = 0;
     this.collectiblePositions.length = 0;
+    this.foamSegments.length = 0;
   }
 
   dispose() {
@@ -277,6 +360,7 @@ export class Chunk {
     this.flowerPositions.length = 0;
     this.rockPositions.length = 0;
     this.collectiblePositions.length = 0;
+    this.foamSegments.length = 0;
     this.active = false;
   }
 }

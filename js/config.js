@@ -3,7 +3,7 @@
 export const CONFIG = {
   // Terrain
   CHUNK_SIZE: 32,           // meters per chunk side
-  CHUNK_SEGMENTS: 63,       // vertices per side (64x64 grid = 63x63 quads = 7938 tris)
+  CHUNK_SEGMENTS: 95,       // vertices per side (96x96 grid = 95x95 quads ≈ 18k tris)
   LOAD_RADIUS: 5,           // chunks to load around player
   UNLOAD_RADIUS: 7,         // chunks beyond this get recycled
   MAX_CHUNKS_PER_FRAME: 2,  // staggered loading
@@ -27,9 +27,9 @@ export const CONFIG = {
   TREE_COLLISION_RADIUS: 0.4,  // trunk collision radius in meters
 
   // Vegetation
-  VEG_GRID_SPACING: 1.5,
-  VEG_DENSITY_THRESHOLD: -0.1,
-  VEG_GRASS_SCALE: 0.4,
+  VEG_GRID_SPACING: 1.3,
+  VEG_DENSITY_THRESHOLD: -0.15,
+  VEG_GRASS_SCALE: 0.55,
   VEG_ROCK_SCALE: 0.3,
   VEG_FERN_SCALE: 1.2,
 
@@ -72,7 +72,7 @@ export const CONFIG = {
 
   // Ground surface
   GROUND_DIRT_SCALE: 0.03,       // noise frequency for dirt patches
-  GROUND_DIRT_THRESHOLD: 0.35,   // noise > this = dirt
+  GROUND_DIRT_THRESHOLD: 0.5,    // noise > this = dirt (higher = less dirt)
   GROUND_TEX_REPEAT: 6,         // texture tiles per chunk
 
   // Rocks
@@ -82,14 +82,19 @@ export const CONFIG = {
 
   // Water / shore
   WATER_LEVEL: -3.5,          // Y at or below = water (flattened to this Y)
-  SHORE_LEVEL: -2.0,          // Y below this = sandy shore (no vegetation)
-  SHORE_COLOR: { r: 0.82, g: 0.71, b: 0.55 },   // sandy beige
+  SHORE_LEVEL: -2.8,          // Y below this = sandy shore (no vegetation)
+  SHORE_COLOR: { r: 0.85, g: 0.75, b: 0.55 },   // warm sandy beige
   WATER_COLOR: { r: 0.05, g: 0.15, b: 0.28 },   // dark opaque water
   SWIM_DEPTH_THRESHOLD: 1.2,  // water deeper than this triggers swimming
   SWIM_SPEED: 1.8,            // m/s (slower than walking)
   SWIM_BOB_SPEED: 0.6,        // slow undulating bob
   SWIM_BOB_AMOUNT: 0.025,     // gentle subtle sway
   SWIM_EYE_ABOVE_WATER: 0.45, // how far eyes peek above water surface
+
+  // Shore foam meshes
+  FOAM_GRID_SPACING: 0.6,         // marching-squares grid step for waterline contour
+  FOAM_SHORE_WIDTH: 0.6,         // strip offset toward shore
+  FOAM_WATER_WIDTH: 0.8,         // strip offset toward water
 
   // Stream channels (ridge noise carving)
   STREAM_SCALE: 0.009,        // lower frequency = longer continuous channels
@@ -98,7 +103,7 @@ export const CONFIG = {
   STREAM_SHARPNESS: 2,        // wider channels (lower = broader)
 
   // Colors
-  GROUND_LOW_COLOR: { r: 0.18, g: 0.32, b: 0.08 },   // dark green (low)
+  GROUND_LOW_COLOR: { r: 0.13, g: 0.24, b: 0.06 },   // dark green (low, near-shore)
   GROUND_MID_COLOR: { r: 0.28, g: 0.45, b: 0.12 },   // mid green
   GROUND_HIGH_COLOR: { r: 0.35, g: 0.50, b: 0.18 },   // light green (high)
   GROUND_DIRT_COLOR: { r: 0.40, g: 0.30, b: 0.18 },   // dirt brown
@@ -107,7 +112,7 @@ export const CONFIG = {
   CANOPY_COLORS: [0x2d5a1e, 0x3a6b2a, 0x1e4a12],
   GRASS_COLOR: 0x4a7a2e,
   ROCK_COLOR: 0x888888,
-  FERN_COLOR: 0x2d6a1e,
+  FERN_COLOR: 0x4a8040,
   FLOWER_COLORS: [0xff4da6, 0xffe040, 0x8b6cf7, 0xff80b0, 0xffee55, 0xff6060],
   FLOWER_DENSITY_THRESHOLD: 0.45,
   FLOWER_GRID_SPACING: 2.0,
