@@ -974,6 +974,8 @@ export class DayNightSystem {
       if (this.sunLight.shadow.intensity !== undefined) {
         this.sunLight.shadow.intensity = shadowStrength;
       }
+      // Soften shadow edges — overcast sky diffuses light, blurring shadows
+      this.sunLight.shadow.radius = 1 + weather.cloudDarkness * 12;
       this.sunLight.castShadow = shadowStrength > 0.05;
     } else {
       this.sunLight.castShadow = true;
