@@ -45,6 +45,7 @@ movement.chunkManager = chunkManager;
 
 // --- Water surface with wave displacement ---
 const waterGeom = new THREE.PlaneGeometry(300, 300, 128, 128);
+const WATER_GRID_STEP = 300 / 128; // snap water position to grid to prevent wave sliding
 waterGeom.rotateX(-Math.PI / 2);
 const waterMat = new THREE.MeshPhongMaterial({
   color: new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b),
@@ -119,13 +120,13 @@ waterMat.onBeforeCompile = (shader) => {
       h += sin(dot(p, vec2(-0.80, -2.20)) + t * 1.10) * 0.004;
       h += sin(dot(p, vec2( 2.80,  1.50)) + t * 1.40) * 0.003;
       h += sin(dot(p, vec2(-1.70,  2.80)) + t * 1.30) * 0.002;
-      // Storm chop — high-frequency chaotic waves driven by rain intensity
-      h += sin(dot(p, vec2( 3.20, -1.80)) + t * 2.80) * 0.012 * uRainIntensity;
-      h += sin(dot(p, vec2(-2.50,  3.10)) + t * 3.20) * 0.010 * uRainIntensity;
-      h += sin(dot(p, vec2( 4.10,  2.30)) + t * 2.50) * 0.008 * uRainIntensity;
-      h += sin(dot(p, vec2(-1.90, -4.40)) + t * 3.60) * 0.007 * uRainIntensity;
-      h += sin(dot(p, vec2( 5.30,  0.80)) + t * 4.10) * 0.005 * uRainIntensity;
-      h += sin(dot(p, vec2(-3.70,  4.60)) + t * 3.80) * 0.004 * uRainIntensity;
+      // Storm chop — lower spatial frequencies to avoid aliasing on 128x128 mesh
+      h += sin(dot(p, vec2( 1.60, -0.90)) + t * 2.80) * 0.015 * uRainIntensity;
+      h += sin(dot(p, vec2(-1.25,  1.55)) + t * 3.20) * 0.012 * uRainIntensity;
+      h += sin(dot(p, vec2( 2.00,  1.15)) + t * 2.50) * 0.010 * uRainIntensity;
+      h += sin(dot(p, vec2(-0.95, -2.20)) + t * 3.60) * 0.008 * uRainIntensity;
+      h += sin(dot(p, vec2( 2.40,  0.40)) + t * 4.10) * 0.006 * uRainIntensity;
+      h += sin(dot(p, vec2(-1.85,  2.30)) + t * 3.80) * 0.005 * uRainIntensity;
       return h;
     }
     // Surface pattern for flecks — multiple sine layers, no grid
@@ -223,31 +224,28 @@ waterMat.onBeforeCompile = (shader) => {
     vec3 stormWater = vec3(0.12, 0.14, 0.18);
     gl_FragColor.rgb = mix(gl_FragColor.rgb, stormWater, uRainIntensity * 0.3);
     // Rain ripple rings on water surface
+    // highp required — sin-hash breaks at mediump on Quest with large world coords
     if (uRainIntensity > 0.01) {
       float rippleSum = 0.0;
+      highp vec2 hpWPos = wPos;
       for (int i = 0; i < 10; i++) {
         float fi = float(i);
         float phase = fract(sin(fi * 127.1) * 311.7);
-        // Each ripple runs at its own speed so they desynchronize
         float speed = 0.7 + fract(sin(fi * 53.7) * 197.3) * 0.5;
-        // Tile across water in 4m cells, offset per layer
-        vec2 cellCoord = floor(wPos / 4.0 + fi * 0.37);
-        // Per-cell phase so neighbouring cells don't pulse together
-        float cellPhase = fract(sin(dot(cellCoord, vec2(41.7, 89.3)) + fi * 13.0) * 2531.73);
-        float cycleTime = uTime * speed + phase + cellPhase;
+        highp vec2 cellCoord = floor(hpWPos / 4.0 + fi * 0.37);
+        highp float cellPhase = fract(sin(dot(cellCoord, vec2(41.7, 89.3)) + fi * 13.0) * 2531.73);
+        float cycleTime = uTime * speed + phase + float(cellPhase);
         float life = fract(cycleTime);
-        float cycle = floor(cycleTime);
-        // Hash uses cycle number so position changes each repeat
-        float seed = cycle * 17.0 + fi * 31.0;
-        vec2 center = cellCoord * 4.0 + vec2(
+        highp float cycle = floor(cycleTime);
+        highp float seed = cycle * 17.0 + fi * 31.0;
+        highp vec2 center = cellCoord * 4.0 + vec2(
           fract(sin(dot(cellCoord, vec2(12.9898 + seed, 78.233))) * 43758.5453) * 4.0,
           fract(sin(dot(cellCoord, vec2(39.346 + seed, 11.135))) * 23421.631) * 4.0
         );
         float radius = life * 0.45;
-        float d = length(wPos - center);
-        // Thin ring annulus
+        float d = length(hpWPos - center);
         float ring = 1.0 - smoothstep(0.0, 0.03, abs(d - radius));
-        ring *= 1.0 - life; // fade as ripple ages
+        ring *= 1.0 - life;
         rippleSum += ring;
       }
       rippleSum = min(rippleSum, 1.0);
@@ -290,8 +288,9 @@ movement.audio = audio;
 
 // When chunks change, rebuild instanced meshes
 chunkManager.onChunksChanged = () => {
-  treePool.rebuild(chunkManager.getActiveChunks());
-  vegPool.rebuild(chunkManager.getActiveChunks());
+  const px = vr.dolly.position.x, pz = vr.dolly.position.z;
+  treePool.rebuild(chunkManager.getActiveChunks(), px, pz);
+  vegPool.rebuild(chunkManager.getActiveChunks(), px, pz);
   collectibles.rebuild(chunkManager.getActiveChunks());
 };
 
@@ -664,9 +663,10 @@ function onFrame() {
   const pos = movement.getPlayerPosition();
   chunkManager.update(pos.x, pos.z);
 
-  // Water plane follows player XZ + animate flecks
-  waterPlane.position.x = pos.x;
-  waterPlane.position.z = pos.z;
+  // Water plane follows player XZ, snapped to grid step so wave vertices
+  // always land on the same world-space positions (prevents pattern sliding)
+  waterPlane.position.x = Math.round(pos.x / WATER_GRID_STEP) * WATER_GRID_STEP;
+  waterPlane.position.z = Math.round(pos.z / WATER_GRID_STEP) * WATER_GRID_STEP;
   waterTimeUniform.value += delta;
   // Update terrain heightmap when player moves significantly
   const hmDx = pos.x - hmapCenter.x, hmDz = pos.z - hmapCenter.z;

@@ -316,8 +316,8 @@ Shaders are the difference between "runs at 90fps" and "runs at 15fps." Because 
 
 In this project, shaders are used for:
 
-- **Water waves**: Vertex shader displaces the water plane with 13+ sine waves (plus 6 storm-chop layers).
-- **Water surface**: Fragment shader adds flecks, crest highlights, shore fade, and rain ripple rings.
+- **Water waves**: Vertex shader displaces the water plane (128x128 grid) with 13+ sine waves (plus 6 storm-chop layers).
+- **Water surface**: Fragment shader adds flecks, crest highlights, shore fade, and rain ripple rings (10 layers).
 - **Wind animation**: Vertex shader sways all vegetation and tree canopies.
 - **Ground wetness**: Fragment shader darkens and blue-shifts terrain during rain.
 - **Sky dome**: Fragment shader creates a smooth 3-stop gradient (fog → sky bottom → sky top).
@@ -433,7 +433,7 @@ On desktop, you optimise when things get slow. In VR, you must **design for perf
 | Merged geometry | 1 total | Static decoration (if geometry never changes) |
 | InstancedMesh | 1 per type | Trees, vegetation, rocks, flowers, birds, fireflies, rain |
 
-**InstancedMesh** is the single most important performance technique in this project. Each tree species is one `InstancedMesh` with up to 2000 instances — one draw call renders an entire forest.
+**InstancedMesh** is the single most important performance technique in this project. Each tree species is one `InstancedMesh` with up to 1200 instances — one draw call renders an entire forest.
 
 ### Shader Complexity
 
@@ -450,7 +450,7 @@ A rough guide for Quest-class hardware:
 
 | Element | Triangle Budget |
 |---------|----------------|
-| Terrain chunk (64x64 grid) | ~8,000 |
+| Terrain chunk (32x32 grid) | ~2,000 |
 | Tree (trunk + canopy) | 200–500 |
 | Fern/flower | 50–150 |
 | Rock | 80–160 |

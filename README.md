@@ -38,7 +38,7 @@ Human-AI conversation logs from each development session (readable markdown, con
 ## Features
 
 ### Infinite Procedural Terrain
-- Seamless chunked terrain streaming around the player (32m chunks, 64x64 vertices, 5-chunk load radius)
+- Seamless chunked terrain streaming around the player (32m chunks, 32x32 vertices, 5-chunk load radius)
 - Multi-octave simplex noise with configurable persistence, lacunarity, and seed
 - Stream channels carved by domain-warped ridge noise creating natural waterways
 - Shader-based ground colouring with height gradients, shore transitions, and dirt patches under trees
@@ -48,7 +48,7 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Ponds and streams fill low terrain areas (below configurable water level)
 - Real-time wave displacement shader with 10+ sinusoidal waves, plus 6 storm-chop layers driven by rain intensity
 - Height-tinted crests and troughs with drifting surface flecks
-- Storm response: water darkens and desaturates in rain, boosted crest foam, rain ripple rings (20-layer procedural expanding rings with per-cell randomised timing)
+- Storm response: water darkens and desaturates in rain, boosted crest foam, rain ripple rings (10-layer procedural expanding rings with per-cell randomised timing)
 - Sandy shore zones with smooth colour transitions (wet sand → foam → dry sand)
 - Shore foam strip with marching-squares waterline contour, wave-driven lapping animation
 - Water edge transparency: surface fades at terrain boundary via heightmap texture
@@ -77,6 +77,7 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Astronomically-positioned moon with simplified Meeus lunar ephemeris (~1 degree accuracy)
 - Real moon photograph with phase shader: reconstructed sphere normals, smooth terminator, earthshine
 - Moon illumination direction computed from actual scene sun-to-moon geometry
+- Behind clouds: photo disc hidden, soft glow sprite shows hazy brightness through overcast
 - Subtle moonlight shadows at night via DirectionalLight crossfade (cool blue-white tint)
 - 300 stars visible at night; occasional shooting stars
 - Diverse cloud system: cumulus puffs, wispy cirrus bands, flat haze layers, and small puffy clusters at stratified altitudes with gentle billowing animation and wind-aligned drift
@@ -87,10 +88,10 @@ Human-AI conversation logs from each development session (readable markdown, con
 
 ### Weather System
 - Three weather states: Sunny, Cloudy, Rainy — driven by a single `weatherIntensity` float (0→1→2)
-- Smooth auto-cycling transitions with configurable hold times, or manual control via keyboard (1/2/3) and VR left trigger
+- Smooth auto-cycling transitions with configurable hold times, or manual control via keyboard (1/2/3) and VR right A button
 - URL override for testing: `?weather=rainy`, `?weather=cloudy`, `?weather=0.5`
 - **Cloudy**: dark overcast sky, thick grey clouds, dimmed sunlight, faded shadows, reduced visibility
-- **Rainy**: 4000-particle rain streaks (custom ShaderMaterial with hair-thin vertical streaks), thunder and lightning, ground wetness with hysteresis
+- **Rainy**: 2000-particle rain streaks (custom ShaderMaterial with hair-thin vertical streaks), thunder and lightning, ground wetness with hysteresis
 - **Thunder**: 5-layer procedural audio (initial crack, deep boom, mid-body, rolling echoes, sub-bass tail) routed through a procedural ConvolverNode reverb impulse response for natural 6–8 second reverb tail
 - **Rain audio**: 4-layer filtered noise (wash 800 Hz, body 1600 Hz with gusting LFO, patter 3200 Hz, sizzle 6000 Hz+ with independent LFO) plus HRTF-spatialised 3D drip sounds (single drips, double drips, leaf/puddle splashes) scattered around the player
 - **Lightning**: Timer-based flash spikes with delayed thunder (0.3–2.5s for distance feel)
@@ -153,13 +154,14 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Tree trunk and rock collision with slide-along
 - Rock surface standing (3 size classes with different heights)
 - Terrain height following with smooth lerp
-- Walk bobbing synchronised to footstep audio
+- Walk bobbing synchronised to footstep audio (camera-space in VR to avoid world-object oscillation)
 
 ### Performance
 - Instanced rendering for all repeated geometry (trees, vegetation, rocks, flowers, birds, fireflies)
 - Chunk recycling pool — geometry reused, not recreated
 - Staggered chunk loading (max 2 per frame)
 - Distance fog hides chunk pop-in
+- Quest-optimised: 2048 shadow map, reduced geometry (32x32 terrain, 128x128 water), capped instance counts
 - Quest foveated rendering support
 - All textures procedurally generated on canvas at startup (one external image: moon photograph)
 
@@ -210,7 +212,7 @@ Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS 
 - **Rendering**: WebGL 2 with WebXR
 - **Textures**: All procedurally generated on HTML5 Canvas (moon photo loaded externally with procedural fallback)
 - **Geometry**: All built from Three.js primitives (no 3D models)
-- **Lines of code**: ~10,850 lines of JavaScript across 30 modules
+- **Lines of code**: ~10,900 lines of JavaScript across 25 modules
 
 ## Project Structure
 

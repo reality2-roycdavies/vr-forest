@@ -7,7 +7,7 @@ import {
   getTrunkMaterial, getCanopyMaterial
 } from './tree-factory.js';
 
-const MAX_TREES_PER_TYPE = 1200;
+const MAX_TREES_PER_TYPE = 2000;
 const _matrix = new THREE.Matrix4();
 const _position = new THREE.Vector3();
 const _quaternion = new THREE.Quaternion();
@@ -50,15 +50,25 @@ export class TreePool {
   }
 
   /**
-   * Rebuild all instance buffers from active chunks
+   * Rebuild all instance buffers from active chunks.
+   * playerX/Z used to prioritise nearby chunks when instance cap is hit.
    */
-  rebuild(chunkIterator) {
-    // Count trees per type first
+  rebuild(chunkIterator, playerX, playerZ) {
+    // Collect and sort chunks by distance from player (closest first)
+    const chunks = [];
+    for (const chunk of chunkIterator) {
+      if (!chunk.active) continue;
+      const dx = chunk.cx * CONFIG.CHUNK_SIZE + CONFIG.CHUNK_SIZE * 0.5 - (playerX || 0);
+      const dz = chunk.cz * CONFIG.CHUNK_SIZE + CONFIG.CHUNK_SIZE * 0.5 - (playerZ || 0);
+      chunk._sortDist = dx * dx + dz * dz;
+      chunks.push(chunk);
+    }
+    chunks.sort((a, b) => a._sortDist - b._sortDist);
+
     const counts = new Array(CONFIG.TREE_TYPES).fill(0);
     const allTrees = [[], [], []]; // per-type arrays
 
-    for (const chunk of chunkIterator) {
-      if (!chunk.active) continue;
+    for (const chunk of chunks) {
       for (const tree of chunk.treePositions) {
         if (counts[tree.type] < MAX_TREES_PER_TYPE) {
           allTrees[tree.type].push(tree);

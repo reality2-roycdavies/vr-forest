@@ -354,12 +354,8 @@ export class VegetationPool {
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
-      stencilWrite: true,
-      stencilFunc: THREE.EqualStencilFunc,
-      stencilRef: 0,
-      stencilZPass: THREE.IncrementStencilOp,
-      stencilZFail: THREE.KeepStencilOp,
-      stencilFail: THREE.KeepStencilOp,
+      // Stencil removed — caused stereo rendering issues on Quest (stencil not
+      // cleared between eye passes, blocking foam in second eye)
     });
     mat.defines = { 'USE_UV': '' };
 
@@ -405,11 +401,12 @@ export class VegetationPool {
         uniform float uTime;
         varying vec3 vFoamWorld;
         varying float vWaveH;
-        float _fHash(vec2 p) {
+        // Force highp for noise — mediump sin() breaks with large world coords on Quest
+        highp float _fHash(highp vec2 p) {
           return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
         }
-        float _fNoise(vec2 p) {
-          vec2 i = floor(p);
+        float _fNoise(highp vec2 p) {
+          highp vec2 i = floor(p);
           vec2 f = fract(p);
           f = f * f * (3.0 - 2.0 * f);
           float a = _fHash(i);
@@ -439,7 +436,8 @@ export class VegetationPool {
         float bubble = 0.6 + 0.4 * smoothstep(0.25, 0.55, fn1 * 0.6 + fn2 * 0.4);
         float shimmer = 0.9 + 0.1 * sin(uTime * 0.3 + vFoamWorld.x * 0.7 + vFoamWorld.z * 0.5);
         gl_FragColor.a *= stripFade * bubble * shimmer;
-        if (gl_FragColor.a < 0.02) discard;`
+        // No discard — let alpha do the work. discard + MSAA on Quest
+        // creates hard edge lines where fragments are killed at sub-pixel boundaries.`
       );
     };
 
@@ -713,7 +711,18 @@ export class VegetationPool {
   /**
    * Rebuild all vegetation, flower, and rock instances from active chunks
    */
-  rebuild(chunkIterator) {
+  rebuild(chunkIterator, playerX, playerZ) {
+    // Sort chunks by distance from player (closest first) to prioritise nearby vegetation
+    const chunks = [];
+    for (const chunk of chunkIterator) {
+      if (!chunk.active) continue;
+      const dx = chunk.cx * CONFIG.CHUNK_SIZE + CONFIG.CHUNK_SIZE * 0.5 - (playerX || 0);
+      const dz = chunk.cz * CONFIG.CHUNK_SIZE + CONFIG.CHUNK_SIZE * 0.5 - (playerZ || 0);
+      chunk._sortDist = dx * dx + dz * dz;
+      chunks.push(chunk);
+    }
+    chunks.sort((a, b) => a._sortDist - b._sortDist);
+
     const vegCounts = [0, 0, 0];
     const allVeg = [[], [], []];
     const flowerCounts = new Array(CONFIG.FLOWER_COLORS.length).fill(0);
@@ -722,8 +731,7 @@ export class VegetationPool {
     const allRocks = [[], [], []];
     const allFoamSegments = [];
 
-    for (const chunk of chunkIterator) {
-      if (!chunk.active) continue;
+    for (const chunk of chunks) {
 
       for (const v of chunk.vegPositions) {
         if (vegCounts[v.type] < MAX_VEG_PER_TYPE) {

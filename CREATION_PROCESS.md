@@ -4,7 +4,7 @@
 
 This project was built over four days (10–13 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
 
-The full conversation transcripts (Claude Code JSONL format) are available in the [`transcripts/`](transcripts/) directory — 9 sessions totalling ~37 MB of raw human-AI dialogue.
+The full conversation transcripts (Claude Code JSONL format) are available in the [`transcripts/`](transcripts/) directory — 13 sessions totalling ~53 MB of raw human-AI dialogue.
 
 The human's role was creative director: providing high-level vision, testing in the VR headset, and giving experiential feedback. Claude's role was the entire development studio: architecture, implementation, debugging, and iteration.
 
@@ -56,7 +56,7 @@ This proved to be the most challenging domain. Every sound was synthesised proce
 
 Water was a major feature arc spanning dozens of iterations. It began with the simple idea of filling low terrain areas with water and surrounding them with sandy shores.
 
-The water surface started as a flat blue plane, evolved through opacity and colour adjustments, then got a full custom ShaderMaterial with 10+ sinusoidal waves at different angles, height-tinted crests, and drifting surface flecks. The mesh resolution was increased several times (eventually 360x360 segments) to support fine wave detail.
+The water surface started as a flat blue plane, evolved through opacity and colour adjustments, then got a full custom ShaderMaterial with 10+ sinusoidal waves at different angles, height-tinted crests, and drifting surface flecks. The mesh resolution was increased several times during development and later optimised back to 128x128 segments for Quest performance.
 
 Stream channels were added using domain-warped ridge noise, carving continuous winding waterways through the terrain and connecting previously isolated ponds.
 
@@ -98,7 +98,7 @@ Day 2 began with a comprehensive performance audit and evolved into a deep polis
 
 The session opened with a systematic analysis of every JavaScript module — 27 specific performance issues were identified and fixed across the codebase. These ranged from replacing deprecated Web Audio API calls (`panner.setPosition()` → `positionX/Y/Z.value`) to eliminating string parsing in hot paths (chunk coordinate lookup), guarding unnecessary `needsUpdate` flags on bird instance matrices, and caching terrain height lookups to avoid redundant noise evaluations.
 
-The terrain resolution was doubled (32×32 to 64×64 vertices per chunk) for smoother ground, and the shore colour blending was improved with smooth gradient transitions between grass, sand, and water.
+The terrain resolution was doubled (32×32 to 64×64 vertices per chunk) for smoother ground (later reduced back to 32×32 in the performance pass), and the shore colour blending was improved with smooth gradient transitions between grass, sand, and water.
 
 ### Phase 10: The Real Moon
 
@@ -229,7 +229,7 @@ Rain went through several iterations. The initial implementation used `Float32Bu
 
 Once visible, the rain "looked like fast snow" — round white blobs. The fix was extreme horizontal squeeze in the fragment shader (`c.x * c.x * 80.0` vs `c.y * c.y * 0.8`), creating hair-thin vertical streaks only ~12% of the point width. The colour was shifted from near-white to translucent blue-grey.
 
-The particle count went from 1000 to 4000 to feel like a proper storm rather than "a few drips here and there."
+The particle count went from 1000 to 4000, then was later optimised to 2000 for Quest performance while still feeling like a proper storm.
 
 ### Phase 23: Thunder and Lightning
 
@@ -260,7 +260,7 @@ This arc illustrates a recurring theme: weather-by-time-of-day is a matrix, and 
 
 ### Phase 25: Stormy Water and Rain Audio Texture
 
-The water system was extended to respond to weather. Six additional high-frequency choppy wave layers scale with `uRainIntensity`, creating visibly rougher water during storms. The fragment shader darkens and desaturates the water surface, boosts crest foam highlights, and renders rain ripple rings — 20 procedural layers of expanding concentric rings tiled across the water in 4m cells.
+The water system was extended to respond to weather. Six additional high-frequency choppy wave layers scale with `uRainIntensity`, creating visibly rougher water during storms. The fragment shader darkens and desaturates the water surface, boosts crest foam highlights, and renders rain ripple rings — 10 procedural layers (optimised from 20) of expanding concentric rings tiled across the water in 4m cells.
 
 Getting the ripples right required three iterations. The first attempt placed ripples at fixed positions (they "stayed in the same place"). Adding a cycle counter to the position hash made each ripple spawn at a new random spot each lifecycle. But all ripples still pulsed in unison — the fix was adding a per-cell phase offset hashed from grid position, combined with per-layer speed variation (0.7–1.2x), so neighbouring cells and different layers are fully desynchronised.
 
@@ -278,8 +278,36 @@ The weather system touches nearly every other system:
 - **Audio**: Wind gain ducked during rain, bird chirps suppressed
 - **Fireflies**: Target opacity reduced by rain intensity
 - **Birds**: Excluded from fog (`fog: false`) so silhouettes stay clean against overcast sky
-- **Input**: Weather cycle added to keyboard (1/2/3) and VR (left trigger)
+- **Input**: Weather cycle added to keyboard (1/2/3) and VR (right A button)
 - **HUD**: Desktop text overlay and VR camera-attached sprite showing current/target weather state
+
+### Phase 27: Quest Performance Optimisation
+
+Testing on the Quest headset revealed significant frame drops with the full-fidelity settings from desktop development. A systematic performance pass reduced GPU and CPU costs:
+
+- **Shadow map**: 4096 → 2048 (75% fewer shadow texels)
+- **Terrain segments**: 64×64 → 32×32 per chunk (75% fewer terrain triangles)
+- **Water mesh**: 400×400 → 128×128 (90% fewer water triangles)
+- **Rain particles**: 4000 → 2000
+- **Rain ripple layers**: 20 → 10 in the water fragment shader
+- **Tree instances**: 2000 → 1200 per type
+- **Vegetation instances**: 5000/3000/2000 → 3000/1500/1000 (grass/flowers/rocks)
+- **Cloud count**: 30 → 18
+- **Heightmap texture**: 256×256 → 128×128
+
+The terrain and water reductions were surprisingly non-impactful visually — with shader-based colouring and procedural textures, the lower polygon count is masked by the surface detail.
+
+### Phase 28: VR Controller Ergonomics
+
+The left trigger (buttons[0]) had been mapped to weather cycling, but on Quest controllers this is where the index finger naturally rests. Users were accidentally changing the weather constantly. The fix moved weather cycling to the right A button (buttons[4]) — a deliberate press that can't happen accidentally.
+
+### Phase 29: Moon Behind Clouds
+
+The moon's photo texture, when scaled to remain visible through clouds, became a massive disc dominating the sky. The fix replaced the approach entirely: during cloudy/rainy weather, the photo moon disc is hidden and replaced with a soft glow sprite (reusing the sun's radial gradient texture with a cool blue-white tint). The glow fades aggressively with cloud darkness, creating a "hazy hint of brightness" rather than a solid object — matching how the real moon appears behind overcast skies.
+
+### Phase 30: Walk Bob in VR
+
+Walk bob was applied to the dolly (camera rig) Y position, which moved the entire world reference frame. Since the water plane sits at a fixed Y, this made the water appear to bob in sync with walking — an immersion-breaking visual artifact. The fix separates VR and desktop bob: in VR, the bob is applied to `camera.position.y` (the camera is a child of the dolly), so only the viewpoint moves while world objects remain stable.
 
 ---
 
@@ -323,7 +351,7 @@ The human was patient with iteration but had a clear quality threshold. They wou
 
 Multiple features that worked perfectly on a desktop monitor broke in VR. The player was at ground level (needed `local-floor` reference space). Trees floated on slopes (Y-position calculated incorrectly). Controller input didn't work (needed session-active polling). The sky disappeared (depth buffer precision). Head bob felt different (needed dolly-based application).
 
-VR is an unforgiving medium. It demands correctness in ways that flat-screen rendering doesn't. Height must be right. Scale must be right. Physics must be right. The headset is a truth machine.
+VR is an unforgiving medium. It demands correctness in ways that flat-screen rendering doesn't. Height must be right. Scale must be right. Physics must be right. The headset is a truth machine. Even something as subtle as applying walk bob to the camera rig (dolly) instead of the camera itself caused the water surface to visibly oscillate — the real world doesn't move when you walk, only your viewpoint does.
 
 ### The "One More Thing" Pattern
 
@@ -384,12 +412,12 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 
 ## By the Numbers
 
-- **Development time**: ~30 hours over four days
-- **Conversation sessions**: 10+ active sessions (transcripts in [`transcripts/`](transcripts/))
-- **User feedback messages**: ~300+
+- **Development time**: ~35 hours over four days
+- **Conversation sessions**: 13+ active sessions (transcripts in [`transcripts/`](transcripts/))
+- **User feedback messages**: ~350+
 - **Major features**: 16+ distinct systems
-- **Lines of JavaScript**: ~10,700
-- **JavaScript modules**: 30
+- **Lines of JavaScript**: ~10,900
+- **JavaScript modules**: 25
 - **External dependencies**: 2 (Three.js, simplex-noise, both from CDN)
 - **External art assets**: 1 (moon photograph from Wikipedia, with procedural fallback)
 - **External audio assets**: 1 (morepork.mp3, trimmed from a recording)
@@ -410,6 +438,8 @@ The raw Claude Code conversation transcripts are in [`transcripts/`](transcripts
 
 | File | Day | Topic |
 |------|-----|-------|
+| `day1-00-seed-prompt.jsonl` | 1 | The original "create a VR forest" prompt and plan |
+| `day1-00-initial-build.jsonl` | 1 | First implementation — scaffold, terrain, trees, sky, movement |
 | `day1-01-initial-appraisal.jsonl` | 1 | Initial project appraisal and architecture |
 | `day1-02-footsteps-crickets-spatial-audio.jsonl` | 1 | Footsteps, crickets, spatial audio |
 | `day1-03-water-ponds-shores.jsonl` | 1 | Water ponds, sandy shores |
@@ -419,3 +449,5 @@ The raw Claude Code conversation transcripts are in [`transcripts/`](transcripts
 | `day3-01-collectibles-minimap-terrain.jsonl` | 3 | Collectibles, minimap, terrain normals |
 | `day3-02-water-edge-effects.jsonl` | 3 | Shore foam, water edge transparency, caustics |
 | `day4-01-cloud-diversity.jsonl` | 4 | Cloud archetypes, textures, billowing animation |
+| `day4-02-weather-system.jsonl` | 4 | Weather architecture, rain particles, thunder, lightning |
+| `day4-03-weather-polish-stormy-water.jsonl` | 4 | Stormy water, rain audio, twilight fog, sun/moon cloud fade |
