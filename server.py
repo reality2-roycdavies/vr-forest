@@ -29,7 +29,15 @@ def main():
         print(f"Certificate files not found. Run ./generate-cert.sh first.")
         sys.exit(1)
 
-    handler = http.server.SimpleHTTPRequestHandler
+    class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+        """Serve files with no-cache headers so VR headset always gets latest."""
+        def end_headers(self):
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
+            super().end_headers()
+
+    handler = NoCacheHandler
     handler.extensions_map.update({
         ".js": "application/javascript",
         ".mjs": "application/javascript",

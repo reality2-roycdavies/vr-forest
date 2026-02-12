@@ -2,7 +2,7 @@
 
 A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — two external assets (morepork owl call, moon photograph), everything else procedurally generated.
 
-This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over two days. For a detailed account of the creation process and a thematic analysis of the human-AI dialogue, see [CREATION_PROCESS.md](CREATION_PROCESS.md).
+This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over three days. For a detailed account of the creation process and a thematic analysis of the human-AI dialogue, see [CREATION_PROCESS.md](CREATION_PROCESS.md).
 
 **Try it now:** [https://reality2-roycdavies.github.io/vr-forest/](https://reality2-roycdavies.github.io/vr-forest/)
 
@@ -14,7 +14,7 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 - Seamless chunked terrain streaming around the player (32m chunks, 64x64 vertices, 5-chunk load radius)
 - Multi-octave simplex noise with configurable persistence, lacunarity, and seed
 - Stream channels carved by domain-warped ridge noise creating natural waterways
-- Vertex-coloured ground with height-based grass gradients and dirt patch blending
+- Shader-based ground colouring with height gradients, shore transitions, and dirt patches under trees
 - Procedural grass texture with blade strokes, soil speckles, and pebble details
 
 ### Water System
@@ -49,7 +49,8 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 - Moon illumination direction computed from actual scene sun-to-moon geometry
 - Subtle moonlight shadows at night via DirectionalLight crossfade (cool blue-white tint)
 - 300 stars visible at night; occasional shooting stars
-- 30 cloud puffs at altitude with time-of-day colour tinting
+- Diverse cloud system: cumulus puffs, wispy cirrus bands, flat haze layers, and small puffy clusters at stratified altitudes with gentle billowing animation and wind-aligned drift
+- Time-of-day cloud colour tinting (white → sunset orange → dark night)
 - Dynamic fog distance (distant during day, closes in at night for darkness effect)
 - Manual time scrubbing: VR (right grip + right stick Y), desktop (bracket keys), clamped to +/- 12 hours
 - Time offset HUD overlay with auto-fade
@@ -153,7 +154,7 @@ Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS 
 - **Rendering**: WebGL 2 with WebXR
 - **Textures**: All procedurally generated on HTML5 Canvas (moon photo loaded externally with procedural fallback)
 - **Geometry**: All built from Three.js primitives (no 3D models)
-- **Lines of code**: ~7,400+ lines of JavaScript across 25 modules
+- **Lines of code**: ~9,500 lines of JavaScript across 29 modules
 
 ## Project Structure
 

@@ -87,6 +87,7 @@ export class DayNightSystem {
     this.timeOffset = 0; // hours offset from real time
     this.moonPhase = 0;
     this.moonAltitude = 0;
+    this.cloudTime = 0;
 
     // Try to get real location
     this._requestGeolocation();
@@ -219,11 +220,11 @@ export class DayNightSystem {
     this.sunLight.shadow.mapSize.width = 4096;
     this.sunLight.shadow.mapSize.height = 4096;
     this.sunLight.shadow.camera.near = 0.5;
-    this.sunLight.shadow.camera.far = 150;
-    this.sunLight.shadow.camera.left = -50;
-    this.sunLight.shadow.camera.right = 50;
-    this.sunLight.shadow.camera.top = 50;
-    this.sunLight.shadow.camera.bottom = -50;
+    this.sunLight.shadow.camera.far = 250;
+    this.sunLight.shadow.camera.left = -80;
+    this.sunLight.shadow.camera.right = 80;
+    this.sunLight.shadow.camera.top = 80;
+    this.sunLight.shadow.camera.bottom = -80;
     this.sunLight.shadow.bias = -0.002;
     this.sunLight.shadow.normalBias = 0.03;
     scene.add(this.sunLight);
@@ -281,37 +282,127 @@ export class DayNightSystem {
   }
 
   _createClouds() {
-    // Generate a soft circular texture for cloud puffs
-    this.cloudTexture = this._createCloudTexture();
+    this.cloudTextures = this._createCloudTextures();
+    // [0] soft round, [1] wispy, [2] flat-bottomed, [3] thin haze
+    this._cloudPlaneGeo = new THREE.PlaneGeometry(1, 1);
+    // Prevailing wind direction — all wispy/flat clouds align to this
+    const windAngle = Math.random() * Math.PI;
+
+    // Cloud archetypes with weighted random selection
+    const archetypes = [
+      { type: 'cumulus',    weight: 0.35, puffs: [5, 8],  heightMin: 60,  heightMax: 90,
+        opacityMin: 0.25, opacityMax: 0.45, textures: [0, 2], driftBase: 0.015, horizontal: false },
+      { type: 'wispy',     weight: 0.25, puffs: [3, 6],  heightMin: 85,  heightMax: 110,
+        opacityMin: 0.1, opacityMax: 0.2,  textures: [1],    driftBase: 0.035, horizontal: true },
+      { type: 'flat',      weight: 0.20, puffs: [6, 10], heightMin: 70,  heightMax: 100,
+        opacityMin: 0.12, opacityMax: 0.22, textures: [3, 0], driftBase: 0.008, horizontal: true },
+      { type: 'smallPuffy', weight: 0.20, puffs: [2, 3], heightMin: 50,  heightMax: 75,
+        opacityMin: 0.3,  opacityMax: 0.5,  textures: [0],    driftBase: 0.025, horizontal: false },
+    ];
+
+    const pickArchetype = () => {
+      const r = Math.random();
+      let cumulative = 0;
+      for (const a of archetypes) {
+        cumulative += a.weight;
+        if (r < cumulative) return a;
+      }
+      return archetypes[0];
+    };
 
     for (let i = 0; i < CONFIG.CLOUD_COUNT; i++) {
+      const arch = pickArchetype();
       const angle = (i / CONFIG.CLOUD_COUNT) * Math.PI * 2 + Math.random() * 0.5;
       const radius = CONFIG.CLOUD_MIN_RADIUS + Math.random() * (CONFIG.CLOUD_MAX_RADIUS - CONFIG.CLOUD_MIN_RADIUS);
-      const height = CONFIG.CLOUD_HEIGHT_MIN + Math.random() * (CONFIG.CLOUD_HEIGHT_MAX - CONFIG.CLOUD_HEIGHT_MIN);
+      const height = arch.heightMin + Math.random() * (arch.heightMax - arch.heightMin);
 
-      // Each cloud is a group of 4-8 billboard sprites for a fluffy look
       const cloud = new THREE.Group();
-      const puffCount = 4 + Math.floor(Math.random() * 5);
+      const puffCount = arch.puffs[0] + Math.floor(Math.random() * (arch.puffs[1] - arch.puffs[0] + 1));
       const cloudWidth = CONFIG.CLOUD_SCALE_MIN + Math.random() * (CONFIG.CLOUD_SCALE_MAX - CONFIG.CLOUD_SCALE_MIN);
 
       for (let p = 0; p < puffCount; p++) {
-        const puffSize = (0.4 + Math.random() * 0.6) * cloudWidth;
-        const mat = new THREE.SpriteMaterial({
-          map: this.cloudTexture,
-          color: 0xffffff,
-          transparent: true,
-          opacity: 0.25 + Math.random() * 0.2,
-          fog: false,
-          depthWrite: false,
-        });
-        const sprite = new THREE.Sprite(mat);
-        sprite.scale.set(puffSize, puffSize * (0.4 + Math.random() * 0.3), 1);
-        sprite.position.set(
-          (Math.random() - 0.5) * cloudWidth * 0.8,
-          (Math.random() - 0.3) * cloudWidth * 0.15,
-          (Math.random() - 0.5) * cloudWidth * 0.4
-        );
-        cloud.add(sprite);
+        const texIdx = arch.textures[Math.floor(Math.random() * arch.textures.length)];
+        const opacity = arch.opacityMin + Math.random() * (arch.opacityMax - arch.opacityMin);
+
+        let puffObj;
+        if (arch.horizontal) {
+          // Flat horizontal plane — no billboarding, sits naturally in sky
+          const mat = new THREE.MeshBasicMaterial({
+            map: this.cloudTextures[texIdx],
+            color: 0xffffff,
+            transparent: true,
+            opacity,
+            fog: false,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          });
+          puffObj = new THREE.Mesh(this._cloudPlaneGeo, mat);
+          puffObj.rotation.x = -Math.PI / 2;
+          puffObj.rotation.y = windAngle + (Math.random() - 0.5) * 0.3;
+        } else {
+          // Billboard sprite — faces camera, good for round puffs
+          const mat = new THREE.SpriteMaterial({
+            map: this.cloudTextures[texIdx],
+            color: 0xffffff,
+            transparent: true,
+            opacity,
+            fog: false,
+            depthWrite: false,
+          });
+          puffObj = new THREE.Sprite(mat);
+        }
+
+        let puffSize, scaleX, scaleY, posX, posY, posZ;
+        switch (arch.type) {
+          case 'cumulus':
+            puffSize = (0.4 + Math.random() * 0.6) * cloudWidth;
+            scaleX = puffSize;
+            scaleY = puffSize * (0.5 + Math.random() * 0.4);
+            posX = (Math.random() - 0.5) * cloudWidth * 0.7;
+            posY = (Math.random() - 0.2) * cloudWidth * 0.3;
+            posZ = (Math.random() - 0.5) * cloudWidth * 0.5;
+            break;
+          case 'wispy':
+            puffSize = (1.0 + Math.random() * 0.8) * cloudWidth;
+            scaleX = puffSize * (1.5 + Math.random() * 0.5);
+            scaleY = puffSize * (1.2 + Math.random() * 0.5);
+            posX = (Math.random() - 0.5) * cloudWidth * 2.5;
+            posY = (Math.random() - 0.5) * cloudWidth * 0.05;
+            posZ = (Math.random() - 0.5) * cloudWidth * 1.0;
+            break;
+          case 'flat':
+            puffSize = (0.5 + Math.random() * 0.5) * cloudWidth;
+            scaleX = puffSize * (1.0 + Math.random() * 0.5);
+            scaleY = puffSize * (0.6 + Math.random() * 0.4);
+            posX = (Math.random() - 0.5) * cloudWidth * 1.2;
+            posY = (Math.random() - 0.5) * cloudWidth * 0.06;
+            posZ = (Math.random() - 0.5) * cloudWidth * 0.8;
+            break;
+          case 'smallPuffy':
+            puffSize = (0.5 + Math.random() * 0.5) * cloudWidth * 0.6;
+            scaleX = puffSize;
+            scaleY = puffSize * (0.5 + Math.random() * 0.3);
+            posX = (Math.random() - 0.5) * cloudWidth * 0.3;
+            posY = (Math.random() - 0.3) * cloudWidth * 0.15;
+            posZ = (Math.random() - 0.5) * cloudWidth * 0.3;
+            break;
+        }
+
+        if (arch.horizontal) {
+          // Horizontal plane: XY plane rotated flat, so scale Y = depth
+          puffObj.scale.set(scaleX, scaleY, 1);
+        } else {
+          puffObj.scale.set(scaleX, scaleY, 1);
+        }
+        puffObj.position.set(posX, posY, posZ);
+        puffObj.userData.baseX = posX;
+        puffObj.userData.baseY = posY;
+        puffObj.userData.baseZ = posZ;
+        puffObj.userData.baseScaleX = scaleX;
+        puffObj.userData.baseScaleY = scaleY;
+        puffObj.userData.phase = Math.random() * Math.PI * 2;
+        puffObj.userData.horizontal = arch.horizontal;
+        cloud.add(puffObj);
       }
 
       cloud.position.set(
@@ -322,7 +413,8 @@ export class DayNightSystem {
       cloud.userData.angle = angle;
       cloud.userData.radius = radius;
       cloud.userData.baseHeight = height;
-      cloud.userData.drift = 0.01 + Math.random() * 0.02;
+      cloud.userData.drift = arch.driftBase + Math.random() * arch.driftBase * 0.5;
+      cloud.userData.type = arch.type;
       this.cloudGroup.add(cloud);
     }
   }
@@ -345,22 +437,89 @@ export class DayNightSystem {
     return new THREE.CanvasTexture(canvas);
   }
 
-  _createCloudTexture() {
-    const size = 64;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    const half = size / 2;
-    const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
-    gradient.addColorStop(0, 'rgba(255,255,255,1)');
-    gradient.addColorStop(0.3, 'rgba(255,255,255,0.7)');
-    gradient.addColorStop(0.6, 'rgba(255,255,255,0.25)');
-    gradient.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, size, size);
-    const tex = new THREE.CanvasTexture(canvas);
-    return tex;
+  _createCloudTextures() {
+    const textures = [];
+
+    // 0: Soft round — classic cumulus puff
+    {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const half = size / 2;
+      const g = ctx.createRadialGradient(half, half, 0, half, half, half);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.3, 'rgba(255,255,255,0.7)');
+      g.addColorStop(0.6, 'rgba(255,255,255,0.25)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+      textures.push(new THREE.CanvasTexture(canvas));
+    }
+
+    // 1: Wispy — very soft round wash, wispy shape comes from puff arrangement
+    {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const half = size / 2;
+      const g = ctx.createRadialGradient(half, half, 0, half, half, half);
+      g.addColorStop(0, 'rgba(255,255,255,0.5)');
+      g.addColorStop(0.25, 'rgba(255,255,255,0.35)');
+      g.addColorStop(0.5, 'rgba(255,255,255,0.15)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+      textures.push(new THREE.CanvasTexture(canvas));
+    }
+
+    // 2: Flat-bottomed — sharp lower edge, soft top for fair-weather cumulus
+    {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.createImageData(size, size);
+      const data = imageData.data;
+      const half = size / 2;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const i = (y * size + x) * 4;
+          const dx = (x - half) / half;
+          const dy = (y - half) / half;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          // Asymmetric falloff: soft on top, flatter on bottom
+          const verticalBias = dy > 0
+            ? dx * dx + dy * dy * 2.5  // steeper below center
+            : dx * dx + dy * dy * 0.6; // softer above center
+          let alpha = Math.max(0, 1 - Math.sqrt(verticalBias) * 1.1);
+          data[i] = 255; data[i + 1] = 255; data[i + 2] = 255;
+          data[i + 3] = Math.floor(Math.max(0, alpha) * 255);
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+      textures.push(new THREE.CanvasTexture(canvas));
+    }
+
+    // 3: Thin haze — very diffuse, low contrast for high-altitude patches
+    {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const half = size / 2;
+      const g = ctx.createRadialGradient(half, half, 0, half, half, half);
+      g.addColorStop(0, 'rgba(255,255,255,0.4)');
+      g.addColorStop(0.3, 'rgba(255,255,255,0.25)');
+      g.addColorStop(0.6, 'rgba(255,255,255,0.1)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+      textures.push(new THREE.CanvasTexture(canvas));
+    }
+
+    return textures;
   }
 
   /**
@@ -807,7 +966,7 @@ export class DayNightSystem {
     this._updateSkyColors(palette.skyTop, palette.skyBottom, palette.fog, playerPos);
 
     // --- Clouds ---
-    this._updateClouds(playerPos, palette, elevation);
+    this._updateClouds(playerPos, palette, elevation, delta || 0.016);
 
     // --- Shooting stars ---
     this._updateShootingStars(playerPos, elevation, delta || 0.016);
@@ -820,23 +979,41 @@ export class DayNightSystem {
     this.skyMesh.position.set(playerPos.x, 0, playerPos.z);
   }
 
-  _updateClouds(playerPos, palette, elevation) {
+  _updateClouds(playerPos, palette, elevation, delta) {
     this.cloudGroup.position.set(playerPos.x, 0, playerPos.z);
+    this.cloudTime += delta;
+    const t = this.cloudTime;
 
     // Tint clouds based on time of day
     const isNight = elevation < -0.05;
     const isTwilight = elevation >= -0.05 && elevation < 0.1;
 
     for (const cloud of this.cloudGroup.children) {
-      // Very slow drift
+      // Drift with slight radial wobble and vertical bob
       cloud.userData.angle += cloud.userData.drift * 0.003;
       const a = cloud.userData.angle;
       const r = cloud.userData.radius;
-      cloud.position.x = Math.cos(a) * r;
-      cloud.position.z = Math.sin(a) * r;
+      const radialWobble = Math.sin(t * 0.03 + a * 3) * 3;
+      const verticalBob = Math.sin(t * 0.04 + a * 2) * 0.8;
+      cloud.position.x = Math.cos(a) * (r + radialWobble);
+      cloud.position.z = Math.sin(a) * (r + radialWobble);
+      cloud.position.y = cloud.userData.baseHeight + verticalBob;
 
-      // Color tinting — apply to each sprite puff in the group
+      // Animate + tint each sprite puff
       for (const puff of cloud.children) {
+        // Billowing: position drift and scale breathing (subtle for horizontal clouds)
+        const ph = puff.userData.phase;
+        const moveScale = puff.userData.horizontal ? 0.15 : 1.0;
+        puff.position.x = puff.userData.baseX + Math.sin(t * 0.08 + ph) * 0.8 * moveScale;
+        puff.position.y = puff.userData.baseY + Math.sin(t * 0.06 + ph * 1.3) * 0.4 * moveScale;
+        puff.position.z = puff.userData.baseZ + Math.cos(t * 0.07 + ph * 0.7) * 0.6 * moveScale;
+
+        const breatheX = 1 + Math.sin(t * 0.05 + ph * 2.0) * 0.06 * moveScale;
+        const breatheY = 1 + Math.sin(t * 0.04 + ph * 1.5) * 0.04 * moveScale;
+        puff.scale.x = puff.userData.baseScaleX * breatheX;
+        puff.scale.y = puff.userData.baseScaleY * breatheY;
+
+        // Color tinting
         const basePuffOpacity = puff.material.userData?.baseOpacity ?? puff.material.opacity;
         if (!puff.material.userData) puff.material.userData = {};
         puff.material.userData.baseOpacity = basePuffOpacity;
@@ -845,13 +1022,13 @@ export class DayNightSystem {
           puff.material.color.setHex(0x222233);
           puff.material.opacity = basePuffOpacity * 0.5;
         } else if (isTwilight) {
-          const t = (elevation + 0.05) / 0.15;
+          const tw = (elevation + 0.05) / 0.15;
           puff.material.color.lerpColors(
             _cloudNightColor,
             _cloudTwilightColor,
-            t
+            tw
           );
-          puff.material.opacity = basePuffOpacity * (0.5 + t * 0.5);
+          puff.material.opacity = basePuffOpacity * (0.5 + tw * 0.5);
         } else {
           puff.material.color.setHex(0xffffff);
           puff.material.opacity = basePuffOpacity;

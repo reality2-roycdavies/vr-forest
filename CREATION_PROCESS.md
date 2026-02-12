@@ -2,7 +2,7 @@
 
 ## How This Project Was Built
 
-This project was built over two days (10–11 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
+This project was built over three days (10–12 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
 
 The human's role was creative director: providing high-level vision, testing in the VR headset, and giving experiential feedback. Claude's role was the entire development studio: architecture, implementation, debugging, and iteration.
 
@@ -139,6 +139,54 @@ The wildlife peek encounters (bear, lion, Wally) were spawning at incorrect heig
 
 ---
 
+## Day 3: Cloud Diversity and Terrain Shaders (12 February 2026)
+
+Day 3 focused on atmospheric realism — making the sky feel alive — and moving terrain colouring from CPU to GPU.
+
+### Phase 15: Terrain Shader Refactor
+
+The terrain colouring system was completely restructured. Previously, vertex colours were computed on the CPU during chunk generation — a large block of JavaScript that blended height-based grass gradients, shore transitions, dirt patches, and per-vertex noise variation. This was moved entirely into the ground material's fragment shader, driven by a per-vertex tree density attribute from simplex noise.
+
+The shader computes all colour blending (height gradients, shore transitions, dirt-under-trees) at fragment resolution, eliminating visible banding between vertices. Normal computation was also optimised: interior vertices now use cached heights instead of recalculating, with `getTerrainHeight()` only called for boundary vertices that need cross-chunk continuity.
+
+### Phase 16: Wildlife Anatomy
+
+The bear and lion peek encounters gained legs — previously they were floating torsos. Stocky cylindrical legs for the bear, slender ones for the lion, positioned at the four corners of the body. A small detail, but floating animals behind trees looked wrong.
+
+### Phase 17: Cloud Diversity
+
+This was the main focus of Day 3, spanning the most iterations. The original cloud system was 30 identical soft circular puffs arranged in a ring — passable from a distance but monotonous under scrutiny.
+
+**Four texture variants** were created:
+- **Soft round**: The original radial gradient for cumulus puffs
+- **Wispy**: A soft diffuse elliptical wash for cirrus-type clouds
+- **Flat-bottomed**: Asymmetric falloff (soft top, flatter base) for fair-weather cumulus
+- **Thin haze**: Very low-contrast radial gradient for high-altitude patches
+
+**Four cloud archetypes** with weighted random selection:
+- **Cumulus** (35%): 5–8 round billboard puffs at 60–90m, medium drift
+- **Wispy** (25%): 3–6 broad horizontal planes at 85–110m, fastest drift, wind-aligned
+- **Flat layer** (20%): 6–10 horizontal haze patches at 70–100m, slowest drift
+- **Small puffy** (20%): 2–3 tight billboard clusters at 50–75m, medium-fast drift
+
+**Key iteration challenges:**
+
+The flat-bottomed texture initially created a visible horizontal line through each cloud — the alpha calculation had a discontinuity where two branches met at `dy = 0.1`. The fix replaced the branching `if/else` with a single smooth asymmetric elliptical distance formula.
+
+Wispy and flat clouds were initially billboard Sprites that rotated to face the camera. This was fine for round puffs but made elongated shapes obviously track the viewer. The fix was switching these types to horizontal `Mesh` planes using `PlaneGeometry` rotated flat, so they sit naturally in the sky.
+
+A subtle but critical bug: the horizontal planes were scaled with `scale.set(scaleX, 1, scaleY)`, but `PlaneGeometry` lies in the XY plane — all vertices have Z=0. Scaling Z multiplied zero by scaleY, leaving the planes paper-thin regardless of settings. Multiple rounds of texture softening and size increases had no visible effect because the geometry was 1 unit deep the entire time. The fix was `scale.set(scaleX, scaleY, 1)`.
+
+Wispy clouds were initially randomly oriented, creating chaotic streaks across the sky. In reality, cirrus clouds align with upper-level winds. A single `windAngle` is now chosen at creation time, and all wispy/flat planes align to it with ±9° of jitter.
+
+**Billowing animation** was added: each puff gently drifts in position and breathes in scale, with horizontal clouds receiving much subtler movement (15% of billboard amplitude). Cloud groups also wobble radially and bob vertically. The initial amplitudes were far too large — "they move too much" — and were dialled back to near-imperceptible gentle shifts.
+
+### Phase 18: Development Infrastructure
+
+The development server (`server.py`) gained no-cache headers so the VR headset always fetches the latest code without manual cache-busting. The `index.html` script tag version was bumped for CDN cache invalidation.
+
+---
+
 ## Thematic Analysis
 
 ### "Show It's Possible"
@@ -222,16 +270,30 @@ The water ambient sound saga reinforced Day 1's lesson about procedural audio. T
 
 The key insight: what makes water sound like water isn't a frequency spectrum — it's a *temporal pattern*. The rhythmic advance-and-retreat of waves meeting a shore is what the brain recognises. No amount of spectral filtering on continuous noise will produce this. The solution required moving from the frequency domain to the time domain.
 
+### The Invisible Bug (Day 3)
+
+The cloud diversity work produced a masterclass in debugging invisible geometry issues. After implementing horizontal plane clouds for wispy and flat types, the user kept reporting that they were "too thin" and looked like "sharp lines" — despite multiple rounds of increasing the scale values. The texture was softened, the puff sizes were doubled, the opacity was reduced, and still: thin lines.
+
+The root cause was that `PlaneGeometry(1, 1)` lies in the XY plane, meaning all vertices have `Z = 0`. The code was scaling the Z axis (`scale.set(scaleX, 1, scaleY)`), but `0 × scaleY = 0` — the planes were always exactly one unit deep, regardless of the scale value. Five rounds of texture and size adjustments were invisible because the geometry itself was paper-thin.
+
+This is a category of bug that's particularly insidious in 3D development: a transform that *looks* correct and *compiles* correctly but does nothing because it operates on a zero-extent axis. The fix was trivial (`scale.set(scaleX, scaleY, 1)`), but diagnosing it required understanding the interaction between PlaneGeometry's vertex layout, Euler rotation order, and Three.js's scale-then-rotate transform composition.
+
+### Iteration Velocity and Diminishing Feedback
+
+Day 3 showed a pattern of diminishing but increasingly precise feedback. Early cloud iterations got broad responses ("better, though some look like half spheres"). As the system improved, feedback became more targeted: "the wispy lines could be fatter and less distinct," then "still look quite sharp," then "the object itself needs to be wider." Each round of feedback addressed a narrower problem, converging on the final result through progressive refinement.
+
+This pattern — broad strokes first, then increasingly fine adjustments — mirrors traditional artistic processes. The human functions as a natural gradient descent over the aesthetic landscape, with the AI performing the parameter updates.
+
 ---
 
 ## By the Numbers
 
-- **Development time**: ~16 hours over two days
-- **Conversation sessions**: 7 (3 in parent project, 4 in VR forest project)
-- **User feedback messages**: ~150+
+- **Development time**: ~20 hours over three days
+- **Conversation sessions**: 8+ (3 in parent project, 5+ in VR forest project)
+- **User feedback messages**: ~200+
 - **Major features**: 15+ distinct systems
-- **Lines of JavaScript**: ~7,400+
-- **JavaScript modules**: 25
+- **Lines of JavaScript**: ~9,500
+- **JavaScript modules**: 29
 - **External dependencies**: 2 (Three.js, simplex-noise, both from CDN)
 - **External art assets**: 1 (moon photograph from Wikipedia, with procedural fallback)
 - **External audio assets**: 1 (morepork.mp3, trimmed from a recording)
@@ -240,3 +302,4 @@ The key insight: what makes water sound like water isn't a frequency spectrum �
 - **Most-iterated feature**: Sky/fog rendering (~8 iterations)
 - **Most-rewritten feature**: Footstep audio (~5 complete rewrites)
 - **Day 2 most-iterated**: Vegetation lighting (~8 iterations across shader patches, emissive tuning, and material changes)
+- **Day 3 most-iterated**: Cloud diversity (~10 iterations across textures, scaling, billboard vs plane, and the Z-scale bug)

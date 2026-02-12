@@ -71,6 +71,17 @@ export class WildlifeSystem {
     }
 
     this._addEyes(group, 0.08, 0.63, 0.28, 0.025, 0xffdd44);
+
+    // Legs — stocky bear legs
+    const legGeo = new THREE.CylinderGeometry(0.07, 0.06, 0.25, 5);
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const leg = new THREE.Mesh(legGeo, bodyMat);
+        leg.position.set(sx * 0.15, 0.12, sz * 0.12);
+        group.add(leg);
+      }
+    }
+
     return group;
   }
 
@@ -117,6 +128,16 @@ export class WildlifeSystem {
     const tail = new THREE.Mesh(tailGeo, bodyMat);
     tail.position.set(0, 0.28, -0.28);
     group.add(tail);
+
+    // Legs — slender cat legs
+    const legGeo = new THREE.CylinderGeometry(0.04, 0.035, 0.25, 5);
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const leg = new THREE.Mesh(legGeo, bodyMat);
+        leg.position.set(sx * 0.12, 0.1, sz * 0.1);
+        group.add(leg);
+      }
+    }
 
     return group;
   }
