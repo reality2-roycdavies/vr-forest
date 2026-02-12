@@ -295,6 +295,64 @@ export class WeatherSystem {
     this._washFilter.connect(this._washGain);
     this._washGain.connect(masterGain);
     this._washSource.start();
+
+    // Mid-frequency body layer — fills gap between wash and patter
+    this._bodySource = ctx.createBufferSource();
+    this._bodySource.buffer = noiseBuffer;
+    this._bodySource.loop = true;
+    this._bodySource.playbackRate.value = 0.9;
+
+    this._bodyFilter = ctx.createBiquadFilter();
+    this._bodyFilter.type = 'bandpass';
+    this._bodyFilter.frequency.value = 1600;
+    this._bodyFilter.Q.value = 0.5;
+
+    this._bodyGain = ctx.createGain();
+    this._bodyGain.gain.value = 0;
+
+    // Slow amplitude modulation — gusting rain variation
+    this._bodyLFO = ctx.createOscillator();
+    this._bodyLFO.type = 'sine';
+    this._bodyLFO.frequency.value = 0.15; // ~7 second cycle
+    this._bodyLFOGain = ctx.createGain();
+    this._bodyLFOGain.gain.value = 0; // modulation depth set in update
+
+    this._bodySource.connect(this._bodyFilter);
+    this._bodyFilter.connect(this._bodyGain);
+    this._bodyLFO.connect(this._bodyLFOGain);
+    this._bodyLFOGain.connect(this._bodyGain.gain);
+    this._bodyGain.connect(masterGain);
+    this._bodySource.start();
+    this._bodyLFO.start();
+
+    // High sizzle layer — rain hitting surfaces, leaves
+    this._sizzleSource = ctx.createBufferSource();
+    this._sizzleSource.buffer = noiseBuffer;
+    this._sizzleSource.loop = true;
+    this._sizzleSource.playbackRate.value = 1.8;
+
+    this._sizzleFilter = ctx.createBiquadFilter();
+    this._sizzleFilter.type = 'highpass';
+    this._sizzleFilter.frequency.value = 6000;
+    this._sizzleFilter.Q.value = 0.3;
+
+    this._sizzleGain = ctx.createGain();
+    this._sizzleGain.gain.value = 0;
+
+    // Second LFO for sizzle — different rate for independent variation
+    this._sizzleLFO = ctx.createOscillator();
+    this._sizzleLFO.type = 'sine';
+    this._sizzleLFO.frequency.value = 0.22; // ~4.5 second cycle
+    this._sizzleLFOGain = ctx.createGain();
+    this._sizzleLFOGain.gain.value = 0;
+
+    this._sizzleSource.connect(this._sizzleFilter);
+    this._sizzleFilter.connect(this._sizzleGain);
+    this._sizzleLFO.connect(this._sizzleLFOGain);
+    this._sizzleLFOGain.connect(this._sizzleGain.gain);
+    this._sizzleGain.connect(masterGain);
+    this._sizzleSource.start();
+    this._sizzleLFO.start();
   }
 
   _stopRainAudio() {
@@ -302,12 +360,26 @@ export class WeatherSystem {
     this._rainAudioActive = false;
     try { this._patterSource?.stop(); } catch (e) { /* */ }
     try { this._washSource?.stop(); } catch (e) { /* */ }
+    try { this._bodySource?.stop(); } catch (e) { /* */ }
+    try { this._bodyLFO?.stop(); } catch (e) { /* */ }
+    try { this._sizzleSource?.stop(); } catch (e) { /* */ }
+    try { this._sizzleLFO?.stop(); } catch (e) { /* */ }
     this._patterSource = null;
     this._patterGain = null;
     this._patterFilter = null;
     this._washSource = null;
     this._washGain = null;
     this._washFilter = null;
+    this._bodySource = null;
+    this._bodyGain = null;
+    this._bodyFilter = null;
+    this._bodyLFO = null;
+    this._bodyLFOGain = null;
+    this._sizzleSource = null;
+    this._sizzleGain = null;
+    this._sizzleFilter = null;
+    this._sizzleLFO = null;
+    this._sizzleLFOGain = null;
   }
 
   _updateRainAudioGains() {
@@ -320,6 +392,16 @@ export class WeatherSystem {
     // Wash: quadratic scale — louder in heavy rain
     if (this._washGain) {
       this._washGain.gain.value = ri * ri * 0.15;
+    }
+    // Body: fills the midrange, with slow gusting modulation
+    if (this._bodyGain) {
+      this._bodyGain.gain.value = ri * 0.08;
+      this._bodyLFOGain.gain.value = ri * 0.03; // modulation depth
+    }
+    // Sizzle: high-freq surface detail, grows with intensity
+    if (this._sizzleGain) {
+      this._sizzleGain.gain.value = ri * ri * 0.05;
+      this._sizzleLFOGain.gain.value = ri * 0.02;
     }
   }
 

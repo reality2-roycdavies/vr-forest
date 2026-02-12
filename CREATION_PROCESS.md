@@ -260,7 +260,17 @@ The most-iterated aspect of the weather system was getting the sky and fog colou
 
 This arc illustrates a recurring theme: weather-by-time-of-day is a matrix, and each combination needs to feel right independently. A single set of parameters that works for daytime overcast will break nighttime rain.
 
-### Phase 25: System Integration
+### Phase 25: Stormy Water and Rain Audio Texture
+
+The water system was extended to respond to weather. Six additional high-frequency choppy wave layers scale with `uRainIntensity`, creating visibly rougher water during storms. The fragment shader darkens and desaturates the water surface, boosts crest foam highlights, and renders rain ripple rings — 20 procedural layers of expanding concentric rings tiled across the water in 4m cells.
+
+Getting the ripples right required three iterations. The first attempt placed ripples at fixed positions (they "stayed in the same place"). Adding a cycle counter to the position hash made each ripple spawn at a new random spot each lifecycle. But all ripples still pulsed in unison — the fix was adding a per-cell phase offset hashed from grid position, combined with per-layer speed variation (0.7–1.2x), so neighbouring cells and different layers are fully desynchronised.
+
+The rain audio was expanded from 2 layers to 4: wash (800 Hz deep rumble), body (1600 Hz midrange), patter (3200 Hz), and sizzle (6000 Hz+ surface detail). The body and sizzle layers each have their own slow LFO modulator at different rates (~7s and ~4.5s cycles), creating an organic ebb-and-flow where different frequency bands swell independently — avoiding the flat monotone of the original two-layer setup.
+
+Dawn and twilight fog was also dimmed during storms (`skyDarkening * 0.4` multiplier on the overcast grey target), fixing an issue where the luminance-matched system treated twilight as "fully day" and left the fog too bright during stormy weather.
+
+### Phase 26: System Integration
 
 The weather system touches nearly every other system:
 - **Day-night**: Fog colour/distance, sun/hemi/ambient light dimming, shadow fade-out, star/moon hiding, sky dome colour convergence, cloud opacity/darkness

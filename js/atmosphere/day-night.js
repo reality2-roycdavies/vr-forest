@@ -991,6 +991,8 @@ export class DayNightSystem {
       // At night, push rain fog toward near-black (rain blocks all ambient light)
       const nightDarken = (1 - dayness) * weather.rainIntensity * 0.7;
       _color.multiplyScalar(1 - nightDarken);
+      // Storm dims fog at all times of day (especially noticeable at twilight/dawn)
+      _color.multiplyScalar(1 - weather.skyDarkening * 0.4);
       this.scene.fog.color.lerp(_color, desatAmount);
       this.scene.background.lerp(_color, desatAmount);
     }
@@ -1040,11 +1042,13 @@ export class DayNightSystem {
       // Fog/bottom: desaturate toward luminance-grey, blending to overcast grey in daytime
       _color.setRGB(fogLum, fogLum, fogLum).lerp(_overcastHorizonGrey, dayness);
       _color.multiplyScalar(1 - nightDarken);
+      _color.multiplyScalar(1 - weather.skyDarkening * 0.4);
       this.skyUniforms.fogColor.value.lerp(_color, desatAmount);
       this.skyUniforms.bottomColor.value.lerp(_color, desatAmount);
       // Top: desaturate toward darker grey, blending to storm grey in daytime
       _color.setRGB(topLum, topLum, topLum).lerp(_cloudStormGrey, dayness);
       _color.multiplyScalar(1 - nightDarken);
+      _color.multiplyScalar(1 - weather.skyDarkening * 0.4);
       this.skyUniforms.topColor.value.lerp(_color, desatAmount);
       // Lightning flash — additive white burst
       if (weather.lightningFlash > 0.01) {

@@ -80,10 +80,12 @@ function updateHeightmap(cx, cz) {
 
 const waterTimeUniform = { value: 0 };
 const waveAmplitudeUniform = { value: 1.0 };
+const waterRainUniform = { value: 0 };
 const hmapCenterUniform = { value: new THREE.Vector2(0, 0) };
 waterMat.onBeforeCompile = (shader) => {
   shader.uniforms.uTime = waterTimeUniform;
   shader.uniforms.uWaveAmplitude = waveAmplitudeUniform;
+  shader.uniforms.uRainIntensity = waterRainUniform;
   shader.uniforms.uHeightmap = { value: hmapTex };
   shader.uniforms.uHmapCenter = hmapCenterUniform;
   shader.uniforms.uHmapSize = { value: HMAP_SIZE };
@@ -93,6 +95,7 @@ waterMat.onBeforeCompile = (shader) => {
   const noiseGLSL = `
     uniform float uTime;
     uniform float uWaveAmplitude;
+    uniform float uRainIntensity;
     varying vec3 vWorldPos;
     varying vec3 vLocalPos;
     varying float vWaveH;
@@ -116,6 +119,13 @@ waterMat.onBeforeCompile = (shader) => {
       h += sin(dot(p, vec2(-0.80, -2.20)) + t * 1.10) * 0.004;
       h += sin(dot(p, vec2( 2.80,  1.50)) + t * 1.40) * 0.003;
       h += sin(dot(p, vec2(-1.70,  2.80)) + t * 1.30) * 0.002;
+      // Storm chop — high-frequency chaotic waves driven by rain intensity
+      h += sin(dot(p, vec2( 3.20, -1.80)) + t * 2.80) * 0.012 * uRainIntensity;
+      h += sin(dot(p, vec2(-2.50,  3.10)) + t * 3.20) * 0.010 * uRainIntensity;
+      h += sin(dot(p, vec2( 4.10,  2.30)) + t * 2.50) * 0.008 * uRainIntensity;
+      h += sin(dot(p, vec2(-1.90, -4.40)) + t * 3.60) * 0.007 * uRainIntensity;
+      h += sin(dot(p, vec2( 5.30,  0.80)) + t * 4.10) * 0.005 * uRainIntensity;
+      h += sin(dot(p, vec2(-3.70,  4.60)) + t * 3.80) * 0.004 * uRainIntensity;
       return h;
     }
     // Surface pattern for flecks — multiple sine layers, no grid
@@ -206,7 +216,43 @@ waterMat.onBeforeCompile = (shader) => {
     float crestFoam = smoothstep(0.07, 0.12, vWaveH);
     float crestNoise = wSurface(wPos * 3.0 + vec2(uTime * 0.08, -uTime * 0.06));
     crestFoam *= smoothstep(0.45, 0.65, crestNoise);
-    gl_FragColor.rgb += crestFoam * 0.04;
+    gl_FragColor.rgb += crestFoam * (0.04 + uRainIntensity * 0.08);
+    // Storm water darkening and desaturation
+    float stormDarken = uRainIntensity * 0.25;
+    gl_FragColor.rgb *= 1.0 - stormDarken;
+    vec3 stormWater = vec3(0.12, 0.14, 0.18);
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, stormWater, uRainIntensity * 0.3);
+    // Rain ripple rings on water surface
+    if (uRainIntensity > 0.01) {
+      float rippleSum = 0.0;
+      for (int i = 0; i < 20; i++) {
+        float fi = float(i);
+        float phase = fract(sin(fi * 127.1) * 311.7);
+        // Each ripple runs at its own speed so they desynchronize
+        float speed = 0.7 + fract(sin(fi * 53.7) * 197.3) * 0.5;
+        // Tile across water in 4m cells, offset per layer
+        vec2 cellCoord = floor(wPos / 4.0 + fi * 0.37);
+        // Per-cell phase so neighbouring cells don't pulse together
+        float cellPhase = fract(sin(dot(cellCoord, vec2(41.7, 89.3)) + fi * 13.0) * 2531.73);
+        float cycleTime = uTime * speed + phase + cellPhase;
+        float life = fract(cycleTime);
+        float cycle = floor(cycleTime);
+        // Hash uses cycle number so position changes each repeat
+        float seed = cycle * 17.0 + fi * 31.0;
+        vec2 center = cellCoord * 4.0 + vec2(
+          fract(sin(dot(cellCoord, vec2(12.9898 + seed, 78.233))) * 43758.5453) * 4.0,
+          fract(sin(dot(cellCoord, vec2(39.346 + seed, 11.135))) * 23421.631) * 4.0
+        );
+        float radius = life * 0.45;
+        float d = length(wPos - center);
+        // Thin ring annulus
+        float ring = 1.0 - smoothstep(0.0, 0.03, abs(d - radius));
+        ring *= 1.0 - life; // fade as ripple ages
+        rippleSum += ring;
+      }
+      rippleSum = min(rippleSum, 1.0);
+      gl_FragColor.rgb += rippleSum * uRainIntensity * 0.15;
+    }
     // Shore fade — very tight to soften waterline without revealing chunk seams
     vec2 hmUV = (vWorldPos.xz - uHmapCenter) / uHmapSize + 0.5;
     float terrainH = texture2D(uHeightmap, hmUV).r;
@@ -643,8 +689,9 @@ function onFrame() {
   if (groundMat?.userData?.wetnessUniform) {
     groundMat.userData.wetnessUniform.value = weather.groundWetness;
   }
-  // Weather drives wave amplitude
+  // Weather drives wave amplitude and rain on water
   waveAmplitudeUniform.value = weather.waveAmplitude;
+  waterRainUniform.value = weather.rainIntensity;
 
   // Weather input: 1/2/3 on desktop, left trigger in VR
   if (input.weatherCycle !== 0) {
