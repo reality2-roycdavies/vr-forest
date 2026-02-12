@@ -128,18 +128,18 @@ export class InputManager {
         // Left grip = button 1
         this.leftGrip = buttons[1] && buttons[1].pressed;
         if (this.leftGrip) this.sprintPressed = true;
-        // Left trigger = weather cycle (edge-triggered)
-        const leftTrigger = buttons[0] && buttons[0].pressed;
-        if (leftTrigger && !this._lastLeftTrigger) this.weatherCycle = -1; // cycle: next state
-        this._lastLeftTrigger = leftTrigger;
       } else if (source.handedness === 'right') {
         this.rightStick.x = Math.abs(sx) > CONFIG.THUMBSTICK_DEADZONE ? sx : 0;
         this.rightStick.y = Math.abs(sy) > CONFIG.THUMBSTICK_DEADZONE ? sy : 0;
-        if ((buttons[4] && buttons[4].pressed) || (buttons[3] && buttons[3].pressed)) {
+        if ((buttons[3] && buttons[3].pressed)) {
           this.jumpPressed = true;
         }
         // Right grip = button 1
         this.rightGrip = buttons[1] && buttons[1].pressed;
+        // Right A button = weather cycle (edge-triggered)
+        const rightA = buttons[4] && buttons[4].pressed;
+        if (rightA && !this._lastRightA) this.weatherCycle = -1;
+        this._lastRightA = rightA;
       }
     }
   }

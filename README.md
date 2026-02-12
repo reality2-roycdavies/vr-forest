@@ -171,8 +171,9 @@ Human-AI conversation logs from each development session (readable markdown, con
 | Left stick | Move (forward/back/strafe) |
 | Right stick X | Snap turn (30 degrees) |
 | Right grip + right stick Y | Scrub time of day |
-| Left trigger | Cycle weather (sunny → cloudy → rainy) |
-| Either grip button | Jump |
+| Right A button | Cycle weather (sunny → cloudy → rainy) |
+| Either grip button | Sprint (costs power) |
+| Left X / thumbstick click | Jump |
 
 ### Desktop
 | Control | Action |

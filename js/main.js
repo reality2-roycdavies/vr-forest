@@ -1,4 +1,4 @@
-console.log('%c[VR Forest v10] Loaded', 'color: #66ffcc; font-size: 14px;');
+console.log('%c[VR Forest v11] Loaded', 'color: #66ffcc; font-size: 14px;');
 // Bootstrap: scene, systems, render loop
 import * as THREE from 'three';
 import { VRSetup } from './vr-setup.js';
@@ -477,7 +477,7 @@ const vrWeatherMat = new THREE.SpriteMaterial({
 });
 const vrWeatherSprite = new THREE.Sprite(vrWeatherMat);
 vrWeatherSprite.scale.set(0.10, 0.025, 1);
-vrWeatherSprite.position.set(0, -0.04, -0.3);
+vrWeatherSprite.position.set(0, 0.06, -0.3);
 vr.camera.add(vrWeatherSprite);
 
 let _lastWeatherText = '';
