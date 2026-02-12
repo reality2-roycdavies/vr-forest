@@ -1,3 +1,4 @@
+console.log('%c[VR Forest v10] Loaded', 'color: #66ffcc; font-size: 14px;');
 // Bootstrap: scene, systems, render loop
 import * as THREE from 'three';
 import { VRSetup } from './vr-setup.js';
@@ -15,6 +16,7 @@ import { updateWind } from './atmosphere/wind.js';
 import { BirdFlockSystem } from './forest/birds.js';
 import { CollectibleSystem } from './forest/collectibles.js';
 import { getTerrainHeight } from './terrain/noise.js';
+import { updateGroundTime } from './terrain/ground-material.js';
 
 // --- Scene ---
 const scene = new THREE.Scene();
@@ -40,14 +42,14 @@ const chunkManager = new ChunkManager(scene);
 movement.chunkManager = chunkManager;
 
 // --- Water surface with wave displacement ---
-const waterGeom = new THREE.PlaneGeometry(180, 180, 360, 360);
+const waterGeom = new THREE.PlaneGeometry(300, 300, 400, 400);
 waterGeom.rotateX(-Math.PI / 2);
 const waterMat = new THREE.MeshPhongMaterial({
   color: new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b),
   specular: new THREE.Color(0.6, 0.6, 0.6),
   shininess: 120,
   transparent: true,
-  opacity: 0.82,
+  opacity: 0.92,
   depthWrite: false,
 });
 const waterTimeUniform = { value: 0 };
@@ -58,6 +60,7 @@ waterMat.onBeforeCompile = (shader) => {
   const noiseGLSL = `
     uniform float uTime;
     varying vec3 vWorldPos;
+    varying vec3 vLocalPos;
     varying float vWaveH;
     // Wave displacement — many cross-directional waves to avoid bands
     float waveHeight(vec2 p, float t) {
@@ -119,6 +122,7 @@ waterMat.onBeforeCompile = (shader) => {
   shader.vertexShader = shader.vertexShader.replace(
     '#include <begin_vertex>',
     `#include <begin_vertex>
+    vLocalPos = transformed;
     vec3 wp = (modelMatrix * vec4(transformed, 1.0)).xyz;
     vWorldPos = wp;
     float wH = waveHeight(wp.xz, uTime);
@@ -145,7 +149,16 @@ waterMat.onBeforeCompile = (shader) => {
     float fleck = smoothstep(0.50, 0.70, combined);
     gl_FragColor.rgb += fleck * 0.08;
     float dark = (1.0 - smoothstep(0.30, 0.50, combined)) * 0.03;
-    gl_FragColor.rgb -= dark;`
+    gl_FragColor.rgb -= dark;
+    // Wave-crest subtle highlights
+    float crestFoam = smoothstep(0.07, 0.12, vWaveH);
+    float crestNoise = wSurface(wPos * 3.0 + vec2(uTime * 0.08, -uTime * 0.06));
+    crestFoam *= smoothstep(0.45, 0.65, crestNoise);
+    gl_FragColor.rgb += crestFoam * 0.04;
+    // Fade out at edges so water plane boundary is invisible
+    float edgeDist = max(abs(vLocalPos.x), abs(vLocalPos.z));
+    float edgeFade = 1.0 - smoothstep(120.0, 148.0, edgeDist);
+    gl_FragColor.a *= edgeFade;`
   );
 };
 const waterPlane = new THREE.Mesh(waterGeom, waterMat);
@@ -333,7 +346,7 @@ function updateScoreHud(score) {
   vrScoreCtx.textBaseline = 'middle';
   vrScoreCtx.fillText(text, 128, 32);
   vrScoreTex.needsUpdate = true;
-  vrScoreSprite.visible = true;
+  vrScoreSprite.visible = vr.isInVR();
 }
 
 collectibles.onScoreChange = updateScoreHud;
@@ -499,6 +512,7 @@ function onFrame() {
   waterPlane.position.x = pos.x;
   waterPlane.position.z = pos.z;
   waterTimeUniform.value += delta;
+  updateGroundTime(waterTimeUniform.value);
 
   // Wind animation
   updateWind(delta);
@@ -568,8 +582,11 @@ function onFrame() {
   if (_minimapFrame >= 10) {
     _minimapFrame = 0;
     renderMinimap(minimapCtx, minimapSize, pos, _cameraDir);
-    renderMinimap(vrMinimapCtx, 128, pos, _cameraDir);
-    vrMinimapTex.needsUpdate = true;
+    if (vr.isInVR()) {
+      renderMinimap(vrMinimapCtx, 128, pos, _cameraDir);
+      vrMinimapTex.needsUpdate = true;
+    }
+    vrMinimapSprite.visible = vr.isInVR();
   }
 
   // Render

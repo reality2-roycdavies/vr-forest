@@ -3,58 +3,250 @@ import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 
 let groundMaterial = null;
+const groundTimeUniform = { value: 0 };
+
+/**
+ * Update ground material time (call each frame for animated foam).
+ */
+export function updateGroundTime(time) {
+  groundTimeUniform.value = time;
+}
 
 /**
  * Get the shared ground material (created once, reused by all chunks).
  */
 export function getGroundMaterial() {
   if (!groundMaterial) {
+    const sandTex = createSandTexture();
+    const dirtTex = createDirtTexture();
     groundMaterial = new THREE.MeshLambertMaterial({
-      vertexColors: true,
       map: createGroundTexture(),
     });
+    groundMaterial.userData.timeUniform = groundTimeUniform;
+    groundMaterial.userData.sandTex = sandTex;
+    groundMaterial.userData.dirtTex = dirtTex;
 
-    // Strip grass texture + shadows on shore/underwater
+    // Per-pixel terrain coloring + texture + shadow control
     const shoreY = CONFIG.SHORE_LEVEL;
     const waterY = CONFIG.WATER_LEVEL;
+    const gMin = -CONFIG.TERRAIN_HEIGHT;
+    const gMax = CONFIG.TERRAIN_HEIGHT;
+    const low = CONFIG.GROUND_LOW_COLOR;
+    const mid = CONFIG.GROUND_MID_COLOR;
+    const high = CONFIG.GROUND_HIGH_COLOR;
+    const shore = CONFIG.SHORE_COLOR;
+    const dirt = CONFIG.GROUND_DIRT_COLOR;
+    const dirtDark = CONFIG.GROUND_DIRT_DARK;
+
+    groundMaterial.customProgramCacheKey = () => 'ground-terrain';
     groundMaterial.onBeforeCompile = (shader) => {
       shader.uniforms.shoreLevel = { value: shoreY };
       shader.uniforms.waterLevel = { value: waterY };
+      shader.uniforms.globalMin = { value: gMin };
+      shader.uniforms.globalMax = { value: gMax };
+      shader.uniforms.lowColor = { value: new THREE.Color(low.r, low.g, low.b) };
+      shader.uniforms.midColor = { value: new THREE.Color(mid.r, mid.g, mid.b) };
+      shader.uniforms.highColor = { value: new THREE.Color(high.r, high.g, high.b) };
+      shader.uniforms.shoreColor = { value: new THREE.Color(shore.r, shore.g, shore.b) };
+      shader.uniforms.dirtColor = { value: new THREE.Color(dirt.r, dirt.g, dirt.b) };
+      shader.uniforms.dirtDarkColor = { value: new THREE.Color(dirtDark.r, dirtDark.g, dirtDark.b) };
+      shader.uniforms.dirtScale = { value: CONFIG.GROUND_DIRT_SCALE };
+      shader.uniforms.dirtThreshold = { value: CONFIG.GROUND_DIRT_THRESHOLD };
+      shader.uniforms.uTime = groundMaterial.userData.timeUniform;
+      shader.uniforms.sandMap = { value: groundMaterial.userData.sandTex };
+      shader.uniforms.dirtMap = { value: groundMaterial.userData.dirtTex };
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        '#include <common>\nvarying float vWorldY;'
+        '#include <common>\nvarying vec3 vWorldPos;\nattribute float treeDensity;\nvarying float vTreeDensity;'
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvWorldY = (modelMatrix * vec4(transformed, 1.0)).y;'
+        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;'
       );
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <common>',
-        '#include <common>\nuniform float shoreLevel;\nuniform float waterLevel;\nvarying float vWorldY;'
+        `#include <common>
+         uniform float shoreLevel;
+         uniform float waterLevel;
+         uniform float globalMin;
+         uniform float globalMax;
+         uniform vec3 lowColor;
+         uniform vec3 midColor;
+         uniform vec3 highColor;
+         uniform vec3 shoreColor;
+         uniform vec3 dirtColor;
+         uniform vec3 dirtDarkColor;
+         uniform float dirtScale;
+         uniform float dirtThreshold;
+         uniform float uTime;
+         uniform sampler2D sandMap;
+         uniform sampler2D dirtMap;
+         varying vec3 vWorldPos;
+         varying float vTreeDensity;
+
+         // Per-pixel value noise for dirt patches (no triangle artifacts)
+         float _hash(vec2 p) {
+           return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+         }
+         float _vnoise(vec2 p) {
+           vec2 i = floor(p);
+           vec2 f = fract(p);
+           f = f * f * (3.0 - 2.0 * f);
+           float a = _hash(i);
+           float b = _hash(i + vec2(1.0, 0.0));
+           float c = _hash(i + vec2(0.0, 1.0));
+           float d = _hash(i + vec2(1.0, 1.0));
+           return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+         }
+         // Simplified wave height (matches water vertex shader, dominant swells only)
+         float _waveH(vec2 p, float t) {
+           float h = 0.0;
+           h += sin(dot(p, vec2( 0.38,  0.12)) + t * 0.35) * 0.045;
+           h += sin(dot(p, vec2(-0.15,  0.35)) + t * 0.28) * 0.040;
+           h += sin(dot(p, vec2( 0.27, -0.22)) + t * 0.42) * 0.030;
+           h += sin(dot(p, vec2( 0.45, -0.55)) + t * 0.55) * 0.020;
+           h += sin(dot(p, vec2(-0.50,  0.30)) + t * 0.48) * 0.018;
+           return h;
+         }
+         float causticPattern(vec2 p, float time) {
+           vec2 i = p;
+           float c = 1.0;
+           float intensity = 0.005;
+           for (int n = 0; n < 3; n++) {
+             float t = time * (1.0 - 0.15 * float(n));
+             i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
+             c += 1.0 / length(vec2(p.x / (sin(i.x + t) / intensity), p.y / (cos(i.y + t) / intensity)));
+           }
+           c /= 3.0;
+           c = 1.17 - pow(c, 1.4);
+           return clamp(pow(abs(c), 8.0), 0.0, 1.0);
+         }`
       );
-      // Anti-tiling: blend texture at two scales + slight UV rotation to break up repeats
-      // Then shore transition to blend grass texture out near water
+
+      // Per-pixel terrain color + anti-tiling texture + shore/grass blend
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
-        `#ifdef USE_MAP
-           vec4 texA = texture2D(map, vMapUv);
-           // Second sample at larger, rotated scale to break tiling
-           vec2 uv2 = vMapUv * 0.37 + vec2(vMapUv.y * 0.12, -vMapUv.x * 0.12);
-           vec4 texB = texture2D(map, uv2);
-           vec4 texelColor = mix(texA, texB, 0.35);
-           diffuseColor *= texelColor;
-         #endif
-         float shoreMix = smoothstep(shoreLevel - 1.5, shoreLevel + 1.5, vWorldY);
-         diffuseColor.rgb = mix(vColor, diffuseColor.rgb, shoreMix);`
+        `// --- Per-pixel terrain color from height (no triangle artifacts) ---
+         float h = vWorldPos.y;
+         float globalRange = globalMax - globalMin;
+         float ht = clamp((h - globalMin) / globalRange, 0.0, 1.0);
+
+         vec3 terrainColor;
+         vec3 wetSandColor = vec3(0.45, 0.38, 0.25);
+
+         // Noisy shore boundary using XZ (pixel-accurate, no triangle artifacts)
+         float shoreNoise = sin(vWorldPos.x * 1.7 + vWorldPos.z * 0.9) * 0.5
+                          + sin(vWorldPos.x * 0.5 - vWorldPos.z * 1.3) * 0.7
+                          + sin(vWorldPos.x * 3.1 + vWorldPos.z * 2.3) * 0.25;
+         float effectiveShore = shoreLevel + shoreNoise * 0.25;
+
+         // Grass gradient by height (smooth blend, no conditionals)
+         vec3 grassLow = mix(lowColor, midColor, smoothstep(0.0, 0.5, ht));
+         vec3 grassColor = mix(grassLow, highColor, smoothstep(0.4, 1.0, ht));
+
+         // Wet sand near water
+         float wetBlend = smoothstep(waterLevel - 0.5, effectiveShore, h);
+         vec3 sandColor = mix(wetSandColor, shoreColor, wetBlend);
+
+         // Single smooth shore → grass transition (no hard if/else = no triangle edges)
+         float grassBlend = smoothstep(effectiveShore - 0.5, effectiveShore + 3.0, h);
+         terrainColor = mix(sandColor, grassColor, grassBlend);
+
+         // Dirt under trees — tree density from custom attribute (exact match)
+         // Trees placed where original noise > 0.15 → treeDensity > ~0.575
+         float treeDens = vTreeDensity;
+         // Add fine per-pixel noise for organic edges
+         float dirtDetail = _vnoise(vWorldPos.xz * 0.15) * 0.15;
+         float dirtFactor = smoothstep(0.5, 0.7, treeDens + dirtDetail);
+         // Suppress dirt on sand — use grassBlend (already wide smoothstep)
+         dirtFactor *= grassBlend;
+         if (dirtFactor > 0.01) {
+           // Smooth blend between dirt shades instead of hard threshold
+           float dirtShade = smoothstep(0.2, 0.4, ht);
+           vec3 dColor = mix(mix(dirtColor, dirtDarkColor, 0.4), dirtColor, dirtShade);
+           terrainColor = mix(terrainColor, dColor, dirtFactor);
+         }
+
+         // Dynamic waterline that follows waves
+         float dynWater = waterLevel + _waveH(vWorldPos.xz, uTime);
+
+         // Shore transition: water color → foam → wet sand → dry sand
+         float distAbove = h - dynWater;
+         vec3 waterTint = vec3(0.05, 0.15, 0.28);
+
+         // At and below waterline: terrain matches rendered water appearance
+         // Use lighter tint than base water color to account for specular/ambient
+         vec3 shallowWater = vec3(0.14, 0.25, 0.36);
+         float waterMatch = 1.0 - smoothstep(-0.1, 0.35, distAbove);
+         terrainColor = mix(terrainColor, shallowWater, waterMatch);
+
+         // Foam band: fades from water edge up onto sand
+         float fn1 = _vnoise(vWorldPos.xz * 4.0 + vec2(uTime * 0.12, uTime * 0.07));
+         float fn2 = _vnoise(vWorldPos.xz * 7.0 + vec2(-uTime * 0.1, uTime * 0.14) + 50.0);
+         float foamNoise = fn1 * 0.6 + fn2 * 0.4;
+         float foamBand = smoothstep(-0.05, 0.1, distAbove) * (1.0 - smoothstep(0.1, 0.8, distAbove));
+         vec3 foamColor = vec3(0.55, 0.58, 0.55);
+         terrainColor = mix(terrainColor, foamColor, foamBand * foamNoise * 0.8);
+
+         // Wet sand above foam — darken and cool-shift
+         float wetZone = smoothstep(2.5, 0.8, distAbove);
+         terrainColor = mix(terrainColor, terrainColor * vec3(0.7, 0.74, 0.78), wetZone * 0.5);
+
+         // Deep water visibility falloff
+         float depthBelow = max(0.0, -distAbove);
+         float visFalloff = exp(-depthBelow * 2.5);
+         vec3 deepColor = vec3(0.04, 0.10, 0.20);
+         terrainColor = mix(deepColor, terrainColor, visFalloff);
+
+         diffuseColor.rgb = terrainColor;
+
+         // --- Per-surface-type textures as detail overlays ---
+         #ifdef USE_MAP
+           vec2 wUV = vWorldPos.xz * 0.5;
+           vec2 wUV2 = wUV * 0.41 + vec2(wUV.y * 0.15, -wUV.x * 0.15);
+
+           // Sample each texture, anti-tiled — different scales per type
+           vec3 grassSamp = mix(texture2D(map, wUV).rgb, texture2D(map, wUV2).rgb, 0.35);
+           vec3 sandSamp = mix(texture2D(sandMap, wUV * 0.7).rgb, texture2D(sandMap, wUV2 * 0.8).rgb, 0.35);
+           vec3 dirtSamp = mix(texture2D(dirtMap, wUV * 0.85).rgb, texture2D(dirtMap, wUV2 * 0.9).rgb, 0.35);
+
+           // Convert to detail: per-channel centering to preserve color character
+           vec3 grassTexDetail = grassSamp - vec3(0.53, 0.54, 0.49);
+           vec3 sandTexDetail = sandSamp - vec3(0.56, 0.55, 0.52);
+           vec3 dirtTexDetail = dirtSamp - vec3(0.50, 0.46, 0.40);
+
+           // Select detail based on terrain type
+           vec3 detail = mix(sandTexDetail * 2.5, grassTexDetail, grassBlend);
+           detail = mix(detail, dirtTexDetail, dirtFactor);
+
+           // Apply as strong additive detail — suppress near waterline
+           float detailSuppress = smoothstep(dynWater - 0.2, dynWater + 0.5, h);
+           diffuseColor.rgb += detail * 1.2 * detailSuppress;
+         #endif`
       );
-      // Near/below water: smoothly suppress shadows over a transition band
+
+      // Near/below water: smoothly suppress shadows
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <aomap_fragment>',
         `#include <aomap_fragment>
-         float shadowSuppress = smoothstep(waterLevel - 1.5, waterLevel + 2.0, vWorldY);
-         reflectedLight.directDiffuse = mix(reflectedLight.indirectDiffuse * 0.6, reflectedLight.directDiffuse, shadowSuppress);`
+         float dynWL = waterLevel + _waveH(vWorldPos.xz, uTime);
+         float shadowSuppress = smoothstep(dynWL - 1.5, dynWL + 2.0, vWorldPos.y);
+         reflectedLight.directDiffuse = mix(reflectedLight.indirectDiffuse * 0.6, reflectedLight.directDiffuse, shadowSuppress);
+
+         // Procedural caustics on underwater terrain
+         float causticDepth = smoothstep(dynWL, dynWL - 0.5, vWorldPos.y);
+         if (causticDepth > 0.01) {
+           float nWarp = _vnoise(vWorldPos.xz * 0.2 + uTime * 0.02);
+           vec2 cUV = vWorldPos.xz + nWarp * 3.0;
+           float c1 = causticPattern(cUV * 6.0, uTime * 0.4);
+           vec2 cUV2 = vec2(cUV.y * 0.7 - cUV.x * 0.7, cUV.x * 0.7 + cUV.y * 0.7);
+           float c2 = causticPattern(cUV2 * 7.1 + 40.0, uTime * 0.3);
+           float caustic = min(c1, c2);
+           float cStrength = causticDepth * (1.0 - smoothstep(dynWL - 0.5, dynWL - 2.5, vWorldPos.y));
+           reflectedLight.directDiffuse += caustic * cStrength * 0.2;
+         }`
       );
     };
   }
@@ -137,6 +329,181 @@ function createGroundTexture(size = 256) {
       ctx.ellipse(wx, wy, rx, ry, rot, 0, Math.PI * 2);
       ctx.fill();
     }, x, y, 6);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  return tex;
+}
+
+/** Helper for seamless tiling: draw at position + all wrap-around copies */
+function drawWrappedHelper(ctx, size, drawFn, x, y, margin) {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const wx = x + dx * size;
+      const wy = y + dy * size;
+      if (wx > -margin && wx < size + margin && wy > -margin && wy < size + margin) {
+        drawFn(wx, wy);
+      }
+    }
+  }
+}
+
+/**
+ * Procedural sand texture — fine grain, small pebbles, shell fragments.
+ */
+function createSandTexture(size = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Warm sandy base
+  ctx.fillStyle = '#9a9080';
+  ctx.fillRect(0, 0, size, size);
+
+  // Fine sand grain — many tiny dots
+  for (let i = 0; i < 1500; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 0.3 + Math.random() * 0.8;
+    const shade = 120 + Math.random() * 60;
+    const warmth = Math.random() * 20;
+    ctx.fillStyle = `rgba(${shade + warmth | 0}, ${shade + warmth * 0.5 | 0}, ${shade * 0.75 | 0}, ${0.15 + Math.random() * 0.25})`;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.arc(wx, wy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }, x, y, 2);
+  }
+
+  // Scattered pebbles
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const rx = 0.8 + Math.random() * 2;
+    const ry = rx * (0.5 + Math.random() * 0.5);
+    const rot = Math.random() * Math.PI;
+    const shade = 90 + Math.random() * 50;
+    ctx.fillStyle = `rgba(${shade + 10 | 0}, ${shade | 0}, ${shade * 0.85 | 0}, ${0.2 + Math.random() * 0.3})`;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, rx, ry, rot, 0, Math.PI * 2);
+      ctx.fill();
+    }, x, y, 4);
+  }
+
+  // Small shell-like fragments
+  for (let i = 0; i < 15; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 1 + Math.random() * 2;
+    const shade = 160 + Math.random() * 60;
+    ctx.fillStyle = `rgba(${shade | 0}, ${shade * 0.95 | 0}, ${shade * 0.85 | 0}, ${0.15 + Math.random() * 0.2})`;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.arc(wx, wy, r, Math.random(), Math.PI + Math.random(), false);
+      ctx.fill();
+    }, x, y, 4);
+  }
+
+  // Subtle ripple lines (wind-blown sand pattern)
+  for (let i = 0; i < 25; i++) {
+    const y = Math.random() * size;
+    const x0 = Math.random() * size;
+    const len = 10 + Math.random() * 30;
+    const shade = 130 + Math.random() * 40;
+    ctx.strokeStyle = `rgba(${shade + 10 | 0}, ${shade | 0}, ${shade * 0.8 | 0}, ${0.08 + Math.random() * 0.1})`;
+    ctx.lineWidth = 0.5 + Math.random() * 0.5;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.moveTo(wx, wy);
+      ctx.bezierCurveTo(wx + len * 0.3, wy - 1 + Math.random() * 2, wx + len * 0.7, wy - 1 + Math.random() * 2, wx + len, wy);
+      ctx.stroke();
+    }, x0, y, len + 5);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  return tex;
+}
+
+/**
+ * Procedural dirt texture — soil clumps, small stones, root traces.
+ */
+function createDirtTexture(size = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Earthy brown base
+  ctx.fillStyle = '#7a6a58';
+  ctx.fillRect(0, 0, size, size);
+
+  // Soil clumps — irregular blobs
+  for (let i = 0; i < 300; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 0.5 + Math.random() * 2.5;
+    const shade = 80 + Math.random() * 50;
+    const warm = Math.random() * 15;
+    ctx.fillStyle = `rgba(${shade + warm | 0}, ${shade * 0.85 + warm * 0.5 | 0}, ${shade * 0.6 | 0}, ${0.15 + Math.random() * 0.3})`;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.arc(wx, wy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }, x, y, 4);
+  }
+
+  // Small stones
+  for (let i = 0; i < 50; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const rx = 0.8 + Math.random() * 2.5;
+    const ry = rx * (0.4 + Math.random() * 0.4);
+    const rot = Math.random() * Math.PI;
+    const shade = 100 + Math.random() * 60;
+    ctx.fillStyle = `rgba(${shade | 0}, ${shade * 0.95 | 0}, ${shade * 0.85 | 0}, ${0.25 + Math.random() * 0.3})`;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, rx, ry, rot, 0, Math.PI * 2);
+      ctx.fill();
+    }, x, y, 5);
+  }
+
+  // Root/twig traces — thin dark lines
+  for (let i = 0; i < 20; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const len = 5 + Math.random() * 15;
+    const angle = Math.random() * Math.PI * 2;
+    const shade = 50 + Math.random() * 30;
+    ctx.strokeStyle = `rgba(${shade + 10 | 0}, ${shade | 0}, ${shade * 0.6 | 0}, ${0.15 + Math.random() * 0.2})`;
+    ctx.lineWidth = 0.5 + Math.random() * 1;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.moveTo(wx, wy);
+      const mx = wx + len * 0.5 * Math.cos(angle) + (Math.random() - 0.5) * 3;
+      const my = wy + len * 0.5 * Math.sin(angle) + (Math.random() - 0.5) * 3;
+      const ex = wx + len * Math.cos(angle);
+      const ey = wy + len * Math.sin(angle);
+      ctx.quadraticCurveTo(mx, my, ex, ey);
+      ctx.stroke();
+    }, x, y, len + 5);
+  }
+
+  // Fine soil speckle
+  for (let i = 0; i < 800; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const shade = 70 + Math.random() * 60;
+    ctx.fillStyle = `rgba(${shade + 15 | 0}, ${shade | 0}, ${shade * 0.65 | 0}, ${0.1 + Math.random() * 0.15})`;
+    ctx.fillRect(x, y, 0.5 + Math.random(), 0.5 + Math.random());
   }
 
   const tex = new THREE.CanvasTexture(canvas);
