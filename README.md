@@ -21,6 +21,8 @@ Human-AI conversation logs from each development session (readable markdown, con
 
 | Session | Topic |
 |---------|-------|
+| [Day 1, Session 0 — The Seed](transcripts/day1-00-seed-prompt.md) | The original prompt — "create a VR forest from scratch" — and the plan |
+| [Day 1, Session 0b — Initial Build](transcripts/day1-00-initial-build.md) | First implementation — project scaffold, terrain, trees, sky, movement |
 | [Day 1, Session 1](transcripts/day1-01-initial-appraisal.md) | Initial appraisal — terrain, trees, vegetation, day/night cycle, sky |
 | [Day 1, Session 2](transcripts/day1-02-footsteps-crickets-spatial-audio.md) | Footsteps, crickets, spatial audio, wildlife |
 | [Day 1, Session 3](transcripts/day1-03-water-ponds-shores.md) | Water system — ponds, shores, waves, wind |

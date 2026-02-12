@@ -27,6 +27,8 @@ MAX_CODE_BLOCK_LINES = 50
 MAX_TOOL_OUTPUT_LINES = 30
 
 SESSION_TITLES = {
+    "day1-00-seed-prompt": ("February 10, 2026", "Day 1, Session 0 \u2014 The Seed Prompt"),
+    "day1-00-initial-build": ("February 10, 2026", "Day 1, Session 0b \u2014 Initial Build"),
     "day1-01-initial-appraisal": ("February 10, 2026", "Day 1, Session 1 \u2014 Initial Appraisal"),
     "day1-02-footsteps-crickets-spatial-audio": ("February 10, 2026", "Day 1, Session 2 \u2014 Footsteps, Crickets & Spatial Audio"),
     "day1-03-water-ponds-shores": ("February 10, 2026", "Day 1, Session 3 \u2014 Water, Ponds & Shores"),
