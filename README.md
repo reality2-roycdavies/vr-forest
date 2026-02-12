@@ -2,7 +2,7 @@
 
 A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — two external assets (morepork owl call, moon photograph), everything else procedurally generated.
 
-This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over three days. For a detailed account of the creation process and a thematic analysis of the human-AI dialogue, see [CREATION_PROCESS.md](CREATION_PROCESS.md).
+This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over four days. For a detailed account of the creation process and a thematic analysis of the human-AI dialogue, see [CREATION_PROCESS.md](CREATION_PROCESS.md).
 
 **Try it now:** [https://reality2-roycdavies.github.io/vr-forest/](https://reality2-roycdavies.github.io/vr-forest/)
 
@@ -21,7 +21,9 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 - Ponds and streams fill low terrain areas (below configurable water level)
 - Real-time wave displacement shader with 10+ sinusoidal waves
 - Height-tinted crests and troughs with drifting surface flecks
-- Sandy shore zones with smooth colour transitions
+- Sandy shore zones with smooth colour transitions (wet sand → foam → dry sand)
+- Shore foam strip with marching-squares waterline contour, wave-driven lapping animation
+- Water edge transparency: surface fades at terrain boundary via heightmap texture
 - Swimming physics: buoyancy, reduced speed, gentle bobbing, no jumping
 
 ### Three Procedural Tree Types
@@ -74,6 +76,16 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 - Random spawn every 5–10 seconds near the player
 - Smooth fade in/out with accompanying growl sounds
 - Procedurally built geometry (no models)
+
+### Collectibles
+- Fairy-like glowing orbs in 7 colours with fluttery animation
+- Spatial chime sounds on proximity, fanfare on collection
+- Power/score HUD for desktop and VR
+- Sprint mechanic (shift/grip) drains power over time
+
+### Minimap
+- Rotating overhead minimap showing terrain, water, trees, and player
+- Adapts for both desktop (corner overlay) and VR (wrist-mounted)
 
 ### Fireflies
 - 30 subtle glowing particles at night

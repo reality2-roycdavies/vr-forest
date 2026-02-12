@@ -2,7 +2,9 @@
 
 ## How This Project Was Built
 
-This project was built over three days (10–12 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
+This project was built over four days (10–13 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
+
+The full conversation transcripts (Claude Code JSONL format) are available in the [`transcripts/`](transcripts/) directory — 9 sessions totalling ~37 MB of raw human-AI dialogue.
 
 The human's role was creative director: providing high-level vision, testing in the VR headset, and giving experiential feedback. Claude's role was the entire development studio: architecture, implementation, debugging, and iteration.
 
@@ -139,21 +141,47 @@ The wildlife peek encounters (bear, lion, Wally) were spawning at incorrect heig
 
 ---
 
-## Day 3: Cloud Diversity and Terrain Shaders (12 February 2026)
+## Day 3: Collectibles, Gameplay, and the Water's Edge (12 February 2026)
 
-Day 3 focused on atmospheric realism — making the sky feel alive — and moving terrain colouring from CPU to GPU.
+Day 3 split into two distinct arcs: gamification features in the morning, and a deep dive into water-land transitions in the evening.
 
-### Phase 15: Terrain Shader Refactor
+### Phase 15: Collectibles and Gameplay
+
+The forest gained its first game-like elements: fairy-like collectible orbs in 7 colours with fluttery animation and spatial chime sounds, a fanfare on collection, a power/score HUD, sprint mechanics (shift/grip drains power over time), jump landing sounds (surface-aware thuds and splashes), and a rotating minimap for both desktop and VR.
+
+Terrain rendering was also improved: heightmap-based normals replaced per-face normals for seamless lighting across chunk boundaries, shadow map stabilisation prevented texel swimming during player movement, and anti-tiling dual-scale texture blending eliminated repetitive ground patterns.
+
+### Phase 16: The Water's Edge
+
+The water-land boundary was the most technically demanding feature of Day 3. The original hard edge — flat blue water plane meeting terrain at the water level — was visually jarring: a perfect straight line where two surfaces intersected.
+
+**Shore transition shader**: The ground material's fragment shader was extended with a multi-zone colour gradient near the waterline: underwater terrain blends from the water colour through foam white to wet sand to dry sand. A simplified wave height function tracks the dynamic waterline position so the shore zone visually "breathes" with the waves.
+
+**Underwater caustics**: Procedural caustic patterns were added to underwater terrain — noise-warped, clamped, and rotated for a convincing dappled-light effect. These were later removed when the approach changed to transparent water edges.
+
+**Shore foam strip**: A marching-squares contour tracer generates the waterline per chunk, producing foam mesh segments that follow the terrain edge. The foam uses shader injection for wave displacement, bubbly noise patterns, ruffled edges, and wave-driven lapping motion via a `vWaveH` varying. Shore-side vertices follow the terrain height to prevent depth clipping.
+
+**Water edge transparency**: The water surface fades to transparent in a tight band at the waterline (-0.2 to 0.15m), controlled by a terrain heightmap texture (256×256) passed to the water shader. This creates a soft edge where water meets land rather than a hard Z-intersection. Polygon offset and stencil buffer prevent z-fighting and overlap artifacts.
+
+This was a long iterative arc — the original caustics approach was eventually replaced by the transparency approach, which required re-engineering how the water and terrain shaders communicate. The terrain heightmap texture became the bridge: the ground material generates it per chunk, and the water shader samples it to know where to fade.
+
+---
+
+## Day 4: Cloud Diversity and Terrain Shaders (13 February 2026)
+
+Day 4 focused on atmospheric realism — making the sky feel alive — and moving terrain colouring from CPU to GPU.
+
+### Phase 17: Terrain Shader Refactor
 
 The terrain colouring system was completely restructured. Previously, vertex colours were computed on the CPU during chunk generation — a large block of JavaScript that blended height-based grass gradients, shore transitions, dirt patches, and per-vertex noise variation. This was moved entirely into the ground material's fragment shader, driven by a per-vertex tree density attribute from simplex noise.
 
 The shader computes all colour blending (height gradients, shore transitions, dirt-under-trees) at fragment resolution, eliminating visible banding between vertices. Normal computation was also optimised: interior vertices now use cached heights instead of recalculating, with `getTerrainHeight()` only called for boundary vertices that need cross-chunk continuity.
 
-### Phase 16: Wildlife Anatomy
+### Phase 18: Wildlife Anatomy
 
 The bear and lion peek encounters gained legs — previously they were floating torsos. Stocky cylindrical legs for the bear, slender ones for the lion, positioned at the four corners of the body. A small detail, but floating animals behind trees looked wrong.
 
-### Phase 17: Cloud Diversity
+### Phase 19: Cloud Diversity
 
 This was the main focus of Day 3, spanning the most iterations. The original cloud system was 30 identical soft circular puffs arranged in a ring — passable from a distance but monotonous under scrutiny.
 
@@ -181,7 +209,7 @@ Wispy clouds were initially randomly oriented, creating chaotic streaks across t
 
 **Billowing animation** was added: each puff gently drifts in position and breathes in scale, with horizontal clouds receiving much subtler movement (15% of billboard amplitude). Cloud groups also wobble radially and bob vertically. The initial amplitudes were far too large — "they move too much" — and were dialled back to near-imperceptible gentle shifts.
 
-### Phase 18: Development Infrastructure
+### Phase 20: Development Infrastructure
 
 The development server (`server.py`) gained no-cache headers so the VR headset always fetches the latest code without manual cache-busting. The `index.html` script tag version was bumped for CDN cache invalidation.
 
@@ -288,9 +316,9 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 
 ## By the Numbers
 
-- **Development time**: ~20 hours over three days
-- **Conversation sessions**: 8+ (3 in parent project, 5+ in VR forest project)
-- **User feedback messages**: ~200+
+- **Development time**: ~24 hours over four days
+- **Conversation sessions**: 9 active sessions (transcripts in [`transcripts/`](transcripts/))
+- **User feedback messages**: ~250+
 - **Major features**: 15+ distinct systems
 - **Lines of JavaScript**: ~9,500
 - **JavaScript modules**: 29
@@ -302,4 +330,23 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 - **Most-iterated feature**: Sky/fog rendering (~8 iterations)
 - **Most-rewritten feature**: Footstep audio (~5 complete rewrites)
 - **Day 2 most-iterated**: Vegetation lighting (~8 iterations across shader patches, emissive tuning, and material changes)
-- **Day 3 most-iterated**: Cloud diversity (~10 iterations across textures, scaling, billboard vs plane, and the Z-scale bug)
+- **Day 3 most-iterated**: Water edge effects (~12 iterations across caustics, foam, transparency, and heightmap communication)
+- **Day 4 most-iterated**: Cloud diversity (~10 iterations across textures, scaling, billboard vs plane, and the Z-scale bug)
+
+---
+
+## Conversation Transcripts
+
+The raw Claude Code conversation transcripts are in [`transcripts/`](transcripts/) as JSONL files (one JSON object per API turn). Each file is a complete session:
+
+| File | Day | Topic |
+|------|-----|-------|
+| `day1-01-initial-appraisal.jsonl` | 1 | Initial project appraisal and architecture |
+| `day1-02-footsteps-crickets-spatial-audio.jsonl` | 1 | Footsteps, crickets, spatial audio |
+| `day1-03-water-ponds-shores.jsonl` | 1 | Water ponds, sandy shores |
+| `day2-01-shadows-creatures-morepork.jsonl` | 2 | Shadows, wildlife, morepork owl |
+| `day2-02-shadows-creatures-continued.jsonl` | 2 | Continued shadow/creature fixes |
+| `day2-03-moon-shadows-water-ambience.jsonl` | 2 | Real moon, moonlight, water ambience |
+| `day3-01-collectibles-minimap-terrain.jsonl` | 3 | Collectibles, minimap, terrain normals |
+| `day3-02-water-edge-effects.jsonl` | 3 | Shore foam, water edge transparency, caustics |
+| `day4-01-cloud-diversity.jsonl` | 4 | Cloud archetypes, textures, billowing animation |
