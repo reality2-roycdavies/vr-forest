@@ -1,4 +1,4 @@
-console.log('%c[VR Forest v11] Loaded', 'color: #66ffcc; font-size: 14px;');
+console.log('%c[VR Forest v13] Loaded', 'color: #66ffcc; font-size: 14px;');
 // Bootstrap: scene, systems, render loop
 import * as THREE from 'three';
 import { VRSetup } from './vr-setup.js';
@@ -44,7 +44,7 @@ const chunkManager = new ChunkManager(scene);
 movement.chunkManager = chunkManager;
 
 // --- Water surface with wave displacement ---
-const waterGeom = new THREE.PlaneGeometry(300, 300, 400, 400);
+const waterGeom = new THREE.PlaneGeometry(300, 300, 128, 128);
 waterGeom.rotateX(-Math.PI / 2);
 const waterMat = new THREE.MeshPhongMaterial({
   color: new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b),
@@ -55,7 +55,7 @@ const waterMat = new THREE.MeshPhongMaterial({
   depthWrite: false,
 });
 // --- Terrain heightmap for water shore fade ---
-const HMAP_RES = 256;
+const HMAP_RES = 128;
 const HMAP_SIZE = 300; // matches water plane size
 const hmapData = new Float32Array(HMAP_RES * HMAP_RES);
 const hmapTex = new THREE.DataTexture(hmapData, HMAP_RES, HMAP_RES, THREE.RedFormat, THREE.FloatType);
@@ -225,7 +225,7 @@ waterMat.onBeforeCompile = (shader) => {
     // Rain ripple rings on water surface
     if (uRainIntensity > 0.01) {
       float rippleSum = 0.0;
-      for (int i = 0; i < 20; i++) {
+      for (int i = 0; i < 10; i++) {
         float fi = float(i);
         float phase = fract(sin(fi * 127.1) * 311.7);
         // Each ripple runs at its own speed so they desynchronize

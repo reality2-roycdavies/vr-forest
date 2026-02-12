@@ -5,9 +5,9 @@ import { getTerrainHeight } from '../terrain/noise.js';
 import { createRockTexture } from './textures.js';
 import { addWindToMaterial } from '../atmosphere/wind.js';
 
-const MAX_VEG_PER_TYPE = 5000;
-const MAX_FLOWERS = 3000;
-const MAX_ROCKS = 2000;
+const MAX_VEG_PER_TYPE = 3000;
+const MAX_FLOWERS = 1500;
+const MAX_ROCKS = 1000;
 const _matrix = new THREE.Matrix4();
 const _position = new THREE.Vector3();
 const _quaternion = new THREE.Quaternion();

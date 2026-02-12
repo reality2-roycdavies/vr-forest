@@ -168,8 +168,8 @@ export class MovementSystem {
     const bobOffset = Math.sin(this.bobPhase * Math.PI * 2) * this.bobAmplitude;
 
     if (this.vr.isInVR()) {
-      // Subtle bob in VR — reduced to minimise discomfort
-      dolly.position.y += bobOffset * 0.3;
+      // Bob the camera (not the dolly) so world objects like water stay stable
+      camera.position.y += bobOffset * 0.3;
     } else {
       camera.position.y = CONFIG.TERRAIN_FOLLOW_OFFSET + bobOffset;
     }

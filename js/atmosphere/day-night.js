@@ -150,8 +150,11 @@ export class DayNightSystem {
     scene.add(this.sunMesh);
 
     // --- Moon disc (phase shader with photo texture, procedural fallback) ---
-    this.moonTexture = this._createMoonTexture();
+    this.moonProceduralTex = this._createMoonTexture();
+    this.moonPhotoTex = null;
+    this.moonTexture = this.moonProceduralTex;
     new THREE.TextureLoader().load('assets/textures/moon.jpg', (tex) => {
+      this.moonPhotoTex = tex;
       this.moonTexture = tex;
       this.moonMat.uniforms.moonMap.value = tex;
     });
@@ -219,8 +222,8 @@ export class DayNightSystem {
     // --- Directional sun light ---
     this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.width = 4096;
-    this.sunLight.shadow.mapSize.height = 4096;
+    this.sunLight.shadow.mapSize.width = 2048;
+    this.sunLight.shadow.mapSize.height = 2048;
     this.sunLight.shadow.camera.near = 0.5;
     this.sunLight.shadow.camera.far = 250;
     this.sunLight.shadow.camera.left = -80;
@@ -901,14 +904,34 @@ export class DayNightSystem {
     const twilightFade = Math.min(1, (0.15 - elevation) / 0.2);
     let moonOpacity = Math.max(0, horizonFade * twilightFade);
     if (weather && weather.cloudDensity > 0.01) {
-      // Fade moon to a vague glow behind clouds
-      moonOpacity *= (1 - weather.cloudDarkness * 0.9);
-      // Enlarge and soften — diffuse bright patch rather than defined disc
-      const moonScale = CONFIG.MOON_VISUAL_RADIUS * (1 + weather.cloudDarkness * 1.2);
-      this.moonMesh.scale.set(moonScale, moonScale, 1);
+      // Behind clouds: hide detailed moon, show hazy glow sprite instead
+      this.moonMesh.visible = false;
+      if (!this._moonGlow) {
+        // Create a soft glow sprite (like sun) for moon behind clouds
+        this._moonGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: this.sunTexture,
+          color: 0xaabbcc,
+          fog: false,
+          transparent: true,
+          depthWrite: false,
+        }));
+        this._moonGlow.renderOrder = -1;
+        this.scene.add(this._moonGlow);
+      }
+      this._moonGlow.visible = moonAboveHorizon && sunLowEnough;
+      this._moonGlow.position.copy(playerPos).add(_moonPos);
+      // Fade aggressively — just a hazy hint
+      const glowOpacity = moonOpacity * (1 - weather.cloudDarkness * 0.92) * 0.5;
+      this._moonGlow.material.opacity = glowOpacity;
+      const glowScale = CONFIG.MOON_VISUAL_RADIUS * 8;
+      this._moonGlow.scale.set(glowScale, glowScale, 1);
     } else {
-      const moonScale = CONFIG.MOON_VISUAL_RADIUS;
-      this.moonMesh.scale.set(moonScale, moonScale, 1);
+      // Clear sky: show detailed moon, hide glow
+      if (this._moonGlow) this._moonGlow.visible = false;
+      if (this.moonPhotoTex) {
+        this.moonMat.uniforms.moonMap.value = this.moonPhotoTex;
+      }
+      this.moonMesh.scale.set(CONFIG.MOON_VISUAL_RADIUS, CONFIG.MOON_VISUAL_RADIUS, 1);
     }
     this.moonMat.uniforms.opacity.value = moonOpacity;
     this.moonMat.uniforms.phase.value = moon.phase;

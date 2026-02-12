@@ -3,7 +3,7 @@
 export const CONFIG = {
   // Terrain
   CHUNK_SIZE: 32,           // meters per chunk side
-  CHUNK_SEGMENTS: 95,       // vertices per side (96x96 grid = 95x95 quads ≈ 18k tris)
+  CHUNK_SEGMENTS: 31,       // vertices per side (32x32 grid = 31x31 quads ≈ 2k tris)
   LOAD_RADIUS: 5,           // chunks to load around player
   UNLOAD_RADIUS: 7,         // chunks beyond this get recycled
   MAX_CHUNKS_PER_FRAME: 2,  // staggered loading
@@ -54,7 +54,7 @@ export const CONFIG = {
   AMBIENT_VOLUME: 0.3,
   SUN_VISUAL_RADIUS: 14,       // visual sun disc size
   SUN_DISTANCE: 150,           // distance from player (within camera far plane)
-  CLOUD_COUNT: 30,             // number of cloud puffs
+  CLOUD_COUNT: 18,             // number of cloud groups
   CLOUD_MIN_RADIUS: 40,        // cloud ring inner radius
   CLOUD_MAX_RADIUS: 180,       // cloud ring outer radius
   CLOUD_HEIGHT_MIN: 60,
@@ -67,7 +67,7 @@ export const CONFIG = {
   DEFAULT_LONGITUDE: 174.76,   // Auckland fallback
 
   // Moon
-  MOON_VISUAL_RADIUS: 3.5,    // SUN_VISUAL_RADIUS * 0.7
+  MOON_VISUAL_RADIUS: 1.75,   // half previous size
   MOON_DISTANCE: 135,         // SUN_DISTANCE * 0.9
 
   // Ground surface
@@ -170,7 +170,7 @@ export const CONFIG = {
   WEATHER_STORM_CLOUD_COLOR: 0x303038,  // dark grey storm clouds
 
   // Rain particles
-  RAIN_PARTICLE_COUNT: 4000,
+  RAIN_PARTICLE_COUNT: 2000,
   RAIN_RADIUS: 25,                      // cylinder radius around player
   RAIN_HEIGHT: 20,                      // cylinder height
   RAIN_SPEED_MIN: 11,                   // m/s downward

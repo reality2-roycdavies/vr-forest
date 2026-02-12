@@ -7,7 +7,7 @@ import {
   getTrunkMaterial, getCanopyMaterial
 } from './tree-factory.js';
 
-const MAX_TREES_PER_TYPE = 2000;
+const MAX_TREES_PER_TYPE = 1200;
 const _matrix = new THREE.Matrix4();
 const _position = new THREE.Vector3();
 const _quaternion = new THREE.Quaternion();
