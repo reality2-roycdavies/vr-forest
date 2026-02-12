@@ -213,11 +213,9 @@ Wispy clouds were initially randomly oriented, creating chaotic streaks across t
 
 The development server (`server.py`) gained no-cache headers so the VR headset always fetches the latest code without manual cache-busting. The `index.html` script tag version was bumped for CDN cache invalidation.
 
----
+### Weather System
 
-## Day 5: Weather System (13 February 2026)
-
-Day 5 was entirely dedicated to a weather system — adding dynamic atmospheric states that interact with every existing system.
+The second half of Day 4 was dedicated to a weather system — adding dynamic atmospheric states that interact with every existing system.
 
 ### Phase 21: Weather Architecture
 
@@ -386,7 +384,7 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 
 ## By the Numbers
 
-- **Development time**: ~30 hours over five days
+- **Development time**: ~30 hours over four days
 - **Conversation sessions**: 10+ active sessions (transcripts in [`transcripts/`](transcripts/))
 - **User feedback messages**: ~300+
 - **Major features**: 16+ distinct systems
@@ -402,7 +400,7 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 - **Day 2 most-iterated**: Vegetation lighting (~8 iterations across shader patches, emissive tuning, and material changes)
 - **Day 3 most-iterated**: Water edge effects (~12 iterations across caustics, foam, transparency, and heightmap communication)
 - **Day 4 most-iterated**: Cloud diversity (~10 iterations across textures, scaling, billboard vs plane, and the Z-scale bug)
-- **Day 5 most-iterated**: Sky/fog colour convergence (~7 iterations across weather×time-of-day matrix)
+- **Day 4 most-iterated**: Sky/fog colour convergence (~7 iterations across weather×time-of-day matrix)
 
 ---
 

@@ -2,7 +2,7 @@
 
 A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — two external assets (morepork owl call, moon photograph), everything else procedurally generated.
 
-This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over five days.
+This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over four days.
 
 **Try it now:** [https://reality2-roycdavies.github.io/vr-forest/](https://reality2-roycdavies.github.io/vr-forest/)
 
@@ -13,7 +13,7 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 | Document | Description |
 |----------|-------------|
 | [Beginner's Guide](GUIDE.md) | Technical primer for novice VR/AI developers — VR fundamentals, framerate, WebXR, Three.js, procedural generation, shaders, spatial audio, performance, and the AI-assisted workflow |
-| [Creation Process](CREATION_PROCESS.md) | Detailed narrative of how the project was built over five days, phase by phase, with a thematic analysis of the human-AI dialogue |
+| [Creation Process](CREATION_PROCESS.md) | Detailed narrative of how the project was built over four days, phase by phase, with a thematic analysis of the human-AI dialogue |
 
 ### Conversation Transcripts
 
@@ -30,6 +30,8 @@ Raw human-AI conversation logs from each development session (JSONL format):
 | [Day 3, Session 1](transcripts/day3-01-collectibles-minimap-terrain.jsonl) | Collectibles, minimap, terrain banding fixes |
 | [Day 3, Session 2](transcripts/day3-02-water-edge-effects.jsonl) | Water edge effects — shore transitions, caustics, foam |
 | [Day 4, Session 1](transcripts/day4-01-cloud-diversity.jsonl) | Cloud diversity, terrain shader refactor, wildlife legs |
+| [Day 4, Session 2](transcripts/day4-02-weather-system.jsonl) | Weather system — architecture, rain particles, thunder, sky/fog tuning |
+| [Day 4, Session 3](transcripts/day4-03-weather-polish-stormy-water.jsonl) | Weather polish — stormy water, rain audio, twilight fog, sun/moon cloud fade |
 
 ## Features
 
