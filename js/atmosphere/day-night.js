@@ -867,6 +867,18 @@ export class DayNightSystem {
     this.sunMesh.position.copy(playerPos).add(_sunPos);
     this.sunMat.color.copy(palette.sun);
     this.sunMesh.visible = elevation > -0.05;
+    // Weather: fade sun to a dim suggestion behind clouds
+    if (weather && weather.cloudDensity > 0.01) {
+      const sunFade = 1 - weather.cloudDarkness * 0.9; // cloudy: ~0.42, rainy: ~0.19
+      this.sunMat.opacity = sunFade;
+      // Enlarge and soften — overcast sun is a diffuse bright patch, not a disc
+      const sunScale = CONFIG.SUN_VISUAL_RADIUS * 3 * (1 + weather.cloudDarkness * 1.5);
+      this.sunMesh.scale.set(sunScale, sunScale, 1);
+    } else {
+      this.sunMat.opacity = 1;
+      const sunScale = CONFIG.SUN_VISUAL_RADIUS * 3;
+      this.sunMesh.scale.set(sunScale, sunScale, 1);
+    }
 
     // Moon — astronomically positioned with phase
     const moon = this._getMoonPosition(now);
@@ -888,7 +900,16 @@ export class DayNightSystem {
     const horizonFade = Math.min(1, (moon.altitude - 0.05) / 0.1);
     const twilightFade = Math.min(1, (0.15 - elevation) / 0.2);
     let moonOpacity = Math.max(0, horizonFade * twilightFade);
-    if (weather) moonOpacity *= (1 - weather.starDimming);
+    if (weather && weather.cloudDensity > 0.01) {
+      // Fade moon to a vague glow behind clouds
+      moonOpacity *= (1 - weather.cloudDarkness * 0.9);
+      // Enlarge and soften — diffuse bright patch rather than defined disc
+      const moonScale = CONFIG.MOON_VISUAL_RADIUS * (1 + weather.cloudDarkness * 1.2);
+      this.moonMesh.scale.set(moonScale, moonScale, 1);
+    } else {
+      const moonScale = CONFIG.MOON_VISUAL_RADIUS;
+      this.moonMesh.scale.set(moonScale, moonScale, 1);
+    }
     this.moonMat.uniforms.opacity.value = moonOpacity;
     this.moonMat.uniforms.phase.value = moon.phase;
     // Compute sun direction on the moon disc (so lit side faces scene sun)
