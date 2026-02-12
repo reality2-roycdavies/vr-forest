@@ -34,17 +34,27 @@ export function getGroundMaterial() {
         '#include <common>',
         '#include <common>\nuniform float shoreLevel;\nuniform float waterLevel;\nvarying float vWorldY;'
       );
-      // Shore transition: smoothly blend grass texture out over a 1.5m band
+      // Anti-tiling: blend texture at two scales + slight UV rotation to break up repeats
+      // Then shore transition to blend grass texture out near water
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
-        `#include <map_fragment>
-         float shoreMix = smoothstep(shoreLevel - 0.5, shoreLevel + 1.0, vWorldY);
+        `#ifdef USE_MAP
+           vec4 texA = texture2D(map, vMapUv);
+           // Second sample at larger, rotated scale to break tiling
+           vec2 uv2 = vMapUv * 0.37 + vec2(vMapUv.y * 0.12, -vMapUv.x * 0.12);
+           vec4 texB = texture2D(map, uv2);
+           vec4 texelColor = mix(texA, texB, 0.35);
+           diffuseColor *= texelColor;
+         #endif
+         float shoreMix = smoothstep(shoreLevel - 1.5, shoreLevel + 1.5, vWorldY);
          diffuseColor.rgb = mix(vColor, diffuseColor.rgb, shoreMix);`
       );
-      // Below water level: remove shadows — use uniform ambient lighting
+      // Near/below water: smoothly suppress shadows over a transition band
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <aomap_fragment>',
-        '#include <aomap_fragment>\nif (vWorldY <= waterLevel) { reflectedLight.directDiffuse = reflectedLight.indirectDiffuse * 0.6; }'
+        `#include <aomap_fragment>
+         float shadowSuppress = smoothstep(waterLevel - 1.5, waterLevel + 2.0, vWorldY);
+         reflectedLight.directDiffuse = mix(reflectedLight.indirectDiffuse * 0.6, reflectedLight.directDiffuse, shadowSuppress);`
       );
     };
   }

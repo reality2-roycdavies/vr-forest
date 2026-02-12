@@ -1018,6 +1018,283 @@ export class AmbientAudio {
     }
   }
 
+  // ======== Collectible chime — two rising sine tones + shimmer burst ========
+
+  playCollectChime(position) {
+    if (!this.started || !this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const vol = CONFIG.COLLECTIBLE_CHIME_VOLUME;
+    const baseFreq = CONFIG.COLLECTIBLE_CHIME_FREQ;
+
+    // Spatial panner
+    const panner = this._createPanner(position);
+    panner.connect(this.spatialBus);
+
+    // Tone 1: rising sweep 880→1320 Hz
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(baseFreq, now);
+    osc1.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.15);
+
+    const gain1 = ctx.createGain();
+    gain1.gain.setValueAtTime(0, now);
+    gain1.gain.linearRampToValueAtTime(vol, now + 0.02);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+    osc1.connect(gain1);
+    gain1.connect(panner);
+    osc1.start(now);
+    osc1.stop(now + 0.35);
+
+    // Tone 2: octave above, delayed 80ms
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(baseFreq * 2, now + 0.08);
+    osc2.frequency.exponentialRampToValueAtTime(baseFreq * 3, now + 0.23);
+
+    const gain2 = ctx.createGain();
+    gain2.gain.setValueAtTime(0, now);
+    gain2.gain.setValueAtTime(0, now + 0.08);
+    gain2.gain.linearRampToValueAtTime(vol * 0.7, now + 0.1);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc2.connect(gain2);
+    gain2.connect(panner);
+    osc2.start(now + 0.08);
+    osc2.stop(now + 0.4);
+
+    // Shimmer: bandpass noise burst at 6kHz
+    if (this._noiseBuffer) {
+      const shimmer = ctx.createBufferSource();
+      shimmer.buffer = this._noiseBuffer;
+      shimmer.playbackRate.value = 1.2;
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 6000;
+      bp.Q.value = 2.0;
+
+      const shimGain = ctx.createGain();
+      shimGain.gain.setValueAtTime(0, now);
+      shimGain.gain.linearRampToValueAtTime(vol * 0.35, now + 0.02);
+      shimGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+      shimmer.connect(bp);
+      bp.connect(shimGain);
+      shimGain.connect(panner);
+      shimmer.start(now);
+      shimmer.stop(now + 0.25);
+    }
+  }
+
+  // ======== Milestone fanfare — celebratory arpeggio for every 10 points ========
+
+  playCollectFanfare() {
+    if (!this.started || !this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const vol = CONFIG.COLLECTIBLE_CHIME_VOLUME * 1.5;
+
+    // Rising major arpeggio: root → 3rd → 5th → octave
+    const notes = [660, 830, 990, 1320];
+    const spacing = 0.09;
+
+    for (let i = 0; i < notes.length; i++) {
+      const t = now + i * spacing;
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(notes[i], t);
+      osc.frequency.linearRampToValueAtTime(notes[i] * 1.02, t + 0.15);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(vol * (0.7 + i * 0.1), t + 0.02);
+      gain.gain.setValueAtTime(vol * (0.5 + i * 0.1), t + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.4);
+    }
+
+    // Sparkle shimmer across the whole arpeggio
+    if (this._noiseBuffer) {
+      const shimmer = ctx.createBufferSource();
+      shimmer.buffer = this._noiseBuffer;
+      shimmer.playbackRate.value = 1.5;
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 8000;
+      bp.Q.value = 1.5;
+
+      const sGain = ctx.createGain();
+      sGain.gain.setValueAtTime(0, now);
+      sGain.gain.linearRampToValueAtTime(vol * 0.25, now + 0.05);
+      sGain.gain.setValueAtTime(vol * 0.2, now + 0.3);
+      sGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+      shimmer.connect(bp);
+      bp.connect(sGain);
+      sGain.connect(this.masterGain);
+      shimmer.start(now);
+      shimmer.stop(now + 0.65);
+    }
+  }
+
+  // ======== Jump landing splash — heavy water impact ========
+
+  playLandingSplash() {
+    if (!this.started || !this.ctx || !this._noiseBuffer) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const vol = CONFIG.FOOTSTEP_VOLUME * 3;
+
+    // Big initial slosh — wide bandpass
+    const slosh = ctx.createBufferSource();
+    slosh.buffer = this._noiseBuffer;
+    slosh.playbackRate.value = 0.5 + Math.random() * 0.2;
+
+    const sloshBP = ctx.createBiquadFilter();
+    sloshBP.type = 'bandpass';
+    sloshBP.frequency.setValueAtTime(800, now);
+    sloshBP.frequency.exponentialRampToValueAtTime(300, now + 0.5);
+    sloshBP.Q.value = 0.6;
+
+    const sloshHP = ctx.createBiquadFilter();
+    sloshHP.type = 'highpass';
+    sloshHP.frequency.value = 200;
+
+    const sloshGain = ctx.createGain();
+    sloshGain.gain.setValueAtTime(vol * 3, now);
+    sloshGain.gain.setTargetAtTime(vol * 1.5, now + 0.06, 0.05);
+    sloshGain.gain.setTargetAtTime(0, now + 0.2, 0.15);
+
+    slosh.connect(sloshHP);
+    sloshHP.connect(sloshBP);
+    sloshBP.connect(sloshGain);
+    sloshGain.connect(this.masterGain);
+    slosh.start(now);
+    slosh.stop(now + 0.8);
+
+    // High spray detail
+    const spray = ctx.createBufferSource();
+    spray.buffer = this._noiseBuffer;
+    spray.playbackRate.value = 1.2 + Math.random() * 0.3;
+
+    const sprayBP = ctx.createBiquadFilter();
+    sprayBP.type = 'bandpass';
+    sprayBP.frequency.value = 3000;
+    sprayBP.Q.value = 0.4;
+
+    const sprayGain = ctx.createGain();
+    sprayGain.gain.setValueAtTime(0, now);
+    sprayGain.gain.setTargetAtTime(vol * 1.2, now + 0.02, 0.015);
+    sprayGain.gain.setTargetAtTime(0, now + 0.1, 0.08);
+
+    spray.connect(sprayBP);
+    sprayBP.connect(sprayGain);
+    sprayGain.connect(this.masterGain);
+    spray.start(now);
+    spray.stop(now + 0.5);
+
+    // Low thump — body hitting water
+    const thump = ctx.createOscillator();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(60, now);
+    thump.frequency.exponentialRampToValueAtTime(25, now + 0.08);
+
+    const thumpGain = ctx.createGain();
+    thumpGain.gain.setValueAtTime(vol * 2, now);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+    thump.connect(thumpGain);
+    thumpGain.connect(this.masterGain);
+    thump.start(now);
+    thump.stop(now + 0.13);
+  }
+
+  // ======== Sprint empty — sad descending minor tones ========
+
+  // ======== Jump landing — double-foot impact thud ========
+
+  playLandingThud() {
+    if (!this.started || !this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const vol = CONFIG.FOOTSTEP_VOLUME * 2.5;
+
+    // Heavy double-foot thud — two overlapping low tones
+    for (let i = 0; i < 2; i++) {
+      const t = now + i * 0.03; // slight stagger for two-foot feel
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime((90 - i * 15), t);
+      osc.frequency.exponentialRampToValueAtTime(25, t + 0.1);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.16);
+    }
+
+    // Ground crunch — short noise burst
+    if (this._noiseBuffer) {
+      const crunch = ctx.createBufferSource();
+      crunch.buffer = this._noiseBuffer;
+      crunch.playbackRate.value = 0.4;
+
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 500;
+      bp.Q.value = 0.6;
+
+      const cGain = ctx.createGain();
+      cGain.gain.setValueAtTime(0, now);
+      cGain.gain.linearRampToValueAtTime(vol * 0.6, now + 0.01);
+      cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+      crunch.connect(bp);
+      bp.connect(cGain);
+      cGain.connect(this.masterGain);
+      crunch.start(now);
+      crunch.stop(now + 0.15);
+    }
+  }
+
+  playSprintEmpty() {
+    if (!this.started || !this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const vol = 0.15;
+
+    // Descending minor third: two falling tones
+    const notes = [660, 520];
+    for (let i = 0; i < notes.length; i++) {
+      const t = now + i * 0.18;
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(notes[i], t);
+      osc.frequency.exponentialRampToValueAtTime(notes[i] * 0.85, t + 0.25);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(vol, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.4);
+    }
+  }
+
   stop() {
     // Stop crickets
     for (const voice of this._cricketVoices) {

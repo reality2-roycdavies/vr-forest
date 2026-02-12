@@ -12,6 +12,13 @@ export class MovementSystem {
     this.vr = vrSetup;
     this.input = inputManager;
     this.chunkManager = null;
+    this.collectibles = null; // set externally for sprint cost
+
+    // Sprint drain accumulator
+    this._sprintDrainAccum = 0;
+
+    // Landing detection
+    this._wasAirborne = false;
 
     // Snap turn
     this.snapCooldown = 0;
@@ -55,7 +62,8 @@ export class MovementSystem {
     }
 
     // --- Continuous locomotion (left stick) ---
-    const moveSpeed = this.isSwimming ? CONFIG.SWIM_SPEED : CONFIG.MOVE_SPEED;
+    const canSprint = this.input.sprintPressed && this.collectibles && this.collectibles.score > 0 && !this.isSwimming;
+    const moveSpeed = this.isSwimming ? CONFIG.SWIM_SPEED : (canSprint ? CONFIG.SPRINT_SPEED : CONFIG.MOVE_SPEED);
     let isMoving = false;
     if (Math.abs(left.x) > 0 || Math.abs(left.y) > 0) {
       camera.getWorldDirection(_forward);
@@ -126,6 +134,14 @@ export class MovementSystem {
         dolly.position.y = this.currentGroundY;
         this.velocityY = 0;
         this.isGrounded = true;
+        // Play landing sound — splash if in shallow water, thud otherwise
+        if (this._wasAirborne && this.audio) {
+          if (terrainY < CONFIG.WATER_LEVEL + 0.1 && this.audio.playLandingSplash) {
+            this.audio.playLandingSplash();
+          } else if (this.audio.playLandingThud) {
+            this.audio.playLandingThud();
+          }
+        }
       }
     } else {
       // Smoothly follow ground surface
@@ -133,9 +149,13 @@ export class MovementSystem {
       dolly.position.y += (targetY - dolly.position.y) * Math.min(1, delta * 12);
     }
 
+    // --- Sprint state (set before bob so footstep rate matches) ---
+    this.isSprinting = canSprint && isMoving;
+
     // --- Walk / swim bob ---
     if (isMoving && this.isGrounded) {
-      const bobSpeed = this.isSwimming ? CONFIG.SWIM_BOB_SPEED : CONFIG.WALK_BOB_SPEED;
+      const sprintBobSpeed = CONFIG.WALK_BOB_SPEED * (CONFIG.SPRINT_SPEED / CONFIG.MOVE_SPEED);
+      const bobSpeed = this.isSwimming ? CONFIG.SWIM_BOB_SPEED : (this.isSprinting ? sprintBobSpeed : CONFIG.WALK_BOB_SPEED);
       const bobAmount = this.isSwimming ? CONFIG.SWIM_BOB_AMOUNT : CONFIG.WALK_BOB_AMOUNT;
       this.bobPhase += delta * bobSpeed;
       this.bobAmplitude = bobAmount;
@@ -148,11 +168,33 @@ export class MovementSystem {
     const bobOffset = Math.sin(this.bobPhase * Math.PI * 2) * this.bobAmplitude;
 
     if (this.vr.isInVR()) {
-      // In VR, very subtle bob on dolly — reduced to avoid discomfort
+      // Subtle bob in VR — reduced to minimise discomfort
       dolly.position.y += bobOffset * 0.3;
     } else {
       camera.position.y = CONFIG.TERRAIN_FOLLOW_OFFSET + bobOffset;
     }
+
+    // --- Sprint point drain: 1 point per second of sprinting ---
+    if (canSprint && isMoving) {
+      this._sprintDrainAccum += delta;
+      while (this._sprintDrainAccum >= 2.0 && this.collectibles.score > 0) {
+        this._sprintDrainAccum -= 2.0;
+        this.collectibles.score -= 1;
+        if (this.collectibles.onScoreChange) {
+          this.collectibles.onScoreChange(this.collectibles.score);
+        }
+        // Sad sound when points run out
+        if (this.collectibles.score <= 0 && this.audio && this.audio.playSprintEmpty) {
+          this.audio.playSprintEmpty();
+        }
+      }
+    } else if (!this.input.sprintPressed) {
+      // Only reset accumulator when sprint key is fully released
+      // (not just when out of points mid-sprint)
+    }
+
+    // Track airborne for landing detection
+    this._wasAirborne = !this.isGrounded;
 
     // Expose state for audio system
     this.isMoving = isMoving && this.isGrounded;

@@ -13,6 +13,8 @@ import { FireflySystem } from './atmosphere/fireflies.js';
 import { CONFIG } from './config.js';
 import { updateWind } from './atmosphere/wind.js';
 import { BirdFlockSystem } from './forest/birds.js';
+import { CollectibleSystem } from './forest/collectibles.js';
+import { getTerrainHeight } from './terrain/noise.js';
 
 // --- Scene ---
 const scene = new THREE.Scene();
@@ -164,10 +166,16 @@ wildlife.audio = audio;
 // --- Birds ---
 const birds = new BirdFlockSystem(scene);
 
+// --- Collectibles ---
+const collectibles = new CollectibleSystem(scene);
+movement.collectibles = collectibles;
+movement.audio = audio;
+
 // When chunks change, rebuild instanced meshes
 chunkManager.onChunksChanged = () => {
   treePool.rebuild(chunkManager.getActiveChunks());
   vegPool.rebuild(chunkManager.getActiveChunks());
+  collectibles.rebuild(chunkManager.getActiveChunks());
 };
 
 // --- VR Session Events ---
@@ -280,6 +288,196 @@ function updateVrTimeHud(text) {
   vrTimeTex.needsUpdate = true;
 }
 
+// --- Score HUD (desktop) ---
+const scoreEl = document.createElement('div');
+scoreEl.style.cssText = 'position:fixed;top:10px;left:10px;color:#66ffcc;font:bold 18px monospace;z-index:999;background:rgba(0,0,0,0.4);padding:6px 12px;border-radius:4px;display:none;transition:transform 0.15s;';
+document.body.appendChild(scoreEl);
+
+// --- Score HUD (VR) ---
+const vrScoreCanvas = document.createElement('canvas');
+vrScoreCanvas.width = 256;
+vrScoreCanvas.height = 64;
+const vrScoreCtx = vrScoreCanvas.getContext('2d');
+const vrScoreTex = new THREE.CanvasTexture(vrScoreCanvas);
+const vrScoreMat = new THREE.SpriteMaterial({
+  map: vrScoreTex,
+  transparent: true,
+  depthTest: false,
+  depthWrite: false,
+  fog: false,
+});
+const vrScoreSprite = new THREE.Sprite(vrScoreMat);
+vrScoreSprite.scale.set(0.10, 0.025, 1);
+vrScoreSprite.position.set(-0.10, 0.06, -0.3);
+vrScoreSprite.visible = false;
+vr.camera.add(vrScoreSprite);
+
+let _lastScoreText = '';
+function updateScoreHud(score) {
+  const text = `Power: ${score}`;
+  // Desktop
+  scoreEl.textContent = text;
+  scoreEl.style.display = '';
+  scoreEl.style.transform = 'scale(1.2)';
+  setTimeout(() => { scoreEl.style.transform = 'scale(1)'; }, 150);
+  // VR
+  if (text === _lastScoreText) return;
+  _lastScoreText = text;
+  vrScoreCtx.clearRect(0, 0, 256, 64);
+  vrScoreCtx.fillStyle = 'rgba(0,0,0,0.5)';
+  vrScoreCtx.roundRect(0, 0, 256, 64, 8);
+  vrScoreCtx.fill();
+  vrScoreCtx.fillStyle = '#66ffcc';
+  vrScoreCtx.font = 'bold 32px monospace';
+  vrScoreCtx.textAlign = 'center';
+  vrScoreCtx.textBaseline = 'middle';
+  vrScoreCtx.fillText(text, 128, 32);
+  vrScoreTex.needsUpdate = true;
+  vrScoreSprite.visible = true;
+}
+
+collectibles.onScoreChange = updateScoreHud;
+
+// --- Minimap (desktop) ---
+const minimapSize = 180;
+const minimapCanvas = document.createElement('canvas');
+minimapCanvas.width = minimapSize;
+minimapCanvas.height = minimapSize;
+minimapCanvas.style.cssText = `position:fixed;bottom:10px;left:10px;width:${minimapSize}px;height:${minimapSize}px;border-radius:50%;opacity:0.85;z-index:999;border:2px solid rgba(255,255,255,0.3);`;
+document.body.appendChild(minimapCanvas);
+const minimapCtx = minimapCanvas.getContext('2d');
+
+// --- Minimap (VR) ---
+const vrMinimapCanvas = document.createElement('canvas');
+vrMinimapCanvas.width = 128;
+vrMinimapCanvas.height = 128;
+const vrMinimapCtx = vrMinimapCanvas.getContext('2d');
+const vrMinimapTex = new THREE.CanvasTexture(vrMinimapCanvas);
+const vrMinimapMat = new THREE.SpriteMaterial({
+  map: vrMinimapTex,
+  transparent: true,
+  depthTest: false,
+  depthWrite: false,
+  fog: false,
+});
+const vrMinimapSprite = new THREE.Sprite(vrMinimapMat);
+vrMinimapSprite.scale.set(0.06, 0.06, 1);
+vrMinimapSprite.position.set(0.10, 0.06, -0.3);
+vr.camera.add(vrMinimapSprite);
+
+let _minimapFrame = 0;
+function renderMinimap(ctx, size, playerPos, cameraDir) {
+  const radius = 80; // world meters
+  const step = 3;    // sample every 3m
+  const half = size / 2;
+  const scale = half / radius;
+  const waterY = CONFIG.WATER_LEVEL;
+  const shoreY = CONFIG.SHORE_LEVEL;
+
+  // Forward/right vectors from camera direction (Three.js right-handed)
+  const fx = cameraDir.x, fz = cameraDir.z;
+
+  ctx.clearRect(0, 0, size, size);
+
+  // Clip to circle
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(half, half, half, 0, Math.PI * 2);
+  ctx.clip();
+
+  // Background
+  ctx.fillStyle = '#0a1a2e';
+  ctx.fillRect(0, 0, size, size);
+
+  // Sample terrain — rotate world offsets so forward = screen up
+  for (let dz = -radius; dz <= radius; dz += step) {
+    for (let dx = -radius; dx <= radius; dx += step) {
+      if (dx * dx + dz * dz > radius * radius) continue;
+      const wx = playerPos.x + dx;
+      const wz = playerPos.z + dz;
+      const h = getTerrainHeight(wx, wz);
+
+      let color;
+      if (h <= waterY) {
+        color = '#0a2844';
+      } else if (h <= shoreY) {
+        color = '#8b6e3c';
+      } else {
+        const t = Math.min(1, (h - shoreY) / 8);
+        const r = Math.floor(30 + t * 20);
+        const g = Math.floor(60 + t * 40);
+        const b = Math.floor(15 + t * 10);
+        color = `rgb(${r},${g},${b})`;
+      }
+
+      // Project: screen_x = dot(offset, right), screen_y = -dot(offset, forward)
+      const sx = -dx * fz + dz * fx;
+      const sy = -(dx * fx + dz * fz);
+      const px = half + sx * scale;
+      const py = half + sy * scale;
+      const ps = Math.max(1, step * scale);
+      ctx.fillStyle = color;
+      ctx.fillRect(px - ps / 2, py - ps / 2, ps, ps);
+    }
+  }
+
+  // Uncollected orbs as teal dots
+  const chunks = chunkManager.getActiveChunks();
+  for (const chunk of chunks) {
+    if (!chunk.active) continue;
+    for (const cp of chunk.collectiblePositions) {
+      const hash = collectibles._hash(cp.x, cp.z);
+      if (collectibles.collected.has(hash)) continue;
+      const dx = cp.x - playerPos.x;
+      const dz = cp.z - playerPos.z;
+      if (dx * dx + dz * dz > radius * radius) continue;
+      const sx = -dx * fz + dz * fx;
+      const sy = -(dx * fx + dz * fz);
+      const px = half + sx * scale;
+      const py = half + sy * scale;
+      ctx.fillStyle = '#66ffcc';
+      ctx.beginPath();
+      ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Player dot + fixed "up" triangle at center
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(half, half, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(half, half - 8);
+  ctx.lineTo(half - 4, half);
+  ctx.lineTo(half + 4, half);
+  ctx.closePath();
+  ctx.fill();
+
+  // North indicator — "N" orbits the edge showing where -Z (north) is
+  const nDist = half - 10;
+  const nx = half - fx * nDist;
+  const ny = half + fz * nDist;
+  ctx.fillStyle = '#ff4444';
+  ctx.font = `bold ${Math.round(size * 0.08)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('N', nx, ny);
+
+  ctx.restore();
+
+  // Radial fade to transparent at edges
+  const fadeGrad = ctx.createRadialGradient(half, half, half * 0.55, half, half, half);
+  fadeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  fadeGrad.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = fadeGrad;
+  ctx.fillRect(0, 0, size, size);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
 // --- Render Loop ---
 let timeHudFade = 0;
 const clock = new THREE.Clock();
@@ -361,6 +559,18 @@ function onFrame() {
     nearbyTrees,
     waterProximity
   );
+
+  // Collectibles
+  collectibles.update(delta, pos, audio);
+
+  // Minimap — throttled to every 10 frames
+  _minimapFrame++;
+  if (_minimapFrame >= 10) {
+    _minimapFrame = 0;
+    renderMinimap(minimapCtx, minimapSize, pos, _cameraDir);
+    renderMinimap(vrMinimapCtx, 128, pos, _cameraDir);
+    vrMinimapTex.needsUpdate = true;
+  }
 
   // Render
   vr.renderer.render(scene, vr.camera);

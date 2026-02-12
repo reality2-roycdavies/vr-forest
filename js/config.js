@@ -35,6 +35,7 @@ export const CONFIG = {
 
   // Movement
   MOVE_SPEED: 3.0,            // m/s
+  SPRINT_SPEED: 7.0,          // m/s (costs 1 point per second)
   SNAP_TURN_ANGLE: 30,        // degrees
   SNAP_TURN_DEADZONE: 0.5,    // thumbstick threshold
   SNAP_TURN_COOLDOWN: 0.3,    // seconds between snaps
@@ -135,6 +136,22 @@ export const CONFIG = {
   RUSTLE_TRIGGER_DIST: 5,            // meters to trigger rustle
   RUSTLE_COOLDOWN: 0.3,              // seconds between rustles
   RUSTLE_MAX_CONCURRENT: 3,
+
+  // Collectibles
+  COLLECTIBLE_GRID_SPACING: 12,          // meters between potential positions
+  COLLECTIBLE_DENSITY_THRESHOLD: 0.55,   // noise > this = collectible
+  COLLECTIBLE_COLLISION_RADIUS: 1.2,     // pickup distance in meters
+  COLLECTIBLE_BOB_SPEED: 1.5,            // oscillations per second
+  COLLECTIBLE_BOB_AMOUNT: 0.08,           // meters of vertical bob
+  COLLECTIBLE_SPIN_SPEED: 1.8,           // radians per second
+  COLLECTIBLE_GLOW_COLOR: 0x66ffcc,      // teal-green glow shell
+  COLLECTIBLE_CORE_COLOR: 0xaaffee,      // bright teal core
+  COLLECTIBLE_ORB_RADIUS: 0.08,           // core orb radius
+  COLLECTIBLE_GLOW_RADIUS: 0.2,          // glow shell radius
+  COLLECTIBLE_SCORE_VALUE: 1,            // points per orb
+  COLLECTIBLE_CHIME_VOLUME: 0.18,        // collection chime volume
+  COLLECTIBLE_CHIME_FREQ: 880,           // base chime frequency
+  COLLECTIBLE_MAX_INSTANCES: 500,        // instanced mesh cap
 
   // Spatial audio
   SPATIAL_REF_DISTANCE: 10,

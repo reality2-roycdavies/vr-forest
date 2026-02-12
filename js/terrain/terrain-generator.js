@@ -73,19 +73,27 @@ export function generateTerrainData(chunkX, chunkZ) {
 
       let gr, gg, gb;
 
-      if (rawHeight <= waterLevel) {
-        // Underwater sandy bottom — darker wet sand, seen through water plane
-        gr = 0.45;
-        gg = 0.38;
-        gb = 0.25;
-      } else if (rawHeight <= shoreLevel) {
-        // Shore — lerp from shore color to grass low color
-        const st = (rawHeight - waterLevel) / (shoreLevel - waterLevel);
-        // Smooth ease-in so the transition doesn't appear as a hard line
-        const sts = st * st * (3 - 2 * st); // smoothstep
-        gr = shoreCol.r + (low.r - shoreCol.r) * sts;
-        gg = shoreCol.g + (low.g - shoreCol.g) * sts;
-        gb = shoreCol.b + (low.b - shoreCol.b) * sts;
+      // Wet sand base color (underwater)
+      const wetR = 0.45, wetG = 0.38, wetB = 0.25;
+
+      if (rawHeight <= shoreLevel) {
+        // Smooth blend: wet sand → shore → grass low across the full range
+        // Use waterLevel as midpoint but no hard break
+        const range01 = Math.max(0, Math.min(1, (rawHeight - (waterLevel - 1.0)) / (shoreLevel - waterLevel + 2.0)));
+        const t = range01 * range01 * (3 - 2 * range01); // smoothstep
+        if (t < 0.5) {
+          // wet sand → shore
+          const s = t * 2;
+          gr = wetR + (shoreCol.r - wetR) * s;
+          gg = wetG + (shoreCol.g - wetG) * s;
+          gb = wetB + (shoreCol.b - wetB) * s;
+        } else {
+          // shore → grass low
+          const s = (t - 0.5) * 2;
+          gr = shoreCol.r + (low.r - shoreCol.r) * s;
+          gg = shoreCol.g + (low.g - shoreCol.g) * s;
+          gb = shoreCol.b + (low.b - shoreCol.b) * s;
+        }
       } else {
         // Normal grass/dirt coloring — t based on global height range
         const h = rawHeight;
@@ -147,51 +155,56 @@ export function generateTerrainData(chunkX, chunkZ) {
       const c = a + verticesPerSide;
       const d = c + 1;
 
-      indices[idx++] = a;
-      indices[idx++] = c;
-      indices[idx++] = b;
-
-      indices[idx++] = b;
-      indices[idx++] = c;
-      indices[idx++] = d;
+      // Alternate diagonal direction in checkerboard to prevent directional banding
+      if ((ix + iz) % 2 === 0) {
+        indices[idx++] = a;
+        indices[idx++] = c;
+        indices[idx++] = b;
+        indices[idx++] = b;
+        indices[idx++] = c;
+        indices[idx++] = d;
+      } else {
+        indices[idx++] = a;
+        indices[idx++] = c;
+        indices[idx++] = d;
+        indices[idx++] = a;
+        indices[idx++] = d;
+        indices[idx++] = b;
+      }
     }
   }
 
-  computeNormals(positions, indices, normals, vertexCount);
+  computeNormalsFromHeightmap(normals, verticesPerSide, step, worldOffsetX, worldOffsetZ);
 
   return { positions, colors, normals, uvs, indices, verticesPerSide };
 }
 
-function computeNormals(positions, indices, normals, vertexCount) {
-  normals.fill(0);
+/**
+ * Compute normals from the continuous heightmap using central differences.
+ * This produces seamless normals across chunk boundaries (no lighting seams)
+ * because getTerrainHeight() is independent of chunk geometry.
+ */
+function computeNormalsFromHeightmap(normals, verticesPerSide, step, worldOffsetX, worldOffsetZ) {
+  for (let iz = 0; iz < verticesPerSide; iz++) {
+    for (let ix = 0; ix < verticesPerSide; ix++) {
+      const idx = (iz * verticesPerSide + ix) * 3;
+      const wx = worldOffsetX + ix * step;
+      const wz = worldOffsetZ + iz * step;
 
-  for (let i = 0; i < indices.length; i += 3) {
-    const ia = indices[i] * 3;
-    const ib = indices[i + 1] * 3;
-    const ic = indices[i + 2] * 3;
+      // Central differences — samples extend beyond chunk edges for continuity
+      const hL = getTerrainHeight(wx - step, wz);
+      const hR = getTerrainHeight(wx + step, wz);
+      const hD = getTerrainHeight(wx, wz - step);
+      const hU = getTerrainHeight(wx, wz + step);
 
-    const ax = positions[ib] - positions[ia];
-    const ay = positions[ib + 1] - positions[ia + 1];
-    const az = positions[ib + 2] - positions[ia + 2];
+      let nx = hL - hR;
+      let ny = 2 * step;
+      let nz = hD - hU;
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
 
-    const bx = positions[ic] - positions[ia];
-    const by = positions[ic + 1] - positions[ia + 1];
-    const bz = positions[ic + 2] - positions[ia + 2];
-
-    const nx = ay * bz - az * by;
-    const ny = az * bx - ax * bz;
-    const nz = ax * by - ay * bx;
-
-    normals[ia] += nx; normals[ia + 1] += ny; normals[ia + 2] += nz;
-    normals[ib] += nx; normals[ib + 1] += ny; normals[ib + 2] += nz;
-    normals[ic] += nx; normals[ic + 1] += ny; normals[ic + 2] += nz;
-  }
-
-  for (let i = 0; i < vertexCount; i++) {
-    const idx = i * 3;
-    const len = Math.sqrt(normals[idx] ** 2 + normals[idx + 1] ** 2 + normals[idx + 2] ** 2) || 1;
-    normals[idx] /= len;
-    normals[idx + 1] /= len;
-    normals[idx + 2] /= len;
+      normals[idx] = nx / len;
+      normals[idx + 1] = ny / len;
+      normals[idx + 2] = nz / len;
+    }
   }
 }

@@ -38,6 +38,9 @@ const streamNoise2D = createNoise2D(rng7);
 const rng8 = mulberry32(CONFIG.TERRAIN_SEED + 7);
 const warpNoise2D = createNoise2D(rng8);
 
+const rng9 = mulberry32(CONFIG.TERRAIN_SEED + 8);
+const collectibleNoise2D = createNoise2D(rng9);
+
 /**
  * Multi-octave fractal noise
  */
@@ -126,4 +129,11 @@ export function getDirtAmount(worldX, worldZ) {
  */
 export function getRockDensity(worldX, worldZ) {
   return rockNoise2D(worldX * 0.04, worldZ * 0.04);
+}
+
+/**
+ * Collectible placement noise — scale 0.03 for ~30-50m clusters
+ */
+export function getCollectibleDensity(worldX, worldZ) {
+  return collectibleNoise2D(worldX * 0.03, worldZ * 0.03);
 }

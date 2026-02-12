@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { generateTerrainData } from './terrain-generator.js';
-import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity } from './noise.js';
+import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity } from './noise.js';
 import { getGroundMaterial } from './ground-material.js';
 
 export class Chunk {
@@ -14,6 +14,7 @@ export class Chunk {
     this.vegPositions = [];    // { x, y, z, type, scale }
     this.flowerPositions = []; // { x, y, z, colorIdx, scale }
     this.rockPositions = [];   // { x, y, z, sizeIdx, rotSeed }
+    this.collectiblePositions = []; // { x, y, z }
     this.active = false;
   }
 
@@ -41,6 +42,7 @@ export class Chunk {
     this._generateVegetation(chunkX, chunkZ);
     this._generateFlowers(chunkX, chunkZ);
     this._generateRocks(chunkX, chunkZ);
+    this._generateCollectibles(chunkX, chunkZ);
   }
 
   _createMesh(data) {
@@ -229,6 +231,32 @@ export class Chunk {
     }
   }
 
+  _generateCollectibles(chunkX, chunkZ) {
+    this.collectiblePositions.length = 0;
+    const spacing = CONFIG.COLLECTIBLE_GRID_SPACING;
+    const size = CONFIG.CHUNK_SIZE;
+    const worldOffX = chunkX * size;
+    const worldOffZ = chunkZ * size;
+
+    for (let lz = spacing * 0.5; lz < size; lz += spacing) {
+      for (let lx = spacing * 0.5; lx < size; lx += spacing) {
+        const wx = worldOffX + lx;
+        const wz = worldOffZ + lz;
+        const density = getCollectibleDensity(wx, wz);
+
+        if (density > CONFIG.COLLECTIBLE_DENSITY_THRESHOLD) {
+          const jitter = getJitter(wx + 500, wz + 500);
+          const jx = wx + jitter.x * 2.0;
+          const jz = wz + jitter.z * 2.0;
+          const y = getTerrainHeight(jx, jz);
+          if (y < CONFIG.SHORE_LEVEL) continue;
+
+          this.collectiblePositions.push({ x: jx, y: y + 0.8, z: jz });
+        }
+      }
+    }
+  }
+
   deactivate() {
     this.active = false;
     if (this.mesh) this.mesh.visible = false;
@@ -236,6 +264,7 @@ export class Chunk {
     this.vegPositions.length = 0;
     this.flowerPositions.length = 0;
     this.rockPositions.length = 0;
+    this.collectiblePositions.length = 0;
   }
 
   dispose() {
@@ -247,6 +276,7 @@ export class Chunk {
     this.vegPositions.length = 0;
     this.flowerPositions.length = 0;
     this.rockPositions.length = 0;
+    this.collectiblePositions.length = 0;
     this.active = false;
   }
 }

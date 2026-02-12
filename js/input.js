@@ -12,6 +12,8 @@ export class InputManager {
     this.jumpPressed = false;
     this.timeAdjust = 0; // -1..1 for time scrubbing
     this.rightGrip = false;
+    this.leftGrip = false;
+    this.sprintPressed = false;
 
     // Mouse look state (desktop only)
     this.mouseYaw = 0;    // accumulated yaw (applied to dolly)
@@ -53,6 +55,8 @@ export class InputManager {
     this.jumpPressed = false;
     this.timeAdjust = 0;
     this.rightGrip = false;
+    this.leftGrip = false;
+    this.sprintPressed = false;
 
     if (this.vrSetup.isInVR()) {
       this._pollGamepads();
@@ -115,6 +119,9 @@ export class InputManager {
         if ((buttons[4] && buttons[4].pressed) || (buttons[3] && buttons[3].pressed)) {
           this.jumpPressed = true;
         }
+        // Left grip = button 1
+        this.leftGrip = buttons[1] && buttons[1].pressed;
+        if (this.leftGrip) this.sprintPressed = true;
       } else if (source.handedness === 'right') {
         this.rightStick.x = Math.abs(sx) > CONFIG.THUMBSTICK_DEADZONE ? sx : 0;
         this.rightStick.y = Math.abs(sy) > CONFIG.THUMBSTICK_DEADZONE ? sy : 0;
@@ -135,5 +142,6 @@ export class InputManager {
     if (this.keys['KeyQ']) this.rightStick.x = -1;
     if (this.keys['KeyE']) this.rightStick.x = 1;
     if (this.keys['Space']) this.jumpPressed = true;
+    if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) this.sprintPressed = true;
   }
 }

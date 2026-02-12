@@ -216,15 +216,16 @@ export class DayNightSystem {
     // --- Directional sun light ---
     this.sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
+    this.sunLight.shadow.mapSize.width = 4096;
+    this.sunLight.shadow.mapSize.height = 4096;
     this.sunLight.shadow.camera.near = 0.5;
-    this.sunLight.shadow.camera.far = 200;
-    this.sunLight.shadow.camera.left = -70;
-    this.sunLight.shadow.camera.right = 70;
-    this.sunLight.shadow.camera.top = 70;
-    this.sunLight.shadow.camera.bottom = -70;
-    this.sunLight.shadow.bias = -0.001;
+    this.sunLight.shadow.camera.far = 150;
+    this.sunLight.shadow.camera.left = -50;
+    this.sunLight.shadow.camera.right = 50;
+    this.sunLight.shadow.camera.top = 50;
+    this.sunLight.shadow.camera.bottom = -50;
+    this.sunLight.shadow.bias = -0.002;
+    this.sunLight.shadow.normalBias = 0.03;
     scene.add(this.sunLight);
     scene.add(this.sunLight.target);
 
@@ -772,6 +773,9 @@ export class DayNightSystem {
       this.sunLight.intensity = palette.sunIntensity;
     }
 
+    // --- Stabilize shadow map to prevent texel swimming ---
+    this._stabilizeShadowMap();
+
     // --- Hemisphere light ---
     this.hemiLight.color.copy(palette.hemiSky);
     this.hemiLight.groundColor.copy(palette.hemiGround);
@@ -961,6 +965,43 @@ export class DayNightSystem {
       duration: 0.4 + Math.random() * 0.8,
       life: 0,
     });
+  }
+
+  /**
+   * Snap shadow camera position to texel grid boundaries.
+   * Prevents shadow "swimming" — subtle banding that shifts as the player moves.
+   */
+  _stabilizeShadowMap() {
+    const light = this.sunLight;
+    const shadowCam = light.shadow.camera;
+
+    // Update matrices so we can transform to light space
+    light.updateMatrixWorld();
+    shadowCam.updateMatrixWorld();
+
+    const texelSize = (shadowCam.right - shadowCam.left) / light.shadow.mapSize.width;
+
+    // Transform target to light view space
+    _sunPos.copy(light.target.position).applyMatrix4(shadowCam.matrixWorldInverse);
+
+    // Snap to texel grid
+    _sunPos.x = Math.round(_sunPos.x / texelSize) * texelSize;
+    _sunPos.y = Math.round(_sunPos.y / texelSize) * texelSize;
+
+    // Transform back to world space
+    _sunPos.applyMatrix4(shadowCam.matrixWorld);
+
+    // Apply the snap offset to both target and light position
+    const dx = _sunPos.x - light.target.position.x;
+    const dy = _sunPos.y - light.target.position.y;
+    const dz = _sunPos.z - light.target.position.z;
+
+    light.target.position.x += dx;
+    light.target.position.y += dy;
+    light.target.position.z += dz;
+    light.position.x += dx;
+    light.position.y += dy;
+    light.position.z += dz;
   }
 
   getSkyMesh() {
