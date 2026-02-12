@@ -978,6 +978,12 @@ export class DayNightSystem {
     this.scene.fog.color.copy(palette.fog);
     if (!this.scene.background) this.scene.background = new THREE.Color();
     this.scene.background.copy(palette.fog);
+    // Darken fog color through twilight — match night fog darkness
+    if (elevation < 0.02) {
+      const fogDimT = Math.min(1, (0.02 - elevation) / 0.10);
+      this.scene.fog.color.lerp(PALETTES.night.fog, fogDimT);
+      this.scene.background.lerp(PALETTES.night.fog, fogDimT);
+    }
     // Weather: desaturate fog/background — target grey matches current luminance
     // so nighttime stays dark, daytime goes to overcast grey
     if (weather && weather.cloudDensity > 0.01) {
@@ -992,19 +998,19 @@ export class DayNightSystem {
       const nightDarken = (1 - dayness) * weather.rainIntensity * 0.7;
       _color.multiplyScalar(1 - nightDarken);
       // Storm dims fog at all times of day (especially noticeable at twilight/dawn)
-      _color.multiplyScalar(1 - weather.skyDarkening * 0.4);
+      _color.multiplyScalar(1 - weather.skyDarkening * 0.6);
       this.scene.fog.color.lerp(_color, desatAmount);
       this.scene.background.lerp(_color, desatAmount);
     }
-    // Fog stays distant until deep night, then closes in for darkness.
+    // Fog distance: stays distant through twilight, only closes in at night.
     let fogNear, fogFar;
-    if (elevation > -0.08) {
-      // Day, golden, twilight — clear, no visible fog
+    if (elevation > -0.02) {
+      // Day, golden, early twilight — fog stays distant
       fogNear = 120;
       fogFar = 250;
     } else {
-      // Night — lerp fog closer as it gets darker
-      const t = Math.min(1, (-0.08 - elevation) / 0.05); // 0 at -0.08, 1 at -0.13
+      // Deep twilight → night: fog closes in
+      const t = Math.min(1, (-0.02 - elevation) / 0.08); // 0 at -0.02, 1 at -0.10
       fogNear = 120 - t * 100;  // 120 → 20
       fogFar = 250 - t * 200;   // 250 → 50
     }
@@ -1042,13 +1048,13 @@ export class DayNightSystem {
       // Fog/bottom: desaturate toward luminance-grey, blending to overcast grey in daytime
       _color.setRGB(fogLum, fogLum, fogLum).lerp(_overcastHorizonGrey, dayness);
       _color.multiplyScalar(1 - nightDarken);
-      _color.multiplyScalar(1 - weather.skyDarkening * 0.4);
+      _color.multiplyScalar(1 - weather.skyDarkening * 0.6);
       this.skyUniforms.fogColor.value.lerp(_color, desatAmount);
       this.skyUniforms.bottomColor.value.lerp(_color, desatAmount);
       // Top: desaturate toward darker grey, blending to storm grey in daytime
       _color.setRGB(topLum, topLum, topLum).lerp(_cloudStormGrey, dayness);
       _color.multiplyScalar(1 - nightDarken);
-      _color.multiplyScalar(1 - weather.skyDarkening * 0.4);
+      _color.multiplyScalar(1 - weather.skyDarkening * 0.6);
       this.skyUniforms.topColor.value.lerp(_color, desatAmount);
       // Lightning flash — additive white burst
       if (weather.lightningFlash > 0.01) {
