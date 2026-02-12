@@ -52,7 +52,7 @@ export const CONFIG = {
   FOG_FAR: 130,
   SKY_RADIUS: 200,
   AMBIENT_VOLUME: 0.3,
-  SUN_VISUAL_RADIUS: 5,        // visual sun disc size
+  SUN_VISUAL_RADIUS: 14,       // visual sun disc size
   SUN_DISTANCE: 150,           // distance from player (within camera far plane)
   CLOUD_COUNT: 30,             // number of cloud puffs
   CLOUD_MIN_RADIUS: 40,        // cloud ring inner radius
@@ -162,4 +162,38 @@ export const CONFIG = {
   SPATIAL_REF_DISTANCE: 10,
   SPATIAL_MAX_DISTANCE: 60,
   SPATIAL_ROLLOFF: 0.8,
+
+  // Weather
+  WEATHER_TRANSITION_RATE: 0.0083,      // intensity units per second (~1 unit per 2 min)
+  WEATHER_HOLD_MIN: 180,                // seconds to hold a state (3 min)
+  WEATHER_HOLD_MAX: 480,                // seconds max hold (8 min)
+  WEATHER_STORM_CLOUD_COLOR: 0x303038,  // dark grey storm clouds
+
+  // Rain particles
+  RAIN_PARTICLE_COUNT: 4000,
+  RAIN_RADIUS: 25,                      // cylinder radius around player
+  RAIN_HEIGHT: 20,                      // cylinder height
+  RAIN_SPEED_MIN: 11,                   // m/s downward
+  RAIN_SPEED_MAX: 16,
+  RAIN_WIND_INFLUENCE: 0.3,            // how much wind pushes rain sideways
+
+  // Thunder / lightning
+  THUNDER_INTERVAL_MIN: 6,              // seconds between flashes (at full rain)
+  THUNDER_INTERVAL_MAX: 18,
+  THUNDER_DELAY_MIN: 0.3,              // seconds after flash for sound
+  THUNDER_DELAY_MAX: 2.5,
+  LIGHTNING_FLASH_DECAY: 0.15,         // seconds for flash to fade
+
+  // Rain audio
+  RAIN_PATTER_FREQ: 3200,
+  RAIN_PATTER_Q: 0.6,
+  RAIN_WASH_FREQ: 800,
+  RAIN_WASH_Q: 0.4,
+  THUNDER_FREQ_MIN: 150,
+  THUNDER_FREQ_MAX: 250,
+  THUNDER_DECAY: 7,
+
+  // Ground wetness
+  WETNESS_WET_RATE: 0.0083,            // per second (~2 min to fully wet)
+  WETNESS_DRY_RATE: 0.0042,            // per second (~4 min to fully dry)
 };

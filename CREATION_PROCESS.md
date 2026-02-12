@@ -215,6 +215,66 @@ The development server (`server.py`) gained no-cache headers so the VR headset a
 
 ---
 
+## Day 5: Weather System (13 February 2026)
+
+Day 5 was entirely dedicated to a weather system — adding dynamic atmospheric states that interact with every existing system.
+
+### Phase 21: Weather Architecture
+
+The weather system was designed around a single `weatherIntensity` float that ramps between 0.0 (sunny), 1.0 (cloudy), and 2.0 (rainy). All weather parameters — cloud darkness, light dimming, fog distance, rain intensity, wind strength, wave amplitude, ground wetness — are derived from this single value each frame. Other systems pull values from the weather instance; no push, minimal coupling.
+
+A state machine auto-cycles between states with configurable hold times (3–8 minutes), or the player can manually set the weather via keyboard (1/2/3 keys) or VR left trigger. URL parameters (`?weather=rainy`) lock to a state for testing.
+
+### Phase 22: Rain Particles
+
+Rain went through several iterations. The initial implementation used `Float32BufferAttribute` which silently *copies* the typed array — so per-frame position updates never reached the GPU. Rain was completely invisible for two sessions before the root cause was found: switching to `BufferAttribute` (which wraps the original array) fixed it immediately.
+
+Once visible, the rain "looked like fast snow" — round white blobs. The fix was extreme horizontal squeeze in the fragment shader (`c.x * c.x * 80.0` vs `c.y * c.y * 0.8`), creating hair-thin vertical streaks only ~12% of the point width. The colour was shifted from near-white to translucent blue-grey.
+
+The particle count went from 1000 to 4000 to feel like a proper storm rather than "a few drips here and there."
+
+### Phase 23: Thunder and Lightning
+
+The first thunder implementation was three layers of filtered noise with a 2.5-second decay — functional but completely synthetic. The user's feedback: "should be more reverby and drawn out, with character."
+
+The rewrite added five layers routed through a procedural ConvolverNode reverb:
+1. **Initial crack**: High-frequency noise burst (close strikes only)
+2. **Deep boom**: Very slow (0.15x) noise through a 120Hz lowpass for sub-bass rumble
+3. **Mid-body**: Bandpass noise at 180Hz for presence and character
+4. **Rolling echoes**: 2–4 delayed noise bursts at progressively lower frequencies, simulating reflections off clouds and terrain
+5. **Sub-bass tail**: A 35Hz sine wave that decays over 6–8 seconds
+
+The reverb impulse response is generated procedurally: exponentially decaying noise with clustered early reflections and a long tail, giving a natural outdoor thunder reverb without loading any audio files. Close strikes get a shorter, punchier reverb; distant strikes get a longer, wetter tail.
+
+### Phase 24: Sky and Fog Convergence
+
+The most-iterated aspect of the weather system was getting the sky and fog colours right across all combinations of weather and time of day. The iteration arc:
+
+1. **Too blue**: Overcast sky preserved the blue ratio from the clear-sky palette. Fixed by lerping toward a storm grey.
+2. **Too dark at horizon**: The `multiplyScalar(dim)` darkening was applied to fog and horizon. Fixed by removing darkening from fog/bottom sky and only dimming the top of the dome.
+3. **Still too dark**: The fixed storm grey target (0x606068) was simply too dark for a realistic overcast horizon. A separate lighter `_overcastHorizonGrey` (0x7a7a82) was introduced for fog/horizon while keeping the darker grey for cloud tinting.
+4. **Night rain too bright**: The fixed overcast grey was *brightening* nighttime fog instead of keeping it dark. Fixed by computing a luminance-matched grey from the current palette — dark at night, lighter during day.
+5. **Night rain still not dark enough**: Added a `nightDarken` factor that pushes fog toward near-black at night with full rain, scaling with `rainIntensity` and inversely with `dayness`.
+6. **Cloudy not dark enough**: The derived parameters were adjusted so cloudy is nearly as dark as rainy (cloudDarkness 0.65, lightDimming 0.35, skyDarkening 0.35), with rainy just a step darker.
+7. **Night sky still showing stars**: `starDimming` was set to fully hide stars and moon at any cloud coverage (`Math.min(1, w)`).
+
+This arc illustrates a recurring theme: weather-by-time-of-day is a matrix, and each combination needs to feel right independently. A single set of parameters that works for daytime overcast will break nighttime rain.
+
+### Phase 25: System Integration
+
+The weather system touches nearly every other system:
+- **Day-night**: Fog colour/distance, sun/hemi/ambient light dimming, shadow fade-out, star/moon hiding, sky dome colour convergence, cloud opacity/darkness
+- **Ground material**: `uWetness` uniform darkens and blue-shifts terrain during rain, with hysteresis (wets in ~2 min, dries in ~4 min)
+- **Water**: Wave amplitude scales with weather (calm → choppy)
+- **Wind**: Strength multiplied by weather (breeze → gusts)
+- **Audio**: Wind gain ducked during rain, bird chirps suppressed
+- **Fireflies**: Target opacity reduced by rain intensity
+- **Birds**: Excluded from fog (`fog: false`) so silhouettes stay clean against overcast sky
+- **Input**: Weather cycle added to keyboard (1/2/3) and VR (left trigger)
+- **HUD**: Desktop text overlay and VR camera-attached sprite showing current/target weather state
+
+---
+
 ## Thematic Analysis
 
 ### "Show It's Possible"
@@ -316,12 +376,12 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 
 ## By the Numbers
 
-- **Development time**: ~24 hours over four days
-- **Conversation sessions**: 9 active sessions (transcripts in [`transcripts/`](transcripts/))
-- **User feedback messages**: ~250+
-- **Major features**: 15+ distinct systems
-- **Lines of JavaScript**: ~9,500
-- **JavaScript modules**: 29
+- **Development time**: ~30 hours over five days
+- **Conversation sessions**: 10+ active sessions (transcripts in [`transcripts/`](transcripts/))
+- **User feedback messages**: ~300+
+- **Major features**: 16+ distinct systems
+- **Lines of JavaScript**: ~10,700
+- **JavaScript modules**: 30
 - **External dependencies**: 2 (Three.js, simplex-noise, both from CDN)
 - **External art assets**: 1 (moon photograph from Wikipedia, with procedural fallback)
 - **External audio assets**: 1 (morepork.mp3, trimmed from a recording)
@@ -332,6 +392,7 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 - **Day 2 most-iterated**: Vegetation lighting (~8 iterations across shader patches, emissive tuning, and material changes)
 - **Day 3 most-iterated**: Water edge effects (~12 iterations across caustics, foam, transparency, and heightmap communication)
 - **Day 4 most-iterated**: Cloud diversity (~10 iterations across textures, scaling, billboard vs plane, and the Z-scale bug)
+- **Day 5 most-iterated**: Sky/fog colour convergence (~7 iterations across weather×time-of-day matrix)
 
 ---
 

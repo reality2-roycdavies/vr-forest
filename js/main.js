@@ -12,11 +12,12 @@ import { AmbientAudio } from './atmosphere/audio.js';
 import { WildlifeSystem } from './forest/wildlife.js';
 import { FireflySystem } from './atmosphere/fireflies.js';
 import { CONFIG } from './config.js';
-import { updateWind } from './atmosphere/wind.js';
+import { updateWind, windUniforms } from './atmosphere/wind.js';
+import { WeatherSystem } from './atmosphere/weather.js';
 import { BirdFlockSystem } from './forest/birds.js';
 import { CollectibleSystem } from './forest/collectibles.js';
 import { getTerrainHeight } from './terrain/noise.js';
-import { updateGroundTime } from './terrain/ground-material.js';
+import { updateGroundTime, getGroundMaterial } from './terrain/ground-material.js';
 
 // --- Scene ---
 const scene = new THREE.Scene();
@@ -36,6 +37,7 @@ const movement = new MovementSystem(vr, input);
 const dayNight = new DayNightSystem(scene);
 const fireflies = new FireflySystem(scene);
 const audio = new AmbientAudio();
+const weather = new WeatherSystem(scene);
 
 // --- Terrain ---
 const chunkManager = new ChunkManager(scene);
@@ -46,8 +48,8 @@ const waterGeom = new THREE.PlaneGeometry(300, 300, 400, 400);
 waterGeom.rotateX(-Math.PI / 2);
 const waterMat = new THREE.MeshPhongMaterial({
   color: new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b),
-  specular: new THREE.Color(0.6, 0.6, 0.6),
-  shininess: 120,
+  specular: new THREE.Color(0.18, 0.18, 0.18),
+  shininess: 35,
   transparent: true,
   opacity: 0.92,
   depthWrite: false,
@@ -77,9 +79,11 @@ function updateHeightmap(cx, cz) {
 }
 
 const waterTimeUniform = { value: 0 };
+const waveAmplitudeUniform = { value: 1.0 };
 const hmapCenterUniform = { value: new THREE.Vector2(0, 0) };
 waterMat.onBeforeCompile = (shader) => {
   shader.uniforms.uTime = waterTimeUniform;
+  shader.uniforms.uWaveAmplitude = waveAmplitudeUniform;
   shader.uniforms.uHeightmap = { value: hmapTex };
   shader.uniforms.uHmapCenter = hmapCenterUniform;
   shader.uniforms.uHmapSize = { value: HMAP_SIZE };
@@ -88,6 +92,7 @@ waterMat.onBeforeCompile = (shader) => {
   // --- Shared GLSL noise functions ---
   const noiseGLSL = `
     uniform float uTime;
+    uniform float uWaveAmplitude;
     varying vec3 vWorldPos;
     varying vec3 vLocalPos;
     varying float vWaveH;
@@ -136,13 +141,27 @@ waterMat.onBeforeCompile = (shader) => {
     '#include <beginnormal_vertex>',
     `// Wave normal from finite differences (runs before defaultnormal_vertex)
     vec3 wpN = (modelMatrix * vec4(position, 1.0)).xyz;
-    float epsN = 0.5;
-    float hL = waveHeight(wpN.xz - vec2(epsN, 0.0), uTime);
-    float hR = waveHeight(wpN.xz + vec2(epsN, 0.0), uTime);
-    float hD = waveHeight(wpN.xz - vec2(0.0, epsN), uTime);
-    float hU = waveHeight(wpN.xz + vec2(0.0, epsN), uTime);
-    // Exaggerate normal tilt (small Y divisor) so lighting reveals wave shape
-    vec3 objectNormal = normalize(vec3((hL - hR) * 4.0, epsN * 0.5, (hD - hU) * 4.0));
+    // Wider sample spacing + averaged normals for smoother reflections
+    float epsN = 1.2;
+    float hL = waveHeight(wpN.xz - vec2(epsN, 0.0), uTime) * uWaveAmplitude;
+    float hR = waveHeight(wpN.xz + vec2(epsN, 0.0), uTime) * uWaveAmplitude;
+    float hD = waveHeight(wpN.xz - vec2(0.0, epsN), uTime) * uWaveAmplitude;
+    float hU = waveHeight(wpN.xz + vec2(0.0, epsN), uTime) * uWaveAmplitude;
+    // Second sample at tighter spacing for fine detail
+    float epsF = 0.4;
+    float hL2 = waveHeight(wpN.xz - vec2(epsF, 0.0), uTime) * uWaveAmplitude;
+    float hR2 = waveHeight(wpN.xz + vec2(epsF, 0.0), uTime) * uWaveAmplitude;
+    float hD2 = waveHeight(wpN.xz - vec2(0.0, epsF), uTime) * uWaveAmplitude;
+    float hU2 = waveHeight(wpN.xz + vec2(0.0, epsF), uTime) * uWaveAmplitude;
+    // Blend broad and fine normals (70% broad, 30% fine) for smooth yet detailed surface
+    float dxB = (hL - hR) / (2.0 * epsN);
+    float dzB = (hD - hU) / (2.0 * epsN);
+    float dxF = (hL2 - hR2) / (2.0 * epsF);
+    float dzF = (hD2 - hU2) / (2.0 * epsF);
+    float dxN = dxB * 0.7 + dxF * 0.3;
+    float dzN = dzB * 0.7 + dzF * 0.3;
+    // Moderate tilt so lighting reveals wave shape without harsh angular reflections
+    vec3 objectNormal = normalize(vec3(dxN * 2.5, 1.0, dzN * 2.5));
     #ifdef USE_TANGENT
       vec3 objectTangent = vec3(1.0, 0.0, 0.0);
     #endif`
@@ -154,7 +173,7 @@ waterMat.onBeforeCompile = (shader) => {
     vLocalPos = transformed;
     vec3 wp = (modelMatrix * vec4(transformed, 1.0)).xyz;
     vWorldPos = wp;
-    float wH = waveHeight(wp.xz, uTime);
+    float wH = waveHeight(wp.xz, uTime) * uWaveAmplitude;
     vWaveH = wH;
     transformed.y += wH;`
   );
@@ -390,6 +409,55 @@ function updateScoreHud(score) {
 
 collectibles.onScoreChange = updateScoreHud;
 
+// --- Weather HUD (desktop) ---
+const weatherEl = document.createElement('div');
+weatherEl.style.cssText = 'position:fixed;bottom:10px;right:10px;color:#aaccee;font:14px monospace;z-index:999;background:rgba(0,0,0,0.4);padding:6px 10px;border-radius:4px;';
+weatherEl.innerHTML = '<span style="opacity:0.6">Weather:</span> <span id="weather-state">Sunny</span> <span style="opacity:0.4;font-size:11px">[1/2/3]</span>';
+document.body.appendChild(weatherEl);
+const weatherStateEl = weatherEl.querySelector('#weather-state');
+
+// --- Weather HUD (VR) ---
+const vrWeatherCanvas = document.createElement('canvas');
+vrWeatherCanvas.width = 256;
+vrWeatherCanvas.height = 64;
+const vrWeatherCtx = vrWeatherCanvas.getContext('2d');
+const vrWeatherTex = new THREE.CanvasTexture(vrWeatherCanvas);
+const vrWeatherMat = new THREE.SpriteMaterial({
+  map: vrWeatherTex,
+  transparent: true,
+  depthTest: false,
+  depthWrite: false,
+  fog: false,
+});
+const vrWeatherSprite = new THREE.Sprite(vrWeatherMat);
+vrWeatherSprite.scale.set(0.10, 0.025, 1);
+vrWeatherSprite.position.set(0, -0.04, -0.3);
+vr.camera.add(vrWeatherSprite);
+
+let _lastWeatherText = '';
+const _weatherIcons = { Sunny: '\u2600', Cloudy: '\u2601', Rainy: '\u2602' };
+function updateWeatherHud(stateName, transitioning) {
+  const icon = _weatherIcons[stateName] || '';
+  const text = `${icon} ${stateName}${transitioning ? '...' : ''}`;
+
+  // Desktop
+  weatherStateEl.textContent = text;
+
+  // VR
+  if (text === _lastWeatherText) return;
+  _lastWeatherText = text;
+  vrWeatherCtx.clearRect(0, 0, 256, 64);
+  vrWeatherCtx.fillStyle = 'rgba(0,0,0,0.5)';
+  vrWeatherCtx.roundRect(0, 0, 256, 64, 8);
+  vrWeatherCtx.fill();
+  vrWeatherCtx.fillStyle = '#aaccee';
+  vrWeatherCtx.font = 'bold 28px monospace';
+  vrWeatherCtx.textAlign = 'center';
+  vrWeatherCtx.textBaseline = 'middle';
+  vrWeatherCtx.fillText(text, 128, 32);
+  vrWeatherTex.needsUpdate = true;
+}
+
 // --- Minimap (desktop) ---
 const minimapSize = 180;
 const minimapCanvas = document.createElement('canvas');
@@ -566,6 +634,30 @@ function onFrame() {
   // Wind animation
   updateWind(delta);
 
+  // Weather system
+  weather.update(delta, dayNight.sunElevation, pos, windUniforms.uWindDirection.value);
+  // Weather drives wind strength
+  windUniforms.uWindStrength.value = weather.windMultiplier;
+  // Weather drives ground wetness
+  const groundMat = getGroundMaterial();
+  if (groundMat?.userData?.wetnessUniform) {
+    groundMat.userData.wetnessUniform.value = weather.groundWetness;
+  }
+  // Weather drives wave amplitude
+  waveAmplitudeUniform.value = weather.waveAmplitude;
+
+  // Weather input: 1/2/3 on desktop, left trigger in VR
+  if (input.weatherCycle !== 0) {
+    if (input.weatherCycle === 1) weather.setTarget(0);       // Sunny
+    else if (input.weatherCycle === 2) weather.setTarget(1);  // Cloudy
+    else if (input.weatherCycle === 3) weather.setTarget(2);  // Rainy
+    else if (input.weatherCycle === -1) weather.cycleForward();
+  }
+  // Update weather HUD
+  const transitioning = Math.abs(weather.weatherIntensity - weather.targetIntensity) > 0.05;
+  updateWeatherHud(weather.getStateName(), transitioning);
+  vrWeatherSprite.visible = vr.isInVR();
+
   // Time scrubbing (right grip + stick Y in VR, [ ] on desktop)
   if (input.timeAdjust !== 0) {
     dayNight.timeOffset += input.timeAdjust * delta * 3; // 3 hours per second
@@ -573,7 +665,7 @@ function onFrame() {
   }
 
   // Update day/night cycle (sky, sun, lights, fog, clouds, moon)
-  dayNight.update(pos, vr.camera, delta);
+  dayNight.update(pos, vr.camera, delta, weather);
 
   // Show time offset indicator (visible while adjusting, fades out after)
   const isAdjusting = input.timeAdjust !== 0;
@@ -600,8 +692,8 @@ function onFrame() {
     vrTimeSprite.visible = false;
   }
 
-  // Fireflies (night only)
-  fireflies.update(delta, pos, dayNight.sunElevation);
+  // Fireflies (night only, suppressed by rain)
+  fireflies.update(delta, pos, dayNight.sunElevation, weather);
   birds.update(delta, pos, dayNight.sunElevation);
 
   // Wildlife peek events
@@ -620,8 +712,11 @@ function onFrame() {
     movement.groundType,
     movement.bobPhase,
     nearbyTrees,
-    waterProximity
+    waterProximity,
+    weather
   );
+  // Weather rain audio (uses shared audio context + noise buffer + spatial bus for 3D drips)
+  weather.updateAudio(audio.ctx, audio.masterGain, audio._noiseBuffer, audio.spatialBus, pos, delta);
 
   // Collectibles
   collectibles.update(delta, pos, audio);

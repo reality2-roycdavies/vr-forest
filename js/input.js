@@ -14,6 +14,7 @@ export class InputManager {
     this.rightGrip = false;
     this.leftGrip = false;
     this.sprintPressed = false;
+    this.weatherCycle = 0; // +1 to cycle forward, -1 backward
 
     // Mouse look state (desktop only)
     this.mouseYaw = 0;    // accumulated yaw (applied to dolly)
@@ -57,6 +58,7 @@ export class InputManager {
     this.rightGrip = false;
     this.leftGrip = false;
     this.sprintPressed = false;
+    this.weatherCycle = 0;
 
     if (this.vrSetup.isInVR()) {
       this._pollGamepads();
@@ -70,6 +72,10 @@ export class InputManager {
       // [ and ] keys for desktop time adjustment
       if (this.keys['BracketLeft']) this.timeAdjust = -1;
       else if (this.keys['BracketRight']) this.timeAdjust = 1;
+      // 1/2/3 keys for weather control (edge-triggered via _weatherKeyLast)
+      const wk = this.keys['Digit1'] ? 1 : this.keys['Digit2'] ? 2 : this.keys['Digit3'] ? 3 : 0;
+      if (wk !== 0 && wk !== this._weatherKeyLast) this.weatherCycle = wk;
+      this._weatherKeyLast = wk;
     }
   }
 
@@ -122,6 +128,10 @@ export class InputManager {
         // Left grip = button 1
         this.leftGrip = buttons[1] && buttons[1].pressed;
         if (this.leftGrip) this.sprintPressed = true;
+        // Left trigger = weather cycle (edge-triggered)
+        const leftTrigger = buttons[0] && buttons[0].pressed;
+        if (leftTrigger && !this._lastLeftTrigger) this.weatherCycle = -1; // cycle: next state
+        this._lastLeftTrigger = leftTrigger;
       } else if (source.handedness === 'right') {
         this.rightStick.x = Math.abs(sx) > CONFIG.THUMBSTICK_DEADZONE ? sx : 0;
         this.rightStick.y = Math.abs(sy) > CONFIG.THUMBSTICK_DEADZONE ? sy : 0;

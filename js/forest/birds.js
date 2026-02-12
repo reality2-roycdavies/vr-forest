@@ -67,6 +67,7 @@ export class BirdFlockSystem {
     const mat = new THREE.MeshBasicMaterial({
       color: 0x1a1a1a,
       side: THREE.DoubleSide,
+      fog: false,
     });
     const total = FLOCK_COUNT * BIRDS_PER_FLOCK;
     this.mesh = new THREE.InstancedMesh(geom, mat, total);

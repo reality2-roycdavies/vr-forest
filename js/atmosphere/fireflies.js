@@ -79,12 +79,19 @@ export class FireflySystem {
     return mesh;
   }
 
-  update(delta, playerPos, sunElevation) {
+  /**
+   * @param {number} delta
+   * @param {THREE.Vector3} playerPos
+   * @param {number} sunElevation
+   * @param {object} [weather] - WeatherSystem instance (optional)
+   */
+  update(delta, playerPos, sunElevation, weather) {
     this.time += delta;
 
-    // Fade based on sun
-    const target = sunElevation < -0.05 ? 1.0 :
+    // Fade based on sun, reduced by rain
+    let target = sunElevation < -0.05 ? 1.0 :
                    sunElevation < 0.05 ? 1.0 - (sunElevation + 0.05) / 0.1 : 0;
+    if (weather) target *= (1 - weather.rainIntensity * 0.8);
     this.opacity += (target - this.opacity) * Math.min(1, delta * 2);
 
     const shouldShow = this.opacity > 0.01;

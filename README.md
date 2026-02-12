@@ -57,11 +57,24 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 - Manual time scrubbing: VR (right grip + right stick Y), desktop (bracket keys), clamped to +/- 12 hours
 - Time offset HUD overlay with auto-fade
 
+### Weather System
+- Three weather states: Sunny, Cloudy, Rainy — driven by a single `weatherIntensity` float (0→1→2)
+- Smooth auto-cycling transitions with configurable hold times, or manual control via keyboard (1/2/3) and VR left trigger
+- URL override for testing: `?weather=rainy`, `?weather=cloudy`, `?weather=0.5`
+- **Cloudy**: dark overcast sky, thick grey clouds, dimmed sunlight, faded shadows, reduced visibility
+- **Rainy**: 4000-particle rain streaks (custom ShaderMaterial with hair-thin vertical streaks), thunder and lightning, ground wetness with hysteresis
+- **Thunder**: 5-layer procedural audio (initial crack, deep boom, mid-body, rolling echoes, sub-bass tail) routed through a procedural ConvolverNode reverb impulse response for natural 6–8 second reverb tail
+- **Rain audio**: Bandpass-filtered noise layers (patter at 3200 Hz + wash at 800 Hz) plus HRTF-spatialised 3D drip sounds (single drips, double drips, leaf/puddle splashes) scattered around the player
+- **Lightning**: Timer-based flash spikes with delayed thunder (0.3–2.5s for distance feel)
+- Time-of-day aware: night rain is near-black, night cloudy hides stars/moon entirely, twilight storms are moody
+- All systems respond to weather: fog distance, sky colours, cloud opacity/darkness, wind strength, wave amplitude, ground wetness (shader darkening + blue shift), firefly suppression, bird chirp reduction
+- Weather HUD for desktop and VR
+
 ### Wind Animation
 - Vertex shader displacement injected via `onBeforeCompile` on all plant materials
 - Three wind profiles: tree trunks (slow sway), canopy (sway + rustle + flutter), vegetation (gentle grass sway)
 - Wind direction slowly drifts over time for natural feel
-- Subtle movement — gentle breeze, not a gale
+- Weather-driven: gentle breeze in sunny, moderate in cloudy, strong gusts in rainy
 
 ### Bird Flocks
 - 5 flocks of 8 birds orbiting at 18–40m altitude
@@ -130,6 +143,7 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 | Left stick | Move (forward/back/strafe) |
 | Right stick X | Snap turn (30 degrees) |
 | Right grip + right stick Y | Scrub time of day |
+| Left trigger | Cycle weather (sunny → cloudy → rainy) |
 | Either grip button | Jump |
 
 ### Desktop
@@ -140,6 +154,7 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 | Q / E | Snap turn |
 | Space | Jump |
 | [ / ] | Scrub time of day |
+| 1 / 2 / 3 | Set weather (sunny / cloudy / rainy) |
 
 ## Running
 
@@ -166,7 +181,7 @@ Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS 
 - **Rendering**: WebGL 2 with WebXR
 - **Textures**: All procedurally generated on HTML5 Canvas (moon photo loaded externally with procedural fallback)
 - **Geometry**: All built from Three.js primitives (no 3D models)
-- **Lines of code**: ~9,500 lines of JavaScript across 29 modules
+- **Lines of code**: ~10,700 lines of JavaScript across 30 modules
 
 ## Project Structure
 
@@ -192,6 +207,7 @@ js/
 │   └── wildlife.js      # Bear, lion, Wally peek encounters
 └── atmosphere/
     ├── day-night.js     # Sun/moon/stars, sky dome, palettes, clouds
+    ├── weather.js       # Weather state machine, rain particles, thunder, lightning
     ├── audio.js         # All procedural audio (footsteps, crickets, morepork, etc.)
     ├── fireflies.js     # Night-time glowing particles
     └── wind.js          # Vertex shader wind displacement

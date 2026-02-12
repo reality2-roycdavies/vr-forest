@@ -4,6 +4,7 @@ import { CONFIG } from '../config.js';
 
 let groundMaterial = null;
 const groundTimeUniform = { value: 0 };
+const groundWetnessUniform = { value: 0 };
 
 /**
  * Update ground material time (call each frame for animated foam).
@@ -23,6 +24,7 @@ export function getGroundMaterial() {
       map: createGroundTexture(),
     });
     groundMaterial.userData.timeUniform = groundTimeUniform;
+    groundMaterial.userData.wetnessUniform = groundWetnessUniform;
     groundMaterial.userData.sandTex = sandTex;
     groundMaterial.userData.dirtTex = dirtTex;
 
@@ -53,6 +55,7 @@ export function getGroundMaterial() {
       shader.uniforms.dirtScale = { value: CONFIG.GROUND_DIRT_SCALE };
       shader.uniforms.dirtThreshold = { value: CONFIG.GROUND_DIRT_THRESHOLD };
       shader.uniforms.uTime = groundMaterial.userData.timeUniform;
+      shader.uniforms.uWetness = groundMaterial.userData.wetnessUniform;
       shader.uniforms.sandMap = { value: groundMaterial.userData.sandTex };
       shader.uniforms.dirtMap = { value: groundMaterial.userData.dirtTex };
 
@@ -81,6 +84,7 @@ export function getGroundMaterial() {
          uniform float dirtScale;
          uniform float dirtThreshold;
          uniform float uTime;
+         uniform float uWetness;
          uniform sampler2D sandMap;
          uniform sampler2D dirtMap;
          varying vec3 vWorldPos;
@@ -187,6 +191,10 @@ export function getGroundMaterial() {
          float visFalloff = exp(-depthBelow * 2.5);
          vec3 deepColor = vec3(0.04, 0.10, 0.20);
          terrainColor = mix(deepColor, terrainColor, visFalloff);
+
+         // Weather wetness: darken + subtle cool blue shift
+         terrainColor *= mix(1.0, 0.65, uWetness);
+         terrainColor = mix(terrainColor, terrainColor * vec3(0.92, 0.95, 1.05), uWetness * 0.5);
 
          diffuseColor.rgb = terrainColor;
 

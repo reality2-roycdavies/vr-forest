@@ -13,6 +13,8 @@ const _camFwd = new THREE.Vector3();
 const _moonPos = new THREE.Vector3();
 const _cloudNightColor = new THREE.Color(0x222233);
 const _cloudTwilightColor = new THREE.Color(0xe8a070);
+const _cloudStormGrey = new THREE.Color(0x505058);    // dark: for cloud tinting
+const _overcastHorizonGrey = new THREE.Color(0x7a7a82); // muted grey: fog/horizon target
 
 // Pre-allocated mutable palette for transitions (avoids 7 Color clones per frame)
 const _blendPalette = {
@@ -136,7 +138,7 @@ export class DayNightSystem {
     this.sunTexture = this._createSunTexture();
     this.sunMat = new THREE.SpriteMaterial({
       map: this.sunTexture,
-      color: 0xffee88,
+      color: 0xfff4cc,
       fog: false,
       transparent: true,
       depthWrite: false,
@@ -427,11 +429,11 @@ export class DayNightSystem {
     const ctx = canvas.getContext('2d');
     const half = size / 2;
     const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
-    gradient.addColorStop(0, 'rgba(255,255,240,1)');
-    gradient.addColorStop(0.15, 'rgba(255,245,200,0.9)');
-    gradient.addColorStop(0.35, 'rgba(255,220,120,0.4)');
-    gradient.addColorStop(0.6, 'rgba(255,200,80,0.1)');
-    gradient.addColorStop(1, 'rgba(255,180,60,0)');
+    gradient.addColorStop(0, 'rgba(255,255,245,0.75)');
+    gradient.addColorStop(0.15, 'rgba(255,250,225,0.55)');
+    gradient.addColorStop(0.35, 'rgba(255,235,180,0.18)');
+    gradient.addColorStop(0.6, 'rgba(255,225,160,0.04)');
+    gradient.addColorStop(1, 'rgba(255,220,150,0)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, size, size);
     return new THREE.CanvasTexture(canvas);
@@ -842,8 +844,12 @@ export class DayNightSystem {
 
   /**
    * Call each frame with player position
+   * @param {THREE.Vector3} playerPos
+   * @param {THREE.Camera} camera
+   * @param {number} delta
+   * @param {object} [weather] - WeatherSystem instance (optional)
    */
-  update(playerPos, camera, delta) {
+  update(playerPos, camera, delta, weather) {
     const now = new Date();
     const { elevation, azimuth } = this._getSunPosition(now);
     this.sunElevation = elevation;
@@ -881,7 +887,9 @@ export class DayNightSystem {
     // Fade with horizon proximity and twilight
     const horizonFade = Math.min(1, (moon.altitude - 0.05) / 0.1);
     const twilightFade = Math.min(1, (0.15 - elevation) / 0.2);
-    this.moonMat.uniforms.opacity.value = Math.max(0, horizonFade * twilightFade);
+    let moonOpacity = Math.max(0, horizonFade * twilightFade);
+    if (weather) moonOpacity *= (1 - weather.starDimming);
+    this.moonMat.uniforms.opacity.value = moonOpacity;
     this.moonMat.uniforms.phase.value = moon.phase;
     // Compute sun direction on the moon disc (so lit side faces scene sun)
     if (camera) {
@@ -895,8 +903,10 @@ export class DayNightSystem {
 
     // Stars visibility
     this.stars.position.copy(playerPos);
-    this.stars.material.opacity = Math.max(0, Math.min(1, (-elevation + 0.05) / 0.15));
-    this.stars.visible = elevation < 0.1;
+    let starOpacity = Math.max(0, Math.min(1, (-elevation + 0.05) / 0.15));
+    if (weather) starOpacity *= (1 - weather.starDimming);
+    this.stars.material.opacity = starOpacity;
+    this.stars.visible = elevation < 0.1 && starOpacity > 0.01;
 
     // --- Sun/moon light + shadow (reuse single DirectionalLight) ---
     _sunDir.copy(_sunPos).normalize();
@@ -935,18 +945,55 @@ export class DayNightSystem {
     // --- Stabilize shadow map to prevent texel swimming ---
     this._stabilizeShadowMap();
 
+    // Weather: dim sunlight and fade shadows
+    if (weather) {
+      this.sunLight.intensity *= (1 - weather.lightDimming);
+      // Shadows fade out as overcast increases (nearly invisible in rain)
+      const shadowStrength = Math.max(0, 1 - weather.lightDimming * 2);
+      if (this.sunLight.shadow.intensity !== undefined) {
+        this.sunLight.shadow.intensity = shadowStrength;
+      }
+      this.sunLight.castShadow = shadowStrength > 0.05;
+    } else {
+      this.sunLight.castShadow = true;
+    }
+
     // --- Hemisphere light ---
     this.hemiLight.color.copy(palette.hemiSky);
     this.hemiLight.groundColor.copy(palette.hemiGround);
     this.hemiLight.intensity = palette.hemiIntensity;
+    if (weather) {
+      this.hemiLight.intensity *= (1 - weather.lightDimming);
+    }
 
     // --- Ambient light ---
     this.ambientLight.intensity = palette.ambient;
+    if (weather) {
+      this.ambientLight.intensity *= (1 - weather.lightDimming);
+      // Lightning flash: additive ambient burst
+      this.ambientLight.intensity += weather.lightningFlash * 0.8;
+    }
 
     // --- Fog (distance adapts to time of day) ---
     this.scene.fog.color.copy(palette.fog);
     if (!this.scene.background) this.scene.background = new THREE.Color();
     this.scene.background.copy(palette.fog);
+    // Weather: desaturate fog/background — target grey matches current luminance
+    // so nighttime stays dark, daytime goes to overcast grey
+    if (weather && weather.cloudDensity > 0.01) {
+      const desatAmount = weather.cloudDarkness;
+      // Compute luminance-matched grey from current palette fog
+      const fogLum = palette.fog.r * 0.3 + palette.fog.g * 0.5 + palette.fog.b * 0.2;
+      // Blend between palette-luminance grey and overcast grey based on brightness
+      // At night (fogLum ~0.03) → use dark grey; at day (fogLum ~0.5) → use overcast grey
+      const dayness = Math.min(1, fogLum * 3);
+      _color.setRGB(fogLum, fogLum, fogLum).lerp(_overcastHorizonGrey, dayness);
+      // At night, push rain fog toward near-black (rain blocks all ambient light)
+      const nightDarken = (1 - dayness) * weather.rainIntensity * 0.7;
+      _color.multiplyScalar(1 - nightDarken);
+      this.scene.fog.color.lerp(_color, desatAmount);
+      this.scene.background.lerp(_color, desatAmount);
+    }
     // Fog stays distant until deep night, then closes in for darkness.
     let fogNear, fogFar;
     if (elevation > -0.08) {
@@ -959,27 +1006,61 @@ export class DayNightSystem {
       fogNear = 120 - t * 100;  // 120 → 20
       fogFar = 250 - t * 200;   // 250 → 50
     }
+    // Weather: reduce fog distance (closer fog = lower visibility)
+    if (weather) {
+      fogNear *= weather.fogMultiplier;
+      fogFar *= weather.fogMultiplier;
+    }
     this.scene.fog.near = fogNear;
     this.scene.fog.far = fogFar;
 
     // --- Sky dome (sky blends to fog color at horizon) ---
-    this._updateSkyColors(palette.skyTop, palette.skyBottom, palette.fog, playerPos);
+    this._updateSkyColors(palette.skyTop, palette.skyBottom, palette.fog, playerPos, weather);
 
     // --- Clouds ---
-    this._updateClouds(playerPos, palette, elevation, delta || 0.016);
+    this._updateClouds(playerPos, palette, elevation, delta || 0.016, weather);
 
     // --- Shooting stars ---
     this._updateShootingStars(playerPos, elevation, delta || 0.016);
   }
 
-  _updateSkyColors(topColor, bottomColor, fogColor, playerPos) {
+  _updateSkyColors(topColor, bottomColor, fogColor, playerPos, weather) {
     this.skyUniforms.topColor.value.copy(topColor);
     this.skyUniforms.bottomColor.value.copy(bottomColor);
     this.skyUniforms.fogColor.value.copy(fogColor);
+    // Weather: converge sky toward overcast grey, respecting time-of-day luminance
+    if (weather && weather.cloudDensity > 0.01) {
+      const desatAmount = weather.cloudDarkness;
+      // Luminance-matched targets so nighttime stays dark
+      const fogLum = fogColor.r * 0.3 + fogColor.g * 0.5 + fogColor.b * 0.2;
+      const topLum = topColor.r * 0.3 + topColor.g * 0.5 + topColor.b * 0.2;
+      const dayness = Math.min(1, fogLum * 3);
+      // Night rain pushes toward near-black
+      const nightDarken = (1 - dayness) * weather.rainIntensity * 0.7;
+      // Fog/bottom: desaturate toward luminance-grey, blending to overcast grey in daytime
+      _color.setRGB(fogLum, fogLum, fogLum).lerp(_overcastHorizonGrey, dayness);
+      _color.multiplyScalar(1 - nightDarken);
+      this.skyUniforms.fogColor.value.lerp(_color, desatAmount);
+      this.skyUniforms.bottomColor.value.lerp(_color, desatAmount);
+      // Top: desaturate toward darker grey, blending to storm grey in daytime
+      _color.setRGB(topLum, topLum, topLum).lerp(_cloudStormGrey, dayness);
+      _color.multiplyScalar(1 - nightDarken);
+      this.skyUniforms.topColor.value.lerp(_color, desatAmount);
+      // Lightning flash — additive white burst
+      if (weather.lightningFlash > 0.01) {
+        const f = weather.lightningFlash * 0.4;
+        this.skyUniforms.topColor.value.r += f;
+        this.skyUniforms.topColor.value.g += f;
+        this.skyUniforms.topColor.value.b += f;
+        this.skyUniforms.bottomColor.value.r += f;
+        this.skyUniforms.bottomColor.value.g += f;
+        this.skyUniforms.bottomColor.value.b += f;
+      }
+    }
     this.skyMesh.position.set(playerPos.x, 0, playerPos.z);
   }
 
-  _updateClouds(playerPos, palette, elevation, delta) {
+  _updateClouds(playerPos, palette, elevation, delta, weather) {
     this.cloudGroup.position.set(playerPos.x, 0, playerPos.z);
     this.cloudTime += delta;
     const t = this.cloudTime;
@@ -1032,6 +1113,13 @@ export class DayNightSystem {
         } else {
           puff.material.color.setHex(0xffffff);
           puff.material.opacity = basePuffOpacity;
+        }
+
+        // Weather: boost opacity + darken toward storm grey
+        if (weather && weather.cloudDensity > 0.01) {
+          puff.material.opacity += weather.cloudDensity * basePuffOpacity;
+          puff.material.opacity = Math.min(puff.material.opacity, 0.95);
+          puff.material.color.lerp(weather.stormCloudColor, weather.cloudDarkness);
         }
       }
     }

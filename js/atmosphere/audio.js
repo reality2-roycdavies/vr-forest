@@ -83,18 +83,26 @@ export class AmbientAudio {
 
   /**
    * Call each frame with extended parameters for all audio subsystems.
+   * @param {object} [weather] - WeatherSystem instance (optional, passed as last arg)
    */
-  update(delta, sunElevation, playerPos, cameraDir, isMoving, groundType, bobPhase, nearbyTrees, waterProximity) {
+  update(delta, sunElevation, playerPos, cameraDir, isMoving, groundType, bobPhase, nearbyTrees, waterProximity, weather) {
     if (!this.started || !this.ctx) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
 
-    // Bird chirps — daytime only
+    // Weather: duck wind during rain
+    const rainDuck = weather ? 1 - weather.rainIntensity * 0.3 : 1;
+    this._weatherWindDuck = rainDuck;
+
+    // Bird chirps — daytime only, suppressed by rain
+    const birdSuppression = weather ? 1 - weather.rainIntensity * 0.8 : 1;
     if (sunElevation === undefined || sunElevation > 0.02) {
       this.birdTimer += delta;
+      // Rain slows bird frequency
+      const birdInterval = (1.5 + Math.random() * 6) / Math.max(0.1, birdSuppression);
       if (this.birdTimer > this.nextBirdTime) {
         this.birdTimer = 0;
-        this.nextBirdTime = 1.5 + Math.random() * 6;
-        this._chirp();
+        this.nextBirdTime = birdInterval;
+        if (birdSuppression > 0.1) this._chirp();
       }
     }
 
@@ -214,8 +222,9 @@ export class AmbientAudio {
     if (!this.started || !this.ctx) return;
     const now = this.ctx.currentTime;
     const duration = 3 + Math.random() * 5;
-    const duck = this._windDuck !== undefined ? this._windDuck : 1;
-    const targetGain = (0.03 + Math.random() * 0.08) * duck;
+    const waterDuck = this._windDuck !== undefined ? this._windDuck : 1;
+    const weatherDuck = this._weatherWindDuck !== undefined ? this._weatherWindDuck : 1;
+    const targetGain = (0.03 + Math.random() * 0.08) * waterDuck * weatherDuck;
     const targetFreq = 250 + Math.random() * 400;
 
     this.windGain.gain.linearRampToValueAtTime(targetGain, now + duration);
