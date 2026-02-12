@@ -2,3 +2,4 @@
 serve-https.py
 node_modules/
 .DS_Store
+transcripts/*.jsonl

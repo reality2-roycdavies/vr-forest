@@ -17,21 +17,21 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 
 ### Conversation Transcripts
 
-Raw human-AI conversation logs from each development session (JSONL format):
+Human-AI conversation logs from each development session (readable markdown, converted from raw JSONL):
 
 | Session | Topic |
 |---------|-------|
-| [Day 1, Session 1](transcripts/day1-01-initial-appraisal.jsonl) | Initial appraisal — terrain, trees, vegetation, day/night cycle, sky |
-| [Day 1, Session 2](transcripts/day1-02-footsteps-crickets-spatial-audio.jsonl) | Footsteps, crickets, spatial audio, wildlife |
-| [Day 1, Session 3](transcripts/day1-03-water-ponds-shores.jsonl) | Water system — ponds, shores, waves, wind |
-| [Day 2, Session 1](transcripts/day2-01-shadows-creatures-morepork.jsonl) | Shadows, creatures, morepork owl |
-| [Day 2, Session 2](transcripts/day2-02-shadows-creatures-continued.jsonl) | Shadows and creatures continued |
-| [Day 2, Session 3](transcripts/day2-03-moon-shadows-water-ambience.jsonl) | Moon positioning, shadows, water ambience |
-| [Day 3, Session 1](transcripts/day3-01-collectibles-minimap-terrain.jsonl) | Collectibles, minimap, terrain banding fixes |
-| [Day 3, Session 2](transcripts/day3-02-water-edge-effects.jsonl) | Water edge effects — shore transitions, caustics, foam |
-| [Day 4, Session 1](transcripts/day4-01-cloud-diversity.jsonl) | Cloud diversity, terrain shader refactor, wildlife legs |
-| [Day 4, Session 2](transcripts/day4-02-weather-system.jsonl) | Weather system — architecture, rain particles, thunder, sky/fog tuning |
-| [Day 4, Session 3](transcripts/day4-03-weather-polish-stormy-water.jsonl) | Weather polish — stormy water, rain audio, twilight fog, sun/moon cloud fade |
+| [Day 1, Session 1](transcripts/day1-01-initial-appraisal.md) | Initial appraisal — terrain, trees, vegetation, day/night cycle, sky |
+| [Day 1, Session 2](transcripts/day1-02-footsteps-crickets-spatial-audio.md) | Footsteps, crickets, spatial audio, wildlife |
+| [Day 1, Session 3](transcripts/day1-03-water-ponds-shores.md) | Water system — ponds, shores, waves, wind |
+| [Day 2, Session 1](transcripts/day2-01-shadows-creatures-morepork.md) | Shadows, creatures, morepork owl |
+| [Day 2, Session 2](transcripts/day2-02-shadows-creatures-continued.md) | Shadows and creatures continued |
+| [Day 2, Session 3](transcripts/day2-03-moon-shadows-water-ambience.md) | Moon positioning, shadows, water ambience |
+| [Day 3, Session 1](transcripts/day3-01-collectibles-minimap-terrain.md) | Collectibles, minimap, terrain banding fixes |
+| [Day 3, Session 2](transcripts/day3-02-water-edge-effects.md) | Water edge effects — shore transitions, caustics, foam |
+| [Day 4, Session 1](transcripts/day4-01-cloud-diversity.md) | Cloud diversity, terrain shader refactor, wildlife legs |
+| [Day 4, Session 2](transcripts/day4-02-weather-system.md) | Weather system — architecture, rain particles, thunder, sky/fog tuning |
+| [Day 4, Session 3](transcripts/day4-03-weather-polish-stormy-water.md) | Weather polish — stormy water, rain audio, twilight fog, sun/moon cloud fade |
 
 ## Features
 
