@@ -1,14 +1,13 @@
 // Distant bird flocks — visual chevrons + crow-like caw audio
 import * as THREE from 'three';
-import { getTerrainHeight, getMountainFactor } from '../terrain/noise.js';
+import { getTerrainHeight } from '../terrain/noise.js';
+import { CONFIG } from '../config.js';
 
 const FLOCK_COUNT = 5;
 const BIRDS_PER_FLOCK = 8;
 const BIRD_ALTITUDE_MIN = 15;
 const BIRD_ALTITUDE_MAX = 35;
 const BIRD_CLEARANCE = 12;          // min meters above terrain surface
-const MOUNTAIN_AVOID_THRESHOLD = 0.15;
-const MOUNTAIN_AVOID_SPEED = 3;     // orbit speed multiplier over mountains
 const FLOCK_RADIUS_MIN = 25;
 const FLOCK_RADIUS_MAX = 80;
 const FLOCK_SPEED = 5;           // m/s orbit speed
@@ -87,6 +86,7 @@ export class BirdFlockSystem {
       const altitude = BIRD_ALTITUDE_MIN + Math.random() * (BIRD_ALTITUDE_MAX - BIRD_ALTITUDE_MIN);
       const speed = FLOCK_SPEED * (0.7 + Math.random() * 0.6);
       const clockwise = Math.random() > 0.5 ? 1 : -1;
+      const direction = clockwise; // smooth float version for gradual turns
 
       // Per-bird offsets — scattered loosely, each with own drift
       const birds = [];
@@ -113,6 +113,7 @@ export class BirdFlockSystem {
         altitude,
         speed,
         clockwise,
+        direction,
         birds,
         radiusDrift: Math.random() * Math.PI * 2,
         altDrift: Math.random() * Math.PI * 2,
@@ -130,14 +131,22 @@ export class BirdFlockSystem {
 
     let instanceIdx = 0;
     for (const flock of this.flocks) {
-      if (isDay) {
-        flock.angle += flock.clockwise * flock.speed / flock.radius * delta;
-      }
-
       // Gentle drift in orbit radius and altitude
       const driftR = Math.sin(this.time * 0.1 + flock.radiusDrift) * 15;
       const driftA = Math.sin(this.time * 0.08 + flock.altDrift) * 5;
       const r = flock.radius + driftR;
+
+      if (isDay) {
+        // Peek ahead: check terrain a short distance along the orbit
+        const peekAngle = flock.angle + flock.direction * 0.15;
+        const peekX = playerPos.x + Math.cos(peekAngle) * r;
+        const peekZ = playerPos.z + Math.sin(peekAngle) * r;
+        const peekY = getTerrainHeight(peekX, peekZ);
+        // Smoothly reverse direction when heading toward mountains
+        const targetDir = peekY > CONFIG.TREELINE_START ? -flock.clockwise : flock.clockwise;
+        flock.direction += (targetDir - flock.direction) * Math.min(1, delta * 1.5);
+        flock.angle += flock.direction * flock.speed / flock.radius * delta;
+      }
 
       // Flock center in world space (orbits around player)
       const cx = playerPos.x + Math.cos(flock.angle) * r;
@@ -148,15 +157,13 @@ export class BirdFlockSystem {
       const baseAlt = flock.altitude + driftA;
       const cy = Math.max(baseAlt, terrainY + BIRD_CLEARANCE);
 
-      // Mountain avoidance: speed up orbit to pass through mountain areas quickly
-      const mtnFactor = getMountainFactor(cx, cz);
-      if (isDay && mtnFactor > MOUNTAIN_AVOID_THRESHOLD) {
-        flock.angle += flock.clockwise * flock.speed / flock.radius * delta * MOUNTAIN_AVOID_SPEED * mtnFactor;
-      }
-
-      // Forward direction (tangent to circle)
-      const fx = -Math.sin(flock.angle) * flock.clockwise;
-      const fz = Math.cos(flock.angle) * flock.clockwise;
+      // Forward direction (tangent to circle, follows smooth direction)
+      const rawFx = -Math.sin(flock.angle) * flock.direction;
+      const rawFz = Math.cos(flock.angle) * flock.direction;
+      // Normalise so heading stays valid even when direction passes through zero
+      const fLen = Math.sqrt(rawFx * rawFx + rawFz * rawFz) || 1;
+      const fx = rawFx / fLen;
+      const fz = rawFz / fLen;
       // Right direction
       const rx = fz;
       const rz = -fx;
