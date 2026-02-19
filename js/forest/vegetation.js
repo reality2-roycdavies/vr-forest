@@ -27,6 +27,7 @@ export class VegetationPool {
     this._createRockMeshes();
     this._createLogMeshes();
     this.foamTimeUniform = { value: 0 };
+    this._foamBaseColor = new THREE.Color(0x9aacb8);
     this._createFoamStrip();
   }
 
@@ -538,6 +539,11 @@ export class VegetationPool {
 
   updateFoamTime(time) {
     this.foamTimeUniform.value = time;
+  }
+
+  /** Blend foam color toward fog so it doesn't glow at night/storms */
+  updateFoamAtmosphere(fogColor, fogBlend) {
+    this.foamMesh.material.color.copy(this._foamBaseColor).lerp(fogColor, fogBlend);
   }
 
   _rebuildFoamStrip(segments) {

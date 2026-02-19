@@ -2,12 +2,19 @@
 // weatherIntensity: 0.0 (sunny) → 1.0 (cloudy) → 2.0 (rainy)
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { getTreeDensity } from '../terrain/noise.js';
 
 const _stormColor = new THREE.Color(CONFIG.WEATHER_STORM_CLOUD_COLOR);
 
 // Cache URL param once
 const _weatherParam = new URLSearchParams(window.location.search).get('weather');
 const _weatherLock = _weatherParam !== null ? _parseWeatherParam(_weatherParam) : null;
+
+// Shelter grid — tracks canopy coverage over rain cylinder
+const SHELTER_RES = 16;
+const SHELTER_SIZE = CONFIG.RAIN_RADIUS * 2;
+const _shelterGrid = new Float32Array(SHELTER_RES * SHELTER_RES);
+let _shelterCX = Infinity, _shelterCZ = Infinity;
 
 function _parseWeatherParam(val) {
   const named = { sunny: 0, clear: 0, cloudy: 1, overcast: 1, rainy: 2, rain: 2, storm: 2, stormy: 2 };
@@ -72,6 +79,9 @@ export class WeatherSystem {
     this._dripInterval = 0.3;
     this._playerPos = null;
     this._spatialBus = null;
+
+    // --- Canopy shelter ---
+    this._shelterFactor = 0; // 0 = open sky, 1 = fully sheltered
 
     // Initial derived params
     this._updateDerivedParams();
@@ -171,6 +181,35 @@ export class WeatherSystem {
     this._rainSpeeds = speeds;
   }
 
+  _updateShelterGrid(playerX, playerZ) {
+    const dx = playerX - _shelterCX;
+    const dz = playerZ - _shelterCZ;
+    if (dx * dx + dz * dz < 9) return; // <3m movement
+    _shelterCX = playerX;
+    _shelterCZ = playerZ;
+
+    const terrainY = this._playerTerrainY || 0;
+    if (terrainY > CONFIG.TREELINE_START) {
+      _shelterGrid.fill(0);
+      this._shelterFactor = 0;
+      return;
+    }
+
+    const cellSize = SHELTER_SIZE / SHELTER_RES;
+    for (let gz = 0; gz < SHELTER_RES; gz++) {
+      for (let gx = 0; gx < SHELTER_RES; gx++) {
+        const wx = playerX + (gx + 0.5 - SHELTER_RES * 0.5) * cellSize;
+        const wz = playerZ + (gz + 0.5 - SHELTER_RES * 0.5) * cellSize;
+        _shelterGrid[gz * SHELTER_RES + gx] =
+          getTreeDensity(wx, wz) > 0.3 ? 1.0 : 0.0;
+      }
+    }
+
+    // Player shelter factor: sample center cell
+    const mid = SHELTER_RES >> 1;
+    this._shelterFactor = _shelterGrid[mid * SHELTER_RES + mid];
+  }
+
   _updateRainParticles(delta, playerPos, windDir) {
     // Snow zone: blend rain→snow based on altitude
     const snowStart = CONFIG.SNOWLINE_START;
@@ -186,6 +225,8 @@ export class WeatherSystem {
     const shouldShow = effectivePrecip > 0.01;
     this._rainMesh.visible = shouldShow;
     if (!shouldShow) return;
+
+    this._updateShelterGrid(playerPos.x, playerPos.z);
 
     const count = CONFIG.RAIN_PARTICLE_COUNT;
     // More particles in snow zone — blizzard at altitude during storms
@@ -236,10 +277,29 @@ export class WeatherSystem {
       const turbX = Math.sin(swirlT * 3.1 + i * 0.53) * swirlStrength * 0.4;
       const turbZ = Math.cos(swirlT * 2.7 + i * 0.71) * swirlStrength * 0.4;
 
-      // Move down + wind + swirl
-      positions[i * 3] += (windX + swirlX + turbX + snowBlend * Math.sin(py * 0.4 + i * 0.7) * 0.5) * delta;
-      positions[i * 3 + 1] -= speeds[i] * speedScale * delta;
-      positions[i * 3 + 2] += (windZ + swirlZ + turbZ + snowBlend * Math.cos(py * 0.5 + i * 1.1) * 0.5) * delta;
+      // Canopy shelter check
+      const gx = Math.floor((px / SHELTER_SIZE + 0.5) * SHELTER_RES);
+      const gz = Math.floor((pz / SHELTER_SIZE + 0.5) * SHELTER_RES);
+      const sheltered = (gx >= 0 && gx < SHELTER_RES && gz >= 0 && gz < SHELTER_RES)
+        ? _shelterGrid[gz * SHELTER_RES + gx] > 0 : false;
+
+      if (sheltered && snowBlend < 0.1) {
+        const dripCycle = Math.floor(swirlT * 0.5);
+        const isDrip = ((i * 7 + dripCycle) % 13) === 0;
+        if (isDrip) {
+          // Drip: fall straight down, slower
+          positions[i * 3 + 1] -= speeds[i] * speedScale * 0.3 * delta;
+        } else {
+          // Hidden under canopy: fall invisibly to recycle to clearings
+          opacities[i] = 0;
+          positions[i * 3 + 1] -= speeds[i] * speedScale * delta;
+        }
+      } else {
+        // Normal movement — wind + swirl
+        positions[i * 3] += (windX + swirlX + turbX + snowBlend * Math.sin(py * 0.4 + i * 0.7) * 0.5) * delta;
+        positions[i * 3 + 1] -= speeds[i] * speedScale * delta;
+        positions[i * 3 + 2] += (windZ + swirlZ + turbZ + snowBlend * Math.cos(py * 0.5 + i * 1.1) * 0.5) * delta;
+      }
 
       // Respawn at top if below ground or too far from center
       const dx = positions[i * 3];
@@ -460,23 +520,26 @@ export class WeatherSystem {
     const snowStart = CONFIG.SNOWLINE_START;
     const altFade = 1 - clamp01((terrainY - treelineY) / (snowStart - treelineY));
 
+    // Slight dampen under canopy (shelter 1.0 → 0.65 volume)
+    const canopyDampen = 1 - this._shelterFactor * 0.35;
+
     // Patter: linear scale
     if (this._patterGain) {
-      this._patterGain.gain.value = ri * 0.12 * altFade;
+      this._patterGain.gain.value = ri * 0.12 * altFade * canopyDampen;
     }
     // Wash: quadratic scale — louder in heavy rain
     if (this._washGain) {
-      this._washGain.gain.value = ri * ri * 0.15 * altFade;
+      this._washGain.gain.value = ri * ri * 0.15 * altFade * canopyDampen;
     }
     // Body: fills the midrange, with slow gusting modulation
     if (this._bodyGain) {
-      this._bodyGain.gain.value = ri * 0.08 * altFade;
-      this._bodyLFOGain.gain.value = ri * 0.03 * altFade;
+      this._bodyGain.gain.value = ri * 0.08 * altFade * canopyDampen;
+      this._bodyLFOGain.gain.value = ri * 0.03 * altFade * canopyDampen;
     }
     // Sizzle: high-freq surface detail, grows with intensity
     if (this._sizzleGain) {
-      this._sizzleGain.gain.value = ri * ri * 0.05 * altFade;
-      this._sizzleLFOGain.gain.value = ri * 0.02 * altFade;
+      this._sizzleGain.gain.value = ri * ri * 0.05 * altFade * canopyDampen;
+      this._sizzleLFOGain.gain.value = ri * 0.02 * altFade * canopyDampen;
     }
   }
 
@@ -765,7 +828,15 @@ export class WeatherSystem {
     this.windMultiplier = w <= 1 ? 1 + w * 0.3 : 1.3 + (w - 1) * 1.2;
 
     // fogMultiplier: 1.0 → 0.65 → 0.6 (cloudy close to rainy)
-    this.fogMultiplier = w <= 1 ? 1 - w * 0.35 : 0.65 - (w - 1) * 0.05;
+    let fogMul = w <= 1 ? 1 - w * 0.35 : 0.65 - (w - 1) * 0.05;
+    // Reduce visibility further in snow zone — whiteout in blizzards
+    const terrainY = this._playerTerrainY || 0;
+    const snowBlend = clamp01((terrainY - CONFIG.TREELINE_START) / (CONFIG.SNOWLINE_START - CONFIG.TREELINE_START));
+    if (snowBlend > 0) {
+      const snowFog = snowBlend * (0.15 + clamp01(w - 1) * 0.25); // cloudy: mild, stormy: heavy
+      fogMul *= (1 - snowFog);
+    }
+    this.fogMultiplier = fogMul;
 
     // rainIntensity: 0 until w > 1, then 0→1
     this.rainIntensity = w <= 1 ? 0 : clamp01(w - 1);

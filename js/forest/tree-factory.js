@@ -38,11 +38,11 @@ export function initTreeGeometries() {
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopyLobe(0, 0.85, 0, 0.8, 1.1, 9));
-    parts.push(makeCanopyLobe(0.1, 1.2, -0.08, 0.65, 0.9, 9));
-    parts.push(makeCanopyLobe(-0.08, 1.5, 0.06, 0.5, 0.75, 8));
-    parts.push(makeCanopyLobe(0.05, 1.8, -0.03, 0.38, 0.6, 7));
-    parts.push(makeCanopyLobe(-0.04, 2.05, 0.02, 0.25, 0.4, 6));
+    parts.push(makeCanopyLobe(0, 0.85, 0, 0.8, 1.1, 14));
+    parts.push(makeCanopyLobe(0.1, 1.2, -0.08, 0.65, 0.9, 14));
+    parts.push(makeCanopyLobe(-0.08, 1.5, 0.06, 0.5, 0.75, 12));
+    parts.push(makeCanopyLobe(0.05, 1.8, -0.03, 0.38, 0.6, 10));
+    parts.push(makeCanopyLobe(-0.04, 2.05, 0.02, 0.25, 0.4, 8));
     const canopy = mergeAll(parts);
     tintCanopyVertexColors(canopy, 0x18401a, 0.28);
     addSphericalUVs(canopy);
@@ -66,12 +66,12 @@ export function initTreeGeometries() {
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopySphere(0, 1.35, 0, 0.55, 2));
-    parts.push(makeCanopySphere(0.32, 1.25, 0.18, 0.45, 2));
-    parts.push(makeCanopySphere(-0.28, 1.3, -0.22, 0.48, 2));
-    parts.push(makeCanopySphere(0.05, 1.6, -0.12, 0.42, 2));
+    parts.push(makeCanopySphere(0, 1.35, 0, 0.55, 3));
+    parts.push(makeCanopySphere(0.32, 1.25, 0.18, 0.45, 3));
+    parts.push(makeCanopySphere(-0.28, 1.3, -0.22, 0.48, 3));
+    parts.push(makeCanopySphere(0.05, 1.6, -0.12, 0.42, 3));
     parts.push(makeCanopySphere(-0.15, 1.55, 0.25, 0.38, 2));
-    parts.push(makeCanopySphere(0.2, 1.5, -0.3, 0.35, 1));
+    parts.push(makeCanopySphere(0.2, 1.5, -0.3, 0.35, 2));
     const canopy = mergeAll(parts);
     tintCanopyVertexColors(canopy, 0x386020, 0.25);
     addSphericalUVs(canopy);
@@ -96,10 +96,10 @@ export function initTreeGeometries() {
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopyLobe(0.18, 1.2, 0.12, 0.48, 0.7, 8));
-    parts.push(makeCanopyLobe(-0.22, 1.4, -0.12, 0.4, 0.6, 8));
-    parts.push(makeCanopyLobe(0.0, 1.65, 0.0, 0.33, 0.5, 7));
-    parts.push(makeCanopyLobe(0.1, 1.85, -0.08, 0.22, 0.35, 6));
+    parts.push(makeCanopyLobe(0.18, 1.2, 0.12, 0.48, 0.7, 12));
+    parts.push(makeCanopyLobe(-0.22, 1.4, -0.12, 0.4, 0.6, 12));
+    parts.push(makeCanopyLobe(0.0, 1.65, 0.0, 0.33, 0.5, 10));
+    parts.push(makeCanopyLobe(0.1, 1.85, -0.08, 0.22, 0.35, 8));
     const canopy = mergeAll(parts);
     tintCanopyVertexColors(canopy, 0x5a9035, 0.3);
     addSphericalUVs(canopy);

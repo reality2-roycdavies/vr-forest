@@ -103,6 +103,7 @@ export class DayNightSystem {
       topColor:    { value: new THREE.Color(0x3068cc) },
       bottomColor: { value: new THREE.Color(0x7ab0d8) },
       fogColor:    { value: new THREE.Color(0x84b0d8) },
+      fogHeight:   { value: 0.2 },
     };
     this.skyMat = new THREE.ShaderMaterial({
       uniforms: this.skyUniforms,
@@ -118,14 +119,28 @@ export class DayNightSystem {
         uniform vec3 topColor;
         uniform vec3 bottomColor;
         uniform vec3 fogColor;
+        uniform float fogHeight;
         varying vec3 vWorldPosition;
         void main() {
           float h = normalize(vWorldPosition - cameraPosition).y;
           float t = max(0.0, h);
-          // Horizon (t=0) = fog color, blends to sky bottom by t=0.2, then to sky top
-          vec3 col = mix(fogColor, bottomColor, smoothstep(0.0, 0.2, t));
-          col = mix(col, topColor, smoothstep(0.2, 1.0, t));
-          gl_FragColor = vec4(col, 1.0);
+          // Sky gradient (bottom → top)
+          vec3 sky = mix(bottomColor, topColor, smoothstep(0.0, 1.0, t));
+          // Horizon fog band
+          float f = smoothstep(0.0, max(fogHeight, 0.2), t);
+          // During storms, flatten ENTIRE sky toward fog color
+          // (heavy overcast = uniform grey sky, no silhouettes)
+          float flatten = smoothstep(0.25, 0.85, fogHeight);
+          vec3 col = mix(fogColor, sky, f * (1.0 - flatten));
+          // Manual linear → sRGB using the exact piecewise transfer function
+          // (matches what built-in materials do via colorspace_fragment;
+          // simple pow(1/2.2) over-brightens very dark nighttime values)
+          vec3 srgb = mix(
+            col * 12.92,
+            pow(col, vec3(1.0 / 2.4)) * 1.055 - 0.055,
+            step(vec3(0.0031308), col)
+          );
+          gl_FragColor = vec4(srgb, 1.0);
         }
       `,
       side: THREE.BackSide,
@@ -1040,18 +1055,10 @@ export class DayNightSystem {
       this.scene.fog.color.lerp(_color, desatAmount);
       this.scene.background.lerp(_color, desatAmount);
     }
-    // Fog distance: stays distant through twilight, only closes in at night.
-    let fogNear, fogFar;
-    if (elevation > -0.02) {
-      // Day, golden, early twilight — fog stays distant
-      fogNear = 120;
-      fogFar = 250;
-    } else {
-      // Deep twilight → night: fog closes in
-      const t = Math.min(1, (-0.02 - elevation) / 0.08); // 0 at -0.02, 1 at -0.10
-      fogNear = 120 - t * 100;  // 120 → 20
-      fogFar = 250 - t * 200;   // 250 → 50
-    }
+    // Fog distance: consistent day/night (dark night colors already reduce
+    // perceived visibility; weather system handles storm reduction separately)
+    let fogNear = 120;
+    let fogFar = 250;
     // Weather: reduce fog distance (closer fog = lower visibility)
     if (weather) {
       fogNear *= weather.fogMultiplier;
@@ -1061,7 +1068,15 @@ export class DayNightSystem {
     this.scene.fog.far = fogFar;
 
     // --- Sky dome (sky blends to fog color at horizon) ---
-    this._updateSkyColors(palette.skyTop, palette.skyBottom, palette.fog, playerPos, weather);
+    // Compute fogHeight from BASE weather state only (not altitude),
+    // so the sky doesn't shift abruptly when crossing the snowline
+    let baseFogMul = 1;
+    if (weather) {
+      const w = weather.weatherIntensity;
+      baseFogMul = w <= 1 ? 1 - w * 0.35 : 0.65 - (w - 1) * 0.05;
+    }
+    this.skyUniforms.fogHeight.value = Math.min(0.95, 0.2 + (1 - baseFogMul) * 1.6);
+    this._updateSkyColors(palette.skyTop, palette.skyBottom, this.scene.fog.color, playerPos, weather);
 
     // --- Clouds ---
     this._updateClouds(playerPos, palette, elevation, delta || 0.016, weather);
@@ -1070,30 +1085,16 @@ export class DayNightSystem {
     this._updateShootingStars(playerPos, elevation, delta || 0.016);
   }
 
-  _updateSkyColors(topColor, bottomColor, fogColor, playerPos, weather) {
+  _updateSkyColors(topColor, bottomColor, sceneFogColor, playerPos, weather) {
     this.skyUniforms.topColor.value.copy(topColor);
     this.skyUniforms.bottomColor.value.copy(bottomColor);
-    this.skyUniforms.fogColor.value.copy(fogColor);
-    // Weather: converge sky toward overcast grey, respecting time-of-day luminance
+    // Horizon = final scene fog color (already includes twilight + weather adjustments)
+    this.skyUniforms.fogColor.value.copy(sceneFogColor);
+    // Weather: push all sky colors toward fog color (overcast = uniform sky)
     if (weather && weather.cloudDensity > 0.01) {
-      const desatAmount = weather.cloudDarkness;
-      // Luminance-matched targets so nighttime stays dark
-      const fogLum = fogColor.r * 0.3 + fogColor.g * 0.5 + fogColor.b * 0.2;
-      const topLum = topColor.r * 0.3 + topColor.g * 0.5 + topColor.b * 0.2;
-      const dayness = Math.min(1, fogLum * 3);
-      // Night rain pushes toward near-black
-      const nightDarken = (1 - dayness) * weather.rainIntensity * 0.7;
-      // Fog/bottom: desaturate toward luminance-grey, blending to overcast grey in daytime
-      _color.setRGB(fogLum, fogLum, fogLum).lerp(_overcastHorizonGrey, dayness);
-      _color.multiplyScalar(1 - nightDarken);
-      _color.multiplyScalar(1 - weather.skyDarkening * 0.6);
-      this.skyUniforms.fogColor.value.lerp(_color, desatAmount);
-      this.skyUniforms.bottomColor.value.lerp(_color, desatAmount);
-      // Top: desaturate toward darker grey, blending to storm grey in daytime
-      _color.setRGB(topLum, topLum, topLum).lerp(_cloudStormGrey, dayness);
-      _color.multiplyScalar(1 - nightDarken);
-      _color.multiplyScalar(1 - weather.skyDarkening * 0.6);
-      this.skyUniforms.topColor.value.lerp(_color, desatAmount);
+      const blend = weather.cloudDarkness; // 0 → 0.9 as weather intensifies
+      this.skyUniforms.bottomColor.value.lerp(sceneFogColor, blend);
+      this.skyUniforms.topColor.value.lerp(sceneFogColor, blend);
       // Lightning flash — additive white burst
       if (weather.lightningFlash > 0.01) {
         const f = weather.lightningFlash * 0.4;

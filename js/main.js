@@ -47,8 +47,9 @@ movement.chunkManager = chunkManager;
 const waterGeom = new THREE.PlaneGeometry(300, 300, 128, 128);
 const WATER_GRID_STEP = 300 / 128; // snap water position to grid to prevent wave sliding
 waterGeom.rotateX(-Math.PI / 2);
+const baseWaterColor = new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b);
 const waterMat = new THREE.MeshPhongMaterial({
-  color: new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b),
+  color: baseWaterColor.clone(),
   specular: new THREE.Color(0.18, 0.18, 0.18),
   shininess: 35,
   transparent: true,
@@ -221,26 +222,30 @@ waterMat.onBeforeCompile = (shader) => {
     '#include <dithering_fragment>',
     `#include <dithering_fragment>
     vec2 wPos = vWorldPos.xz;
+    // Scale additive effects by current brightness so they fade at night
+    float baseLum = dot(gl_FragColor.rgb, vec3(0.3, 0.5, 0.2));
+    float effectScale = clamp(baseLum * 8.0, 0.05, 1.0);
     // Wave height tinting — crests lighter, troughs darker
     float wNorm = clamp(vWaveH * 5.0 + 0.5, 0.0, 1.0);
-    gl_FragColor.rgb += (wNorm - 0.5) * 0.12;
+    gl_FragColor.rgb += (wNorm - 0.5) * 0.12 * effectScale;
     // Subtle drifting surface pattern — low contrast
     float n1 = wSurface(wPos * 0.5 + vec2(uTime * 0.04, uTime * 0.025));
     float n2 = wSurface(wPos * 0.7 + vec2(-uTime * 0.03, uTime * 0.045) + 50.0);
     float combined = n1 * 0.5 + n2 * 0.5;
     float fleck = smoothstep(0.50, 0.70, combined);
-    gl_FragColor.rgb += fleck * 0.08;
-    float dark = (1.0 - smoothstep(0.30, 0.50, combined)) * 0.03;
+    gl_FragColor.rgb += fleck * 0.08 * effectScale;
+    float dark = (1.0 - smoothstep(0.30, 0.50, combined)) * 0.03 * effectScale;
     gl_FragColor.rgb -= dark;
     // Wave-crest subtle highlights
     float crestFoam = smoothstep(0.07, 0.12, vWaveH);
     float crestNoise = wSurface(wPos * 3.0 + vec2(uTime * 0.08, -uTime * 0.06));
     crestFoam *= smoothstep(0.45, 0.65, crestNoise);
-    gl_FragColor.rgb += crestFoam * (0.04 + uRainIntensity * 0.08);
-    // Storm water darkening and desaturation
+    gl_FragColor.rgb += crestFoam * (0.04 + uRainIntensity * 0.08) * effectScale;
+    // Storm water darkening and desaturation (scale by scene brightness
+    // so stormWater target doesn't brighten dark nighttime water)
     float stormDarken = uRainIntensity * 0.25;
     gl_FragColor.rgb *= 1.0 - stormDarken;
-    vec3 stormWater = vec3(0.12, 0.14, 0.18);
+    vec3 stormWater = vec3(0.12, 0.14, 0.18) * effectScale;
     gl_FragColor.rgb = mix(gl_FragColor.rgb, stormWater, uRainIntensity * 0.3);
     // Rain ripple rings on water surface
     // highp required — sin-hash breaks at mediump on Quest with large world coords
@@ -268,7 +273,7 @@ waterMat.onBeforeCompile = (shader) => {
         rippleSum += ring;
       }
       rippleSum = min(rippleSum, 1.0);
-      gl_FragColor.rgb += rippleSum * uRainIntensity * 0.15;
+      gl_FragColor.rgb += rippleSum * uRainIntensity * 0.15 * effectScale;
     }
     // Shore fade — very tight to soften waterline without revealing chunk seams
     vec2 hmUV = (vWorldPos.xz - uHmapCenter) / uHmapSize + 0.5;
@@ -709,9 +714,28 @@ function onFrame() {
   if (groundMat?.userData?.wetnessUniform) {
     groundMat.userData.wetnessUniform.value = weather.groundWetness;
   }
+  // Drive ground water/foam darkening from scene brightness
+  if (groundMat?.userData?.waterDarkenUniform) {
+    const gFogLum = scene.fog.color.r * 0.3 + scene.fog.color.g * 0.5 + scene.fog.color.b * 0.2;
+    groundMat.userData.waterDarkenUniform.value = Math.min(1, gFogLum * 4);
+  }
   // Weather drives wave amplitude and rain on water
   waveAmplitudeUniform.value = weather.waveAmplitude;
   waterRainUniform.value = weather.rainIntensity;
+  // Blend water + foam toward scene fog color so they match the atmosphere.
+  // Use fog luminance as a proxy for scene brightness (encapsulates time + weather).
+  {
+    const fogLum = scene.fog.color.r * 0.3 + scene.fog.color.g * 0.5 + scene.fog.color.b * 0.2;
+    // fogLum ~0.01 at night, ~0.15 stormy day, ~0.4 clear day
+    const sceneBright = Math.min(1, fogLum * 4);
+    const fogBlend = 1 - sceneBright; // 0 = bright day, ~1 = dark night
+    waterMat.color.copy(baseWaterColor).lerp(scene.fog.color, fogBlend);
+    // Dim specular in dark/storms — prevents bright reflections at night
+    const specDim = Math.max(0.02, sceneBright);
+    waterMat.specular.setScalar(0.18 * specDim);
+    // Foam strips (MeshBasicMaterial — ignores scene lighting, needs manual tint)
+    vegPool.updateFoamAtmosphere(scene.fog.color, fogBlend);
+  }
 
   // Weather input: 1/2/3 on desktop, left trigger in VR
   if (input.weatherCycle !== 0) {

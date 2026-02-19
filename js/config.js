@@ -205,7 +205,7 @@ export const CONFIG = {
   WEATHER_STORM_CLOUD_COLOR: 0x303038,  // dark grey storm clouds
 
   // Rain particles
-  RAIN_PARTICLE_COUNT: 2000,
+  RAIN_PARTICLE_COUNT: 5000,
   RAIN_RADIUS: 25,                      // cylinder radius around player
   RAIN_HEIGHT: 20,                      // cylinder height
   RAIN_SPEED_MIN: 11,                   // m/s downward

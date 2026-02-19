@@ -5,6 +5,7 @@ import { CONFIG } from '../config.js';
 let groundMaterial = null;
 const groundTimeUniform = { value: 0 };
 const groundWetnessUniform = { value: 0 };
+const groundWaterDarkenUniform = { value: 1.0 }; // 1 = full brightness, 0 = black
 
 /**
  * Update ground material time (call each frame for animated foam).
@@ -25,6 +26,7 @@ export function getGroundMaterial() {
     });
     groundMaterial.userData.timeUniform = groundTimeUniform;
     groundMaterial.userData.wetnessUniform = groundWetnessUniform;
+    groundMaterial.userData.waterDarkenUniform = groundWaterDarkenUniform;
     groundMaterial.userData.sandTex = sandTex;
     groundMaterial.userData.dirtTex = dirtTex;
 
@@ -56,6 +58,7 @@ export function getGroundMaterial() {
       shader.uniforms.dirtThreshold = { value: CONFIG.GROUND_DIRT_THRESHOLD };
       shader.uniforms.uTime = groundMaterial.userData.timeUniform;
       shader.uniforms.uWetness = groundMaterial.userData.wetnessUniform;
+      shader.uniforms.uWaterDarken = groundMaterial.userData.waterDarkenUniform;
       shader.uniforms.sandMap = { value: groundMaterial.userData.sandTex };
       shader.uniforms.dirtMap = { value: groundMaterial.userData.dirtTex };
       shader.uniforms.subalpineColor = { value: new THREE.Color(CONFIG.SUBALPINE_COLOR.r, CONFIG.SUBALPINE_COLOR.g, CONFIG.SUBALPINE_COLOR.b) };
@@ -93,6 +96,7 @@ export function getGroundMaterial() {
          uniform float dirtThreshold;
          uniform float uTime;
          uniform float uWetness;
+         uniform float uWaterDarken;
          uniform sampler2D sandMap;
          uniform sampler2D dirtMap;
          uniform vec3 subalpineColor;
@@ -220,7 +224,8 @@ export function getGroundMaterial() {
 
          // At and below waterline: terrain matches rendered water appearance
          // Use lighter tint than base water color to account for specular/ambient
-         vec3 shallowWater = vec3(0.14, 0.25, 0.36);
+         // uWaterDarken scales these toward black at night/storms
+         vec3 shallowWater = vec3(0.14, 0.25, 0.36) * uWaterDarken;
          float waterMatch = 1.0 - smoothstep(-0.1, 0.35, distAbove);
          terrainColor = mix(terrainColor, shallowWater, waterMatch);
 
@@ -229,7 +234,7 @@ export function getGroundMaterial() {
          float fn2 = _vnoise(vWorldPos.xz * 7.0 + vec2(-uTime * 0.1, uTime * 0.14) + 50.0);
          float foamNoise = fn1 * 0.6 + fn2 * 0.4;
          float foamBand = smoothstep(-0.05, 0.1, distAbove) * (1.0 - smoothstep(0.1, 0.8, distAbove));
-         vec3 foamColor = vec3(0.55, 0.58, 0.55);
+         vec3 foamColor = vec3(0.55, 0.58, 0.55) * uWaterDarken;
          terrainColor = mix(terrainColor, foamColor, foamBand * foamNoise * 0.8);
 
          // Wet sand above foam — darken and cool-shift
