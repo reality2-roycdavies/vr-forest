@@ -64,6 +64,9 @@ export class WeatherSystem {
     this._lightningInterval = this._nextLightningInterval();
     this._flashValue = 0;
     this._thunderPending = [];
+    this._boltMesh = null;
+    this._boltOpacity = 0;
+    this._createBoltMesh(scene);
 
     // --- Rain audio state ---
     this._rainAudioActive = false;
@@ -179,6 +182,91 @@ export class WeatherSystem {
     this._rainPositions = positions;
     this._rainOpacities = opacities;
     this._rainSpeeds = speeds;
+  }
+
+  _createBoltMesh(scene) {
+    // Lightning bolt: jagged line from sky to ground
+    // Pre-allocate geometry with enough segments for a detailed bolt + branches
+    const MAX_SEGS = 40; // main bolt segments + branch segments
+    const positions = new Float32Array(MAX_SEGS * 2 * 3); // 2 verts per segment, 3 floats each
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setDrawRange(0, 0); // hidden until triggered
+
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xeeeeff,
+      transparent: true,
+      opacity: 1.0,
+      depthWrite: false,
+      fog: false,
+    });
+
+    this._boltMesh = new THREE.LineSegments(geo, mat);
+    this._boltMesh.frustumCulled = false;
+    this._boltMesh.visible = false;
+    this._boltPositions = positions;
+    scene.add(this._boltMesh);
+  }
+
+  _generateBolt(playerPos) {
+    // Pick a random direction and distance
+    const angle = Math.random() * Math.PI * 2;
+    const dist = CONFIG.LIGHTNING_BOLT_MIN_DIST +
+      Math.random() * (CONFIG.LIGHTNING_BOLT_MAX_DIST - CONFIG.LIGHTNING_BOLT_MIN_DIST);
+    const baseX = playerPos.x + Math.cos(angle) * dist;
+    const baseZ = playerPos.z + Math.sin(angle) * dist;
+    const groundY = (this._playerTerrainY || 0);
+    const topY = groundY + 60 + Math.random() * 30; // bolt starts 60-90m above ground
+    const botY = groundY + 1; // strike near ground
+
+    // Generate jagged main bolt (12–16 segments)
+    const mainSegs = 12 + Math.floor(Math.random() * 5);
+    const points = [{ x: baseX, y: topY, z: baseZ }];
+    const drift = 8; // max horizontal jitter per segment
+    for (let i = 1; i <= mainSegs; i++) {
+      const t = i / mainSegs;
+      const prev = points[i - 1];
+      points.push({
+        x: prev.x + (Math.random() - 0.5) * drift * (1 - t * 0.5),
+        y: topY - (topY - botY) * t,
+        z: prev.z + (Math.random() - 0.5) * drift * (1 - t * 0.5),
+      });
+    }
+
+    // Write main bolt as line segments
+    const pos = this._boltPositions;
+    let vi = 0;
+    for (let i = 0; i < mainSegs; i++) {
+      const a = points[i], b = points[i + 1];
+      pos[vi++] = a.x; pos[vi++] = a.y; pos[vi++] = a.z;
+      pos[vi++] = b.x; pos[vi++] = b.y; pos[vi++] = b.z;
+    }
+
+    // Add 2-4 short branches from random mid-points
+    const branchCount = 2 + Math.floor(Math.random() * 3);
+    for (let b = 0; b < branchCount && vi < pos.length - 12; b++) {
+      const srcIdx = 2 + Math.floor(Math.random() * (mainSegs - 3));
+      const src = points[srcIdx];
+      const branchSegs = 2 + Math.floor(Math.random() * 2);
+      let bx = src.x, by = src.y, bz = src.z;
+      for (let s = 0; s < branchSegs; s++) {
+        const nx = bx + (Math.random() - 0.5) * drift * 1.5;
+        const ny = by - (3 + Math.random() * 5);
+        const nz = bz + (Math.random() - 0.5) * drift * 1.5;
+        pos[vi++] = bx; pos[vi++] = by; pos[vi++] = bz;
+        pos[vi++] = nx; pos[vi++] = ny; pos[vi++] = nz;
+        bx = nx; by = ny; bz = nz;
+      }
+    }
+
+    // Update draw range and geometry
+    const vertCount = vi / 3;
+    this._boltMesh.geometry.setDrawRange(0, vertCount);
+    this._boltMesh.geometry.getAttribute('position').needsUpdate = true;
+    this._boltMesh.visible = true;
+    this._boltOpacity = 1.0;
+
+    return dist;
   }
 
   _updateShelterGrid(playerX, playerZ) {
@@ -339,10 +427,17 @@ export class WeatherSystem {
       Math.random() * (CONFIG.THUNDER_INTERVAL_MAX - CONFIG.THUNDER_INTERVAL_MIN);
   }
 
-  _updateLightning(delta) {
+  _updateLightning(delta, playerPos) {
     // Decay flash
     if (this._flashValue > 0) {
       this._flashValue = Math.max(0, this._flashValue - delta / CONFIG.LIGHTNING_FLASH_DECAY);
+    }
+
+    // Decay bolt visual (slightly slower than flash for lingering afterimage)
+    if (this._boltOpacity > 0) {
+      this._boltOpacity = Math.max(0, this._boltOpacity - delta / (CONFIG.LIGHTNING_FLASH_DECAY * 1.5));
+      this._boltMesh.material.opacity = this._boltOpacity;
+      if (this._boltOpacity <= 0) this._boltMesh.visible = false;
     }
 
     if (this.rainIntensity < 0.1 || (this._playerTerrainY || 0) >= CONFIG.SNOWLINE_START) {
@@ -355,16 +450,22 @@ export class WeatherSystem {
       this._lightningTimer = 0;
       this._lightningInterval = this._nextLightningInterval();
 
-      // Flash
-      this._flashValue = 0.8 + Math.random() * 0.2;
+      // Generate visible bolt and get distance
+      let boltDist = 500; // fallback
+      if (playerPos) boltDist = this._generateBolt(playerPos);
 
-      // Schedule thunder sound
-      const thunderDelay = CONFIG.THUNDER_DELAY_MIN +
-        Math.random() * (CONFIG.THUNDER_DELAY_MAX - CONFIG.THUNDER_DELAY_MIN);
+      // Flash brightness scales with proximity
+      const flashScale = clamp01(1.2 - boltDist / 800);
+      this._flashValue = (0.6 + Math.random() * 0.4) * flashScale;
+
+      // Thunder delay based on distance (speed of sound ≈ 343 m/s)
+      const thunderDelay = boltDist / 343;
+      // Volume inversely related to distance
+      const volume = clamp01(1.1 - boltDist / 1000);
       this._thunderPending.push({
         delay: thunderDelay,
-        volume: 0.6 + Math.random() * 0.4,
-        isClose: thunderDelay < 0.8,
+        volume: volume,
+        isClose: boltDist < 350,
       });
     }
 
@@ -910,7 +1011,7 @@ export class WeatherSystem {
     this._updateDerivedParams();
     this._updateGroundWetness(delta);
     this._updateRainParticles(delta, playerPos, windDir);
-    this._updateLightning(delta);
+    this._updateLightning(delta, playerPos);
   }
 
   /**

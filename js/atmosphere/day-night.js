@@ -1182,7 +1182,7 @@ export class DayNightSystem {
     this._updateClouds(playerPos, palette, elevation, delta || 0.016, weather);
 
     // --- Shooting stars ---
-    this._updateShootingStars(playerPos, elevation, delta || 0.016);
+    this._updateShootingStars(playerPos, elevation, delta || 0.016, weather);
   }
 
   _updateSkyColors(topColor, bottomColor, sceneFogColor, playerPos, weather) {
@@ -1280,9 +1280,9 @@ export class DayNightSystem {
     }
   }
 
-  _updateShootingStars(playerPos, elevation, delta) {
-    // Only at night
-    if (elevation > 0.05) {
+  _updateShootingStars(playerPos, elevation, delta, weather) {
+    // Only at night with clear skies
+    if (elevation > 0.05 || (weather && weather.starDimming > 0.5)) {
       // Return active ones to pool
       for (const s of this.shootingStars) {
         s.mesh.visible = false;

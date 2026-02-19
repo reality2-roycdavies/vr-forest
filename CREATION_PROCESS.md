@@ -2,7 +2,7 @@
 
 ## How This Project Was Built
 
-This project was built over four days (10–13 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
+This project was built over seven days (10–20 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
 
 The full conversation transcripts (Claude Code JSONL format) are available in the [`transcripts/`](transcripts/) directory — 13 sessions totalling ~53 MB of raw human-AI dialogue.
 
@@ -410,14 +410,153 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 
 ---
 
+## Day 5: Mountains and Snow (14 February 2026)
+
+Day 5 extended the world vertically — adding mountain chains, altitude-based biomes, and snow physics.
+
+### Phase 31: Mountain Chains
+
+The terrain was enriched with mountain chains using additive ridge noise — the inverse technique of stream carving. Where streams use ridge noise to dig *down* along zero-crossings, mountains use it to push terrain *up*. Domain warping with a separate noise layer creates meandering ridgelines rather than straight walls.
+
+Key design decisions:
+- **Smooth parabolic peaks** rather than knife-edge ridges: `1 - raw²` instead of `1 - |raw|`
+- **Detail noise modulation**: A second noise layer modulates the ridge height, so peaks vary organically
+- **Amplitude modulation**: Large-scale noise makes some peaks tall and others modest
+- **Threshold masking**: Only areas where the blended ridge value exceeds a threshold become mountains, creating distinct peaks rather than uniformly raised terrain
+- **Spawn suppression**: Mountains fade in 60–100m from the origin so the player always starts in a forest clearing
+- **Foothills**: Rolling hills scale with proximity to mountain ridges, creating natural transitions
+- **Valley depressions**: Terrain between ridges is pushed *down*, creating basins that fill with water to form mountain lakes
+
+### Phase 32: Altitude Biomes
+
+Five altitude zones with smooth colour transitions were added to the ground shader:
+1. **Forest** (below 10m): Normal green terrain with full vegetation
+2. **Subalpine** (10–16m): Darker forest green, trees still present but starting to thin
+3. **Treeline** (16–20m): Trees scale down progressively, tussock/tan ground colours emerge
+4. **Alpine** (20–24m): Grey-brown rock, no trees or vegetation
+5. **Snow** (above 24m): Bright white snow with subtle emissive bloom (colour values > 1.0)
+
+Tree placement respects altitude: trees shrink near the treeline and vanish above it. Vegetation (grass, ferns, flowers) cuts off above the subalpine zone. Rocks appear with increasing density at higher altitudes.
+
+### Phase 33: Snow and Ski Physics
+
+Above the snowline, movement physics change:
+- Reduced friction creates a sliding/skiing feel on slopes
+- Downhill momentum is preserved, creating natural gliding
+- The player can ski down mountain slopes and gradually decelerate on flat snow
+
+### Phase 34: Altitude Weather
+
+Weather effects respond to altitude:
+- Rain transitions to snow particles above the snowline
+- Fog takes on a white tint at altitude
+- Wind intensifies with elevation
+- Blizzard conditions at high altitude during storms: reduced visibility, white-tinted everything
+
+---
+
+## Day 6: Forest Floor and Shelter (15–17 February 2026)
+
+Day 6 added ground-level detail and weather interaction with the forest canopy.
+
+### Phase 35: Fallen Logs and Stumps
+
+The forest floor gained procedural fallen logs and tree stumps:
+- **Fallen logs**: Cylindrical geometry with bark texture, random length and radius, placed at terrain-following angles with rotation based on a noise field
+- **Tree stumps**: Short cylinders with concentric ring cross-sections on top, random height and radius
+- Both use noise-driven placement with configurable grid spacing and density threshold
+- A dedicated noise instance (logNoise2D) ensures placement is deterministic and independent of other systems
+
+### Phase 36: Altitude Audio
+
+Audio was extended to respond to altitude:
+- Cricket and bird sounds fade above the treeline — these are forest insects and birds, not alpine ones
+- Mountain wind intensifies with altitude, creating an increasingly exposed feeling at high elevations
+- Footstep sounds transition to rock/snow surface types based on altitude zone
+
+### Phase 37: Rain Canopy Sheltering
+
+Rain particles now interact with the tree canopy:
+- Under dense tree cover, most rain particles are blocked — the canopy acts as a natural umbrella
+- Occasional drips still fall through gaps, maintaining a sense of the rain continuing above
+- The sheltering effect is based on the tree density noise field at each particle's position
+- This creates a noticeable and satisfying difference between walking in the open during rain (heavy rain) and walking under trees (mostly dry with occasional drips)
+
+---
+
+## Day 7: Real Stars and Polish (20 February 2026)
+
+Day 7 replaced placeholder stars with astronomically accurate constellations and polished several systems.
+
+### Phase 38: Real Constellation Stars
+
+The 300 random white dots were replaced with 438 real stars from the HYG stellar database (magnitude ≤ 4.5), accurately positioned using J2000 equatorial coordinates:
+
+**Star catalog encoding**: Each star is packed into 5 bytes — 2 bytes for right ascension (uint16, 0–24h mapped to 0–65535), 2 bytes for declination (uint16, -90°–+90° mapped to 0–65535), and 1 byte for visual magnitude (uint8). The entire catalog is stored as a base64 string (~3KB) and decoded once at startup.
+
+**Equatorial placement**: Stars are placed on a sphere in equatorial coordinates at startup — `cos(dec)*cos(ra)` on X, `sin(dec)` on Y, `-cos(dec)*sin(ra)` on Z. This is a one-time O(N) operation.
+
+**O(1) rotation per frame**: Rather than computing altitude-azimuth for each star every frame, the entire Points mesh is rotated by a single Euler rotation derived from Local Sidereal Time and observer latitude. The Euler order 'ZYX' rotates: Y by `π - LST` (hour angle rotation), then Z by `-(π/2 - latitude)` (tilt the celestial pole to correct elevation). This aligns the celestial pole with the observer's North and rotates the sky at the correct sidereal rate.
+
+**ShaderMaterial**: A custom vertex/fragment shader handles per-star brightness and size (based on magnitude), soft circular point rendering, and subtle GPU-driven twinkling using a time uniform and per-vertex phase.
+
+**The compass alignment bug**: The initial Euler rotation used 'YXZ' order which tilted the celestial pole toward East (+Z) instead of North (+X). The scene's coordinate convention is +X = North, +Z = East, Y = Up — matching the azimuth system where azimuth 0 maps to cos(0) on X. Switching to 'ZYX' with the Z rotation carrying the latitude tilt fixed the alignment. The Southern Cross now correctly appears in the southern sky from Auckland.
+
+### Phase 39: Moon Phase Stability
+
+The moon's phase shadow was shifting when the camera rotated — the illumination direction was being projected onto the camera's right/up axes, which change with head movement. The fix was to project the sun-to-moon vector onto the moon disc's own local coordinate frame (`moonMesh.matrixWorld.extractBasis()`), so the phase shadow remains stable regardless of viewing angle.
+
+### Phase 40: Deep Night Sky
+
+The night sky was too bright after earlier fog tweaks. A new `deepNight` palette was added with near-black sky colours (0x030508 top, 0x020304 bottom) and progressive darkening from sun elevation -0.1 to -0.35, so the sky deepens convincingly as night progresses rather than staying at a single "night" brightness.
+
+### Phase 41: Terrain-Following Birds
+
+Bird flocks were lowered from 55–80m to 15–35m altitude and given terrain awareness:
+- Birds follow the terrain height with a minimum clearance of 12m above ground
+- Mountain avoidance: when flying over mountainous terrain (getMountainFactor > 0.15), flocks speed up their orbit to pass through quickly rather than lingering
+- Crow caw audio positions also use terrain-aware altitude
+
+### Phase 42: Minimap and Firefly Fixes
+
+**Minimap North alignment**: The minimap's North indicator was pointing along -Z, but the astronomical coordinate system uses +X as North (azimuth 0 = cos(0) on X axis). The N marker was corrected to align with +X.
+
+**Minimap pitch stability**: The minimap was shrinking when the player looked up or down because the camera direction vector's XZ components diminish as the Y component grows. Fixed by normalising the camera direction in the XZ plane before computing the minimap projection.
+
+**Fireflies over water/snow**: Fireflies were appearing over water and above the treeline. Added terrain height checks to exclude fireflies from water (below shore level) and high-altitude zones (above treeline), with respawn logic to reposition excluded fireflies to valid forest locations.
+
+---
+
+## Thematic Analysis (continued)
+
+### The Vertical Dimension
+
+Days 5–7 represent a shift from horizontal world-building (infinite terrain, water, weather) to vertical enrichment. Mountains added altitude as a gameplay axis — the higher you climb, the more the world changes: vegetation thins, sounds shift, weather intensifies, physics change. This creates a sense of journey and discovery that the flat forest floor couldn't provide alone.
+
+### Astronomical Accuracy as Immersion
+
+The real constellation star system is emblematic of a design philosophy that emerged throughout the project: *accuracy enhances immersion even when most users won't consciously notice it*. Most people won't identify Orion or the Southern Cross in the VR night sky. But the *pattern* of real star distributions — clusters here, sparse patches there, the Milky Way's density gradient — creates a subtly more convincing sky than random dots ever could. The brain recognises "this looks right" without knowing why.
+
+The same principle drove the astronomical moon positioning, real-time sun elevation, and now sidereal star rotation. None of these are gameplay features. All of them contribute to the feeling of being in a *real place* rather than a simulation.
+
+### Coordinate System Alignment
+
+The compass alignment bug (celestial pole tilting East instead of North) revealed a recurring challenge in 3D development: different systems use different coordinate conventions, and misalignment between them creates subtle but persistent wrongness. The scene used +X = North for azimuth calculations (sun, moon), but the minimap used -Z as North, and the initial star rotation assumed Y-up with an arbitrary forward. Getting all three systems — astronomical coordinates, scene coordinates, and UI — to agree required careful analysis of each transformation chain.
+
+### Shelter and Interaction
+
+Rain canopy sheltering represents a shift from passive atmosphere to interactive environment. Previously, weather was something that happened *to* the player uniformly. Now the forest itself provides shelter — walking under trees during rain is noticeably different from walking in the open. This creates emergent gameplay: seeking shelter under trees during a storm, finding exposed ridgelines windier and snowier, discovering that mountain valleys trap water. The world isn't just scenery; it responds to where you are in it.
+
+---
+
 ## By the Numbers
 
-- **Development time**: ~35 hours over four days
-- **Conversation sessions**: 13+ active sessions (transcripts in [`transcripts/`](transcripts/))
-- **User feedback messages**: ~350+
-- **Major features**: 16+ distinct systems
-- **Lines of JavaScript**: ~10,900
-- **JavaScript modules**: 25
+- **Development time**: ~50 hours over seven days
+- **Conversation sessions**: 17+ active sessions (transcripts in [`transcripts/`](transcripts/))
+- **User feedback messages**: ~450+
+- **Major features**: 20+ distinct systems
+- **Lines of JavaScript**: ~12,100
+- **JavaScript modules**: 26
 - **External dependencies**: 2 (Three.js, simplex-noise, both from CDN)
 - **External art assets**: 1 (moon photograph from Wikipedia, with procedural fallback)
 - **External audio assets**: 1 (morepork.mp3, trimmed from a recording)
@@ -429,6 +568,7 @@ This pattern — broad strokes first, then increasingly fine adjustments — mir
 - **Day 3 most-iterated**: Water edge effects (~12 iterations across caustics, foam, transparency, and heightmap communication)
 - **Day 4 most-iterated**: Cloud diversity (~10 iterations across textures, scaling, billboard vs plane, and the Z-scale bug)
 - **Day 4 most-iterated**: Sky/fog colour convergence (~7 iterations across weather×time-of-day matrix)
+- **Day 7 most-iterated**: Star compass alignment (~4 iterations tracing coordinate conventions across astronomical, scene, and UI systems)
 
 ---
 
@@ -451,3 +591,4 @@ The raw Claude Code conversation transcripts are in [`transcripts/`](transcripts
 | `day4-01-cloud-diversity.jsonl` | 4 | Cloud archetypes, textures, billowing animation |
 | `day4-02-weather-system.jsonl` | 4 | Weather architecture, rain particles, thunder, lightning |
 | `day4-03-weather-polish-stormy-water.jsonl` | 4 | Stormy water, rain audio, twilight fog, sun/moon cloud fade |
+| *(Day 5–7 transcripts pending conversion)* | 5–7 | Mountains, snow, fallen logs, altitude audio, rain sheltering, real stars, polish |

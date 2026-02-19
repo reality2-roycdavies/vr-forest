@@ -732,12 +732,15 @@ function onFrame() {
     // fogLum ~0.01 at night, ~0.15 stormy day, ~0.4 clear day
     const sceneBright = Math.min(1, fogLum * 4);
     const fogBlend = 1 - sceneBright; // 0 = bright day, ~1 = dark night
-    waterMat.color.copy(baseWaterColor).lerp(scene.fog.color, fogBlend);
+    // Also blend water toward fog during overcast so it matches the greyed-out landscape
+    const weatherFog = weather.cloudDarkness * 0.5; // 0 sunny, ~0.33 cloudy, ~0.45 rainy
+    const totalFogBlend = Math.min(1, fogBlend + weatherFog);
+    waterMat.color.copy(baseWaterColor).lerp(scene.fog.color, totalFogBlend);
     // Dim specular in dark/storms — prevents bright reflections at night
     const specDim = Math.max(0.02, sceneBright);
     waterMat.specular.setScalar(0.18 * specDim);
     // Foam strips (MeshBasicMaterial — ignores scene lighting, needs manual tint)
-    vegPool.updateFoamAtmosphere(scene.fog.color, fogBlend);
+    vegPool.updateFoamAtmosphere(scene.fog.color, totalFogBlend);
   }
 
   // Weather input: 1/2/3 on desktop, left trigger in VR

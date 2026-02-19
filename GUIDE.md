@@ -213,7 +213,7 @@ This project has no 3D models, no pre-made textures (except one moon photograph)
 
 - **No asset pipeline**: No modelling tools, no texture editing, no sound recording. Just code.
 - **Infinite variety**: Procedural content can vary endlessly. Every tree is slightly different. The terrain extends forever.
-- **Small download**: The entire project is ~200KB of JavaScript. A single 3D tree model might be 500KB.
+- **Small download**: The entire project is ~450KB of JavaScript. A single 3D tree model might be 500KB.
 - **AI-friendly**: An AI assistant can write code to generate a tree, but it cannot create a 3D model file.
 
 ### Noise Functions

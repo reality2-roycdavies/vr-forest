@@ -2,7 +2,7 @@
 
 A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — two external assets (morepork owl call, moon photograph), everything else procedurally generated.
 
-This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over four days.
+This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over seven days.
 
 **Try it now:** [https://reality2-roycdavies.github.io/vr-forest/](https://reality2-roycdavies.github.io/vr-forest/)
 
@@ -34,6 +34,10 @@ Human-AI conversation logs from each development session (readable markdown, con
 | [Day 4, Session 1](transcripts/day4-01-cloud-diversity.md) | Cloud diversity, terrain shader refactor, wildlife legs |
 | [Day 4, Session 2](transcripts/day4-02-weather-system.md) | Weather system — architecture, rain particles, thunder, sky/fog tuning |
 | [Day 4, Session 3](transcripts/day4-03-weather-polish-stormy-water.md) | Weather polish — stormy water, rain audio, twilight fog, sun/moon cloud fade |
+| Day 5 | Mountain chains, snow/ski physics, altitude weather, performance optimisations |
+| Day 6 | Fallen logs/stumps, altitude audio, blizzard snow, fog tint |
+| Day 6, Session 2 | Rain canopy sheltering — rain blocked under trees with occasional drips |
+| Day 7 | Real constellation stars, moon phase fix, terrain-following birds, firefly/minimap fixes |
 
 ## Features
 
@@ -41,6 +45,9 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Seamless chunked terrain streaming around the player (32m chunks, 32x32 vertices, 5-chunk load radius)
 - Multi-octave simplex noise with configurable persistence, lacunarity, and seed
 - Stream channels carved by domain-warped ridge noise creating natural waterways
+- Mountain chains via additive ridge noise with domain warping, foothills, and valley depressions
+- Altitude biomes: subalpine forest, tussock, alpine rock, snow — with smooth colour transitions
+- Valley lakes formed by terrain depression between mountain ridges
 - Shader-based ground colouring with height gradients, shore transitions, and dirt patches under trees
 - Procedural grass texture with blade strokes, soil speckles, and pebble details
 
@@ -76,10 +83,14 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Sun rendered as soft-glow sprite
 - Astronomically-positioned moon with simplified Meeus lunar ephemeris (~1 degree accuracy)
 - Real moon photograph with phase shader: reconstructed sphere normals, smooth terminator, earthshine
-- Moon illumination direction computed from actual scene sun-to-moon geometry
+- Moon illumination direction computed from moon disc local axes (stable regardless of camera rotation)
 - Behind clouds: photo disc hidden, soft glow sprite shows hazy brightness through overcast
 - Subtle moonlight shadows at night via DirectionalLight crossfade (cool blue-white tint)
-- 300 stars visible at night; occasional shooting stars
+- 438 real constellation stars with accurate J2000 equatorial positions (packed binary catalog)
+- Stars rotate correctly for observer's latitude, longitude, and local sidereal time — Southern Cross visible from southern hemisphere, constellations track across the sky
+- Custom ShaderMaterial with per-star brightness/size, soft circular points, and subtle GPU twinkling
+- Progressive night sky darkening to near-black at deep night
+- Occasional shooting stars
 - Diverse cloud system: cumulus puffs, wispy cirrus bands, flat haze layers, and small puffy clusters at stratified altitudes with gentle billowing animation and wind-aligned drift
 - Time-of-day cloud colour tinting (white → sunset orange → dark night)
 - Dynamic fog distance (distant during day, closes in at night for darkness effect)
@@ -91,10 +102,11 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Smooth auto-cycling transitions with configurable hold times, or manual control via keyboard (1/2/3) and VR right A button
 - URL override for testing: `?weather=rainy`, `?weather=cloudy`, `?weather=0.5`
 - **Cloudy**: dark overcast sky, thick grey clouds, dimmed sunlight, faded shadows, reduced visibility
-- **Rainy**: 2000-particle rain streaks (custom ShaderMaterial with hair-thin vertical streaks), thunder and lightning, ground wetness with hysteresis
+- **Rainy**: 2000-particle rain streaks (custom ShaderMaterial with hair-thin vertical streaks), thunder and lightning, ground wetness with hysteresis, rain canopy sheltering (reduced rain under trees with occasional drips)
 - **Thunder**: 5-layer procedural audio (initial crack, deep boom, mid-body, rolling echoes, sub-bass tail) routed through a procedural ConvolverNode reverb impulse response for natural 6–8 second reverb tail
 - **Rain audio**: 4-layer filtered noise (wash 800 Hz, body 1600 Hz with gusting LFO, patter 3200 Hz, sizzle 6000 Hz+ with independent LFO) plus HRTF-spatialised 3D drip sounds (single drips, double drips, leaf/puddle splashes) scattered around the player
 - **Lightning**: Timer-based flash spikes with delayed thunder (0.3–2.5s for distance feel)
+- **Blizzard**: Rain converts to snow above the snowline with reduced visibility and white-tinted fog
 - Time-of-day aware: night rain is near-black, night cloudy hides stars/moon entirely, twilight storms are moody
 - All systems respond to weather: fog distance, sky colours, cloud opacity/darkness, wind strength, wave amplitude, ground wetness (shader darkening + blue shift), firefly suppression, bird chirp reduction
 - Weather HUD for desktop and VR
@@ -106,10 +118,11 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Weather-driven: gentle breeze in sunny, moderate in cloudy, strong gusts in rainy
 
 ### Bird Flocks
-- 5 flocks of 8 birds orbiting at 18–40m altitude
+- 5 flocks of 8 birds orbiting at 15–35m altitude with terrain following
 - Swept-wing body geometry with fat diamond body
 - Crow-like flight: slow flap phase then extended glide with wings held up
 - Per-bird drift within flock for organic scattered movement
+- Mountain avoidance: flocks speed up orbit when over mountainous terrain
 - Crow caw audio: layered sawtooth + square oscillators, bandpass filtered, spatialised via HRTF
 - Daytime only — birds disappear at night
 
@@ -125,16 +138,24 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Power/score HUD for desktop and VR
 - Sprint mechanic (shift/grip) drains power over time
 
+### Fallen Logs and Stumps
+- Procedural fallen logs with bark texture, angled placement on terrain slopes
+- Tree stumps with concentric ring cross-sections
+- Noise-driven placement with configurable density and spacing
+
 ### Minimap
 - Rotating overhead minimap showing terrain, water, trees, and player
+- Compass North indicator aligned with astronomical coordinate system (+X = North)
+- Stable rendering regardless of camera pitch (XZ-normalised direction)
 - Adapts for both desktop (corner overlay) and VR (wrist-mounted)
 
 ### Fireflies
-- 30 subtle glowing particles at night
+- 30 subtle glowing particles at night in forested areas only
 - Two-layer rendering: dim glow halo + bright core point
 - Individual pulse timing, drift orbits, and vertical bob
 - Yellow and green colour variants with additive blending
 - Fade in at sunset, disappear at sunrise
+- Excluded from water, shore, and above-treeline zones (no fireflies on snow)
 
 ### Immersive Audio (All Procedural)
 - **Spatial 3D audio** via Web Audio API PannerNodes (HRTF)
@@ -144,6 +165,7 @@ Human-AI conversation logs from each development session (readable markdown, con
 - **Crickets**: 4-voice chorus, frequency 4200–5400 Hz, active at dusk/night only
 - **Morepork (NZ owl)**: Single distant calls from random directions at night (30–90 second intervals)
 - **Water ambient**: Rhythmic lapping waves near water bodies (bandpass-filtered noise with pulse envelope, wind ducking)
+- **Altitude audio**: Mountain wind intensifies at altitude; cricket and bird sounds fade above treeline
 - **Wind**: Continuous filtered noise backdrop (auto-ducked near water)
 
 ### Movement & Physics
@@ -153,6 +175,7 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Jumping with gravity (4.0 m/s up, 9.8 m/s² down)
 - Tree trunk and rock collision with slide-along
 - Rock surface standing (3 size classes with different heights)
+- Snow/ski physics: reduced friction and sliding on snowy slopes above the snowline
 - Terrain height following with smooth lerp
 - Walk bobbing synchronised to footstep audio (camera-space in VR to avoid world-object oscillation)
 
@@ -212,21 +235,21 @@ Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS 
 - **Rendering**: WebGL 2 with WebXR
 - **Textures**: All procedurally generated on HTML5 Canvas (moon photo loaded externally with procedural fallback)
 - **Geometry**: All built from Three.js primitives (no 3D models)
-- **Lines of code**: ~10,900 lines of JavaScript across 25 modules
+- **Lines of code**: ~12,100 lines of JavaScript across 26 modules
 
 ## Project Structure
 
 ```
 js/
 ├── main.js              # Scene bootstrap, render loop, system orchestration
-├── config.js            # All tunable constants (~140 parameters)
+├── config.js            # All tunable constants (~170 parameters)
 ├── vr-setup.js          # WebXR renderer, camera rig, controllers
 ├── input.js             # VR gamepad + keyboard/mouse input
 ├── movement.js          # Player locomotion, physics, collision
 ├── terrain/
 │   ├── chunk-manager.js # Dynamic chunk loading/unloading
 │   ├── chunk.js         # Per-chunk mesh + object placement
-│   ├── noise.js         # Seeded simplex noise (8 instances)
+│   ├── noise.js         # Seeded simplex noise (13 instances)
 │   ├── terrain-generator.js  # Height, colour, normal generation
 │   └── ground-material.js    # Shared ground material + texture
 ├── forest/
@@ -238,8 +261,9 @@ js/
 │   └── wildlife.js      # Bear, lion, Wally peek encounters
 └── atmosphere/
     ├── day-night.js     # Sun/moon/stars, sky dome, palettes, clouds
+    ├── star-catalog.js  # 438 real stars (mag ≤ 4.5) packed as binary catalog
     ├── weather.js       # Weather state machine, rain particles, thunder, lightning
     ├── audio.js         # All procedural audio (footsteps, crickets, morepork, etc.)
-    ├── fireflies.js     # Night-time glowing particles
+    ├── fireflies.js     # Night-time glowing particles (forest areas only)
     └── wind.js          # Vertex shader wind displacement
 ```

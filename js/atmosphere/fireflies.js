@@ -121,9 +121,9 @@ export class FireflySystem {
       const wx = playerPos.x + f.x + dx;
       const wz = playerPos.z + f.z + dz;
 
-      // Hide fireflies over water — place off-screen if terrain is submerged
+      // Hide fireflies over water or above treeline (no fireflies on snow/alpine)
       const groundY = getTerrainHeight(wx, wz);
-      if (groundY < CONFIG.SHORE_LEVEL) {
+      if (groundY < CONFIG.SHORE_LEVEL || groundY > CONFIG.TREELINE_START) {
         glowPos.setXYZ(i, 0, -1000, 0);
         corePos.setXYZ(i, 0, -1000, 0);
         continue;
@@ -166,9 +166,9 @@ export class FireflySystem {
         f.x = (Math.random() - 0.5) * SPREAD;
         f.z = (Math.random() - 0.5) * SPREAD;
       }
-      // Reposition if over water
+      // Reposition if over water or above treeline
       const gY = getTerrainHeight(playerPos.x + f.x, playerPos.z + f.z);
-      if (gY < CONFIG.SHORE_LEVEL) {
+      if (gY < CONFIG.SHORE_LEVEL || gY > CONFIG.TREELINE_START) {
         f.x = (Math.random() - 0.5) * SPREAD;
         f.z = (Math.random() - 0.5) * SPREAD;
       }
