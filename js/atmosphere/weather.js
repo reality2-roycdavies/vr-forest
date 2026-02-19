@@ -10,7 +10,7 @@ const _weatherParam = new URLSearchParams(window.location.search).get('weather')
 const _weatherLock = _weatherParam !== null ? _parseWeatherParam(_weatherParam) : null;
 
 function _parseWeatherParam(val) {
-  const named = { sunny: 0, clear: 0, cloudy: 1, overcast: 1, rainy: 2, rain: 2, storm: 2 };
+  const named = { sunny: 0, clear: 0, cloudy: 1, overcast: 1, rainy: 2, rain: 2, storm: 2, stormy: 2 };
   if (named[val.toLowerCase()] !== undefined) return named[val.toLowerCase()];
   const num = parseFloat(val);
   return isNaN(num) ? null : Math.max(0, Math.min(2, num));
@@ -106,21 +106,27 @@ export class WeatherSystem {
       uniforms: {
         uColor: { value: new THREE.Color(0.7, 0.75, 0.85) },
         uSnowBlend: { value: 0.0 },
+        uStormIntensity: { value: 0.0 },
       },
       vertexShader: `
         attribute float aOpacity;
         uniform float uSnowBlend;
+        uniform float uStormIntensity;
         varying float vOpacity;
         varying float vDepth;
         varying float vSnow;
+        varying float vStorm;
         void main() {
           vOpacity = aOpacity;
           vSnow = uSnowBlend;
+          vStorm = uStormIntensity;
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
           vDepth = -mvPos.z;
-          // Rain: tall thin streaks; Snow: smaller, softer dots
+          // Rain: tall thin streaks; Snow: soft dots, bigger in storms
           float rainSize = clamp(90.0 / max(1.0, -mvPos.z), 2.0, 45.0);
-          float snowSize = clamp(40.0 / max(1.0, -mvPos.z), 1.5, 18.0);
+          float snowBase = 40.0 + uStormIntensity * 30.0;
+          float snowMax = 18.0 + uStormIntensity * 14.0;
+          float snowSize = clamp(snowBase / max(1.0, -mvPos.z), 1.5, snowMax);
           gl_PointSize = mix(rainSize, snowSize, uSnowBlend);
           gl_Position = projectionMatrix * mvPos;
         }
@@ -130,6 +136,7 @@ export class WeatherSystem {
         varying float vOpacity;
         varying float vDepth;
         varying float vSnow;
+        varying float vStorm;
         void main() {
           vec2 c = gl_PointCoord - vec2(0.5);
           // Rain: thin vertical streak (x*80, y*0.8)
@@ -140,9 +147,12 @@ export class WeatherSystem {
           if (dist > 1.0) discard;
           // Snow: softer falloff for fluffy look
           float core = exp(-dist * mix(3.0, 1.5, vSnow));
-          // Distance fade
-          float distFade = 1.0 - smoothstep(8.0, 22.0, vDepth);
-          float alpha = core * vOpacity * distFade * mix(0.7, 0.5, vSnow);
+          // Distance fade — see further in blizzard
+          float farPlane = mix(22.0, 30.0, vStorm * vSnow);
+          float distFade = 1.0 - smoothstep(8.0, farPlane, vDepth);
+          // Snow more opaque in storms
+          float snowAlpha = mix(0.5, 0.85, vStorm);
+          float alpha = core * vOpacity * distFade * mix(0.7, snowAlpha, vSnow);
           gl_FragColor = vec4(uColor, alpha);
         }
       `,
@@ -162,10 +172,6 @@ export class WeatherSystem {
   }
 
   _updateRainParticles(delta, playerPos, windDir) {
-    const shouldShow = this.rainIntensity > 0.01;
-    this._rainMesh.visible = shouldShow;
-    if (!shouldShow) return;
-
     // Snow zone: blend rain→snow based on altitude
     const snowStart = CONFIG.SNOWLINE_START;
     const treelineY = CONFIG.TREELINE_START;
@@ -173,21 +179,39 @@ export class WeatherSystem {
     // snowBlend: 0 at treeline, 1 at snowline (fully snow)
     const snowBlend = clamp01((terrainY - treelineY) / (snowStart - treelineY));
 
+    // Light gentle snow at altitude during cloudy weather (even without rain)
+    const altitudeSnow = snowBlend * clamp01(this.cloudDensity) * 0.15;
+    const effectivePrecip = Math.max(this.rainIntensity, altitudeSnow);
+
+    const shouldShow = effectivePrecip > 0.01;
+    this._rainMesh.visible = shouldShow;
+    if (!shouldShow) return;
+
     const count = CONFIG.RAIN_PARTICLE_COUNT;
-    const activeCount = Math.floor(count * this.rainIntensity);
+    // More particles in snow zone — blizzard at altitude during storms
+    const stormFactor = clamp01(this.rainIntensity);
+    const snowBoost = 1 + snowBlend * (3.0 + stormFactor * 3.0);
+    const activeCount = Math.min(count, Math.floor(count * effectivePrecip * snowBoost));
     const radius = CONFIG.RAIN_RADIUS;
     const height = CONFIG.RAIN_HEIGHT;
     const positions = this._rainPositions;
     const opacities = this._rainOpacities;
     const speeds = this._rainSpeeds;
 
-    // Wind sideways push — more drift for snow
-    const windScale = lerp(1.0, 2.5, snowBlend);
+    // Wind sideways push — much stronger in snow storms (blizzard gusts)
+    const windScale = lerp(1.0, 4.0 + stormFactor * 6.0, snowBlend);
     const windX = windDir ? windDir.x * CONFIG.RAIN_WIND_INFLUENCE * this.windMultiplier * windScale : 0;
     const windZ = windDir ? windDir.y * CONFIG.RAIN_WIND_INFLUENCE * this.windMultiplier * windScale : 0;
 
-    // Snow falls much slower — small floaty flakes
-    const speedScale = lerp(1.0, 0.12, snowBlend);
+    // Snow falls slower — gentle in cloudy, driven harder and more horizontal in storms
+    const stormSpeed = lerp(0.12, 0.4, stormFactor);
+    const speedScale = lerp(1.0, stormSpeed, snowBlend);
+
+    // Time-based swirl — turbulent vortex motion in blizzards
+    if (!this._swirlTime) this._swirlTime = 0;
+    this._swirlTime += delta;
+    const swirlT = this._swirlTime;
+    const swirlStrength = snowBlend * stormFactor * 3.5;
 
     for (let i = 0; i < count; i++) {
       if (i >= activeCount) {
@@ -200,10 +224,22 @@ export class WeatherSystem {
         opacities[i] = 0.5 + Math.random() * 0.5;
       }
 
-      // Move down + wind push (snow drifts gently sideways — floaty)
-      positions[i * 3] += (windX + snowBlend * Math.sin(positions[i * 3 + 1] * 0.4 + i * 0.7) * 0.5) * delta;
+      const px = positions[i * 3];
+      const py = positions[i * 3 + 1];
+      const pz = positions[i * 3 + 2];
+
+      // Swirling vortex: each particle gets unique phase from index + position
+      const phase = i * 1.37 + py * 0.3;
+      const swirlX = Math.sin(swirlT * 1.7 + phase) * swirlStrength;
+      const swirlZ = Math.cos(swirlT * 1.3 + phase * 0.8) * swirlStrength;
+      // Secondary smaller swirl for turbulence
+      const turbX = Math.sin(swirlT * 3.1 + i * 0.53) * swirlStrength * 0.4;
+      const turbZ = Math.cos(swirlT * 2.7 + i * 0.71) * swirlStrength * 0.4;
+
+      // Move down + wind + swirl
+      positions[i * 3] += (windX + swirlX + turbX + snowBlend * Math.sin(py * 0.4 + i * 0.7) * 0.5) * delta;
       positions[i * 3 + 1] -= speeds[i] * speedScale * delta;
-      positions[i * 3 + 2] += (windZ + snowBlend * Math.cos(positions[i * 3 + 1] * 0.5 + i * 1.1) * 0.5) * delta;
+      positions[i * 3 + 2] += (windZ + swirlZ + turbZ + snowBlend * Math.cos(py * 0.5 + i * 1.1) * 0.5) * delta;
 
       // Respawn at top if below ground or too far from center
       const dx = positions[i * 3];
@@ -226,6 +262,7 @@ export class WeatherSystem {
     rc.g = lerp(0.75, 1.0, snowBlend);
     rc.b = lerp(0.85, 1.0, snowBlend);
     mat.uniforms.uSnowBlend.value = snowBlend;
+    mat.uniforms.uStormIntensity.value = stormFactor;
 
     // Position rain cylinder at player
     this._rainMesh.position.set(playerPos.x, playerPos.y, playerPos.z);
@@ -248,7 +285,7 @@ export class WeatherSystem {
       this._flashValue = Math.max(0, this._flashValue - delta / CONFIG.LIGHTNING_FLASH_DECAY);
     }
 
-    if (this.rainIntensity < 0.1) {
+    if (this.rainIntensity < 0.1 || (this._playerTerrainY || 0) >= CONFIG.SNOWLINE_START) {
       this._lightningTimer = 0;
       return;
     }
@@ -871,18 +908,18 @@ export class WeatherSystem {
    */
   getStateName() {
     const t = this.targetIntensity;
-    if (t < 0.5) return 'Sunny';
+    if (t < 0.5) return 'Clear';
     if (t < 1.5) return 'Cloudy';
-    return 'Rainy';
+    return 'Stormy';
   }
 
   /**
    * Get current weather state name (actual, not target).
    */
   getCurrentStateName() {
-    if (this.weatherIntensity < 0.3) return 'Sunny';
+    if (this.weatherIntensity < 0.3) return 'Clear';
     if (this.weatherIntensity < 1.3) return 'Cloudy';
-    return 'Rainy';
+    return 'Stormy';
   }
 
   dispose() {

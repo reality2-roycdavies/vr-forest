@@ -80,6 +80,19 @@ export const CONFIG = {
   ROCK_DENSITY_THRESHOLD: 0.45, // noise threshold for rock placement
   ROCK_COLORS: [0x787878, 0x8a8580, 0x6e6e6e, 0x959085],
 
+  // Fallen logs & stumps
+  LOG_GRID_SPACING: 8,
+  LOG_DENSITY_THRESHOLD: 0.55,
+  LOG_JITTER: 2.0,
+  LOG_MIN_LENGTH: 1.5,
+  LOG_MAX_LENGTH: 4.0,
+  LOG_RADIUS_MIN: 0.1,
+  LOG_RADIUS_MAX: 0.18,
+  STUMP_RADIUS_MIN: 0.15,
+  STUMP_RADIUS_MAX: 0.25,
+  STUMP_HEIGHT_MIN: 0.15,
+  STUMP_HEIGHT_MAX: 0.4,
+
   // Water / shore
   WATER_LEVEL: -3.5,          // Y at or below = water (flattened to this Y)
   SHORE_LEVEL: -2.8,          // Y below this = sandy shore (no vegetation)

@@ -74,7 +74,7 @@ const PALETTES = {
   day: {
     skyTop:    new THREE.Color(0x3068cc),
     skyBottom: new THREE.Color(0x7aaccc),
-    fog:       new THREE.Color(0x8ab4d0),
+    fog:       new THREE.Color(0x84b0d8),
     sun:       new THREE.Color(0xffdd66),
     sunIntensity: 1.0,
     hemiSky:   new THREE.Color(0x80c0e8),
@@ -102,7 +102,7 @@ export class DayNightSystem {
     this.skyUniforms = {
       topColor:    { value: new THREE.Color(0x3068cc) },
       bottomColor: { value: new THREE.Color(0x7ab0d8) },
-      fogColor:    { value: new THREE.Color(0x8ab4d0) },
+      fogColor:    { value: new THREE.Color(0x84b0d8) },
     };
     this.skyMat = new THREE.ShaderMaterial({
       uniforms: this.skyUniforms,
@@ -248,7 +248,7 @@ export class DayNightSystem {
     scene.add(this.ambientLight);
 
     // --- Fog ---
-    this.scene.fog = new THREE.Fog(0x8ab4d0, CONFIG.FOG_NEAR, CONFIG.FOG_FAR);
+    this.scene.fog = new THREE.Fog(0x84b0d8, CONFIG.FOG_NEAR, CONFIG.FOG_FAR);
 
     // --- Clouds ---
     this.cloudGroup = new THREE.Group();

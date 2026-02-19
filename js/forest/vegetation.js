@@ -2,12 +2,14 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { getTerrainHeight } from '../terrain/noise.js';
-import { createRockTexture } from './textures.js';
+import { createRockTexture, createBarkTexture } from './textures.js';
 import { addWindToMaterial } from '../atmosphere/wind.js';
 
 const MAX_VEG_PER_TYPE = 3000;
 const MAX_FLOWERS = 1500;
 const MAX_ROCKS = 1000;
+const MAX_LOGS = 600;
+const MAX_STUMPS = 400;
 const _matrix = new THREE.Matrix4();
 const _position = new THREE.Vector3();
 const _quaternion = new THREE.Quaternion();
@@ -23,6 +25,7 @@ export class VegetationPool {
     this._createMeshes();
     this._createFlowerMeshes();
     this._createRockMeshes();
+    this._createLogMeshes();
     this.foamTimeUniform = { value: 0 };
     this._createFoamStrip();
   }
@@ -323,6 +326,95 @@ export class VegetationPool {
       mesh.castShadow = true;
       this.scene.add(mesh);
       this.rockMeshes.push(mesh);
+    }
+  }
+
+  _createLogMeshes() {
+    const barkColors = [0x5c3a1e, 0x4a2f16, 0x6b4226];
+    const barkTex = createBarkTexture('#5c3a1e', 128);
+
+    // --- Fallen log: horizontal cylinder ---
+    {
+      const geom = new THREE.CylinderGeometry(1.0, 1.0, 1.0, 6, 1);
+      // Rotate so cylinder is horizontal (along X axis)
+      geom.rotateZ(Math.PI / 2);
+
+      // Jag vertices for organic bark
+      const pos = geom.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const hash = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+        const jag = ((hash - Math.floor(hash)) - 0.5) * 0.4;
+        pos.setXYZ(i, x + jag * 0.3, y + jag * 0.2, z + jag * 0.3);
+      }
+      pos.needsUpdate = true;
+      geom.computeVertexNormals();
+
+      // Vertex colors: bark browns
+      const colors = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) {
+        const hash = Math.sin(pos.getX(i) * 431.1 + pos.getZ(i) * 217.3) * 43758.5453;
+        const ci = Math.abs(Math.floor(hash * 100)) % barkColors.length;
+        const base = new THREE.Color(barkColors[ci]);
+        const frac = ((hash - Math.floor(hash)) - 0.5) * 0.1;
+        colors[i * 3] = Math.max(0, Math.min(1, base.r + frac));
+        colors[i * 3 + 1] = Math.max(0, Math.min(1, base.g + frac));
+        colors[i * 3 + 2] = Math.max(0, Math.min(1, base.b + frac));
+      }
+      geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+      const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: barkTex });
+      this.logMesh = new THREE.InstancedMesh(geom, mat, MAX_LOGS);
+      this.logMesh.count = 0;
+      this.logMesh.frustumCulled = false;
+      this.logMesh.castShadow = true;
+      this.scene.add(this.logMesh);
+    }
+
+    // --- Stump: short upright cylinder, slightly tapered ---
+    {
+      const geom = new THREE.CylinderGeometry(0.85, 1.0, 1.0, 6, 1);
+
+      // Jag vertices
+      const pos = geom.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const hash = Math.sin(x * 173.1 + y * 251.7 + z * 94.7) * 43758.5453;
+        const jag = ((hash - Math.floor(hash)) - 0.5) * 0.08;
+        // Only jag top face more for irregular cut
+        const topMult = y > 0.3 ? 2.0 : 1.0;
+        pos.setXYZ(i, x + jag * 0.4, y + jag * 0.2 * topMult, z + jag * 0.4);
+      }
+      pos.needsUpdate = true;
+      geom.computeVertexNormals();
+
+      // Vertex colors: bark browns, top face slightly lighter (cut wood)
+      const colors = new Float32Array(pos.count * 3);
+      const cutWood = new THREE.Color(0x8b6b4a); // lighter heartwood
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        const hash = Math.sin(pos.getX(i) * 371.1 + pos.getZ(i) * 197.3) * 43758.5453;
+        const frac = ((hash - Math.floor(hash)) - 0.5) * 0.1;
+        let base;
+        if (y > 0.3) {
+          // Top face: cut wood color
+          base = cutWood;
+        } else {
+          const ci = Math.abs(Math.floor(hash * 100)) % barkColors.length;
+          base = new THREE.Color(barkColors[ci]);
+        }
+        colors[i * 3] = Math.max(0, Math.min(1, base.r + frac));
+        colors[i * 3 + 1] = Math.max(0, Math.min(1, base.g + frac));
+        colors[i * 3 + 2] = Math.max(0, Math.min(1, base.b + frac));
+      }
+      geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+      const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: barkTex });
+      this.stumpMesh = new THREE.InstancedMesh(geom, mat, MAX_STUMPS);
+      this.stumpMesh.count = 0;
+      this.stumpMesh.frustumCulled = false;
+      this.stumpMesh.castShadow = true;
+      this.scene.add(this.stumpMesh);
     }
   }
 
@@ -877,6 +969,59 @@ export class VegetationPool {
         }
         if (bucket.length > 0) mesh.instanceMatrix.needsUpdate = true;
       }
+    }
+
+    // Rebuild logs & stumps
+    {
+      const allLogs = [];
+      const allStumps = [];
+      for (const chunk of chunks) {
+        if (chunk.logPositions) {
+          for (const lp of chunk.logPositions) {
+            if (lp.type === 0 && allLogs.length < MAX_LOGS) allLogs.push(lp);
+            else if (lp.type === 1 && allStumps.length < MAX_STUMPS) allStumps.push(lp);
+          }
+        }
+      }
+
+      // Fallen logs — horizontal cylinders
+      this.logMesh.count = allLogs.length;
+      for (let i = 0; i < allLogs.length; i++) {
+        const l = allLogs[i];
+        const seed = l.rotSeed;
+        const radius = CONFIG.LOG_RADIUS_MIN + (Math.sin(seed * 5.7) * 0.5 + 0.5) * (CONFIG.LOG_RADIUS_MAX - CONFIG.LOG_RADIUS_MIN);
+        // Raise so log sits on ground (center up by radius)
+        _position.set(l.x, l.y + radius * 0.5, l.z);
+        // Random Y rotation, slight X/Z tilt (±5°)
+        _euler.set(
+          Math.sin(seed * 1.3) * 0.09,
+          (seed * 73.13) % (Math.PI * 2),
+          Math.sin(seed * 2.9) * 0.09
+        );
+        _quaternion.setFromEuler(_euler);
+        // scale.x = length (cylinder is along X after rotateZ), y/z = radius
+        _scale.set(l.scale, radius, radius);
+        _matrix.compose(_position, _quaternion, _scale);
+        this.logMesh.setMatrixAt(i, _matrix);
+      }
+      if (allLogs.length > 0) this.logMesh.instanceMatrix.needsUpdate = true;
+
+      // Stumps — upright cylinders
+      this.stumpMesh.count = allStumps.length;
+      for (let i = 0; i < allStumps.length; i++) {
+        const s = allStumps[i];
+        const seed = s.rotSeed;
+        const height = CONFIG.STUMP_HEIGHT_MIN + (Math.sin(seed * 3.1) * 0.5 + 0.5) * (CONFIG.STUMP_HEIGHT_MAX - CONFIG.STUMP_HEIGHT_MIN);
+        // Raise so stump base sits on ground (center up by half height)
+        _position.set(s.x, s.y + height * 0.5, s.z);
+        _euler.set(0, (seed * 73.13) % (Math.PI * 2), 0);
+        _quaternion.setFromEuler(_euler);
+        // scale.x/z = radius, y = height
+        _scale.set(s.scale, height, s.scale);
+        _matrix.compose(_position, _quaternion, _scale);
+        this.stumpMesh.setMatrixAt(i, _matrix);
+      }
+      if (allStumps.length > 0) this.stumpMesh.instanceMatrix.needsUpdate = true;
     }
 
     // Rebuild foam strip along waterline contour

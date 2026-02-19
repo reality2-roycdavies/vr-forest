@@ -48,6 +48,9 @@ const mountainWarpNoise2D = createNoise2D(rng11);
 const rng12 = mulberry32(CONFIG.TERRAIN_SEED + 11);
 const mountainDetailNoise2D = createNoise2D(rng12);
 
+const rng13 = mulberry32(CONFIG.TERRAIN_SEED + 12);
+const logNoise2D = createNoise2D(rng13);
+
 /**
  * Multi-octave fractal noise
  */
@@ -196,4 +199,11 @@ export function getRockDensity(worldX, worldZ) {
  */
 export function getCollectibleDensity(worldX, worldZ) {
   return collectibleNoise2D(worldX * 0.03, worldZ * 0.03);
+}
+
+/**
+ * Fallen log / stump placement noise
+ */
+export function getLogDensity(worldX, worldZ) {
+  return logNoise2D(worldX * 0.04, worldZ * 0.04);
 }

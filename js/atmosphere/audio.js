@@ -99,9 +99,10 @@ export class AmbientAudio {
     const rainDuck = weather ? 1 - weather.rainIntensity * 0.3 : 1;
     this._weatherWindDuck = rainDuck;
 
-    // Bird chirps — daytime only, suppressed by rain
+    // Bird chirps — daytime only, suppressed by rain, silent above snowline
+    const playerY = playerPos ? playerPos.y : 0;
     const birdSuppression = weather ? 1 - weather.rainIntensity * 0.8 : 1;
-    if (sunElevation === undefined || sunElevation > 0.02) {
+    if ((sunElevation === undefined || sunElevation > 0.02) && playerY < CONFIG.SNOWLINE_START) {
       this.birdTimer += delta;
       // Rain slows bird frequency
       const birdInterval = (1.5 + Math.random() * 6) / Math.max(0.1, birdSuppression);
@@ -122,9 +123,9 @@ export class AmbientAudio {
       this._updateFootsteps(isMoving, groundType, bobPhase);
     }
 
-    // Crickets
+    // Crickets — silent above snowline (no insects in snow)
     if (sunElevation !== undefined) {
-      this._updateCrickets(sunElevation);
+      this._updateCrickets(sunElevation, playerY);
     }
 
     // Morepork — nighttime owl call-and-response
@@ -669,8 +670,8 @@ export class AmbientAudio {
 
   // ======== Crickets — night ambient, 4 sine voices with chirp bursts ========
 
-  _updateCrickets(sunElevation) {
-    const shouldBeActive = sunElevation < CONFIG.CRICKET_SUN_FADE_IN;
+  _updateCrickets(sunElevation, playerY) {
+    const shouldBeActive = sunElevation < CONFIG.CRICKET_SUN_FADE_IN && playerY < CONFIG.SNOWLINE_START;
     const ctx = this.ctx;
     const now = ctx.currentTime;
 

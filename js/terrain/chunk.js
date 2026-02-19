@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { generateTerrainData } from './terrain-generator.js';
-import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity, getMountainFactor } from './noise.js';
+import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity, getMountainFactor, getLogDensity } from './noise.js';
 import { getGroundMaterial } from './ground-material.js';
 
 export class Chunk {
@@ -15,6 +15,7 @@ export class Chunk {
     this.flowerPositions = []; // { x, y, z, colorIdx, scale }
     this.rockPositions = [];   // { x, y, z, sizeIdx, rotSeed }
     this.collectiblePositions = []; // { x, y, z }
+    this.logPositions = [];    // { x, y, z, type, scale, rotSeed }  type: 0=log, 1=stump
     this.foamSegments = [];         // { x1, z1, x2, z2, nx, nz }
     this.active = false;
   }
@@ -43,6 +44,7 @@ export class Chunk {
     this._generateVegetation(chunkX, chunkZ);
     this._generateFlowers(chunkX, chunkZ);
     this._generateRocks(chunkX, chunkZ);
+    this._generateLogs(chunkX, chunkZ);
     this._generateCollectibles(chunkX, chunkZ);
     this._generateFoam(chunkX, chunkZ);
   }
@@ -290,6 +292,51 @@ export class Chunk {
     }
   }
 
+  _generateLogs(chunkX, chunkZ) {
+    this.logPositions.length = 0;
+    const spacing = CONFIG.LOG_GRID_SPACING;
+    const size = CONFIG.CHUNK_SIZE;
+    const worldOffX = chunkX * size;
+    const worldOffZ = chunkZ * size;
+
+    for (let lz = spacing * 0.3; lz < size; lz += spacing) {
+      for (let lx = spacing * 0.3; lx < size; lx += spacing) {
+        const wx = worldOffX + lx;
+        const wz = worldOffZ + lz;
+        const density = getLogDensity(wx, wz);
+
+        if (density > CONFIG.LOG_DENSITY_THRESHOLD) {
+          // Only place near trees
+          if (getTreeDensity(wx, wz) <= 0) continue;
+
+          const jitter = getJitter(wx + 500, wz + 500);
+          const jx = wx + jitter.x * CONFIG.LOG_JITTER;
+          const jz = wz + jitter.z * CONFIG.LOG_JITTER;
+          const y = getTerrainHeight(jx, jz);
+          if (y < CONFIG.SHORE_LEVEL) continue;
+          if (y > CONFIG.TREELINE_START) continue;
+
+          // Type split: hash-based, ~60% logs, ~40% stumps
+          const hash = Math.sin(jx * 127.1 + jz * 311.7) * 43758.5453;
+          const frac = hash - Math.floor(hash);
+          const type = frac < 0.6 ? 0 : 1; // 0=log, 1=stump
+
+          // Scale from density
+          const t = (density - CONFIG.LOG_DENSITY_THRESHOLD) / (1 - CONFIG.LOG_DENSITY_THRESHOLD);
+          let scale;
+          if (type === 0) {
+            scale = CONFIG.LOG_MIN_LENGTH + t * (CONFIG.LOG_MAX_LENGTH - CONFIG.LOG_MIN_LENGTH);
+          } else {
+            scale = CONFIG.STUMP_RADIUS_MIN + t * (CONFIG.STUMP_RADIUS_MAX - CONFIG.STUMP_RADIUS_MIN);
+          }
+
+          const rotSeed = jx * 17.3 + jz * 11.7;
+          this.logPositions.push({ x: jx, y, z: jz, type, scale, rotSeed });
+        }
+      }
+    }
+  }
+
   _generateCollectibles(chunkX, chunkZ) {
     this.collectiblePositions.length = 0;
     const spacing = CONFIG.COLLECTIBLE_GRID_SPACING;
@@ -386,6 +433,7 @@ export class Chunk {
     this.flowerPositions.length = 0;
     this.rockPositions.length = 0;
     this.collectiblePositions.length = 0;
+    this.logPositions.length = 0;
     this.foamSegments.length = 0;
   }
 
@@ -399,6 +447,7 @@ export class Chunk {
     this.flowerPositions.length = 0;
     this.rockPositions.length = 0;
     this.collectiblePositions.length = 0;
+    this.logPositions.length = 0;
     this.foamSegments.length = 0;
     this.active = false;
   }
