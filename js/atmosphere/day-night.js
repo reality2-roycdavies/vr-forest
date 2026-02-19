@@ -16,6 +16,9 @@ const _cloudTwilightColor = new THREE.Color(0xe8a070);
 const _cloudStormGrey = new THREE.Color(0x505058);    // dark: for cloud tinting
 const _overcastHorizonGrey = new THREE.Color(0x7a7a82); // muted grey: fog/horizon target
 
+// Reusable Date object (avoids new Date() allocation every frame)
+const _now = new Date();
+
 // Pre-allocated mutable palette for transitions (avoids 7 Color clones per frame)
 const _blendPalette = {
   skyTop: new THREE.Color(), skyBottom: new THREE.Color(),
@@ -214,8 +217,9 @@ export class DayNightSystem {
     this.stars.material.transparent = true;
     scene.add(this.stars);
 
-    // --- Shooting stars ---
+    // --- Shooting stars (pooled to avoid geometry allocation/disposal) ---
     this.shootingStars = [];
+    this._shootingStarPool = [];
     this.shootingStarTimer = 0;
     this.shootingStarInterval = 4 + Math.random() * 8; // 4-12 sec between
 
@@ -668,24 +672,14 @@ export class DayNightSystem {
     }
     hours += this.timeOffset;
 
-    // Compute Julian date directly from UTC components + hour offset
-    // Avoid creating extra Date objects
-    const wholeHours = Math.floor(hours);
-    const fracMinutes = (hours - wholeHours) * 60;
-    // Adjust the now Date in-place temporarily for UTC extraction
-    const savedH = now.getHours(), savedM = now.getMinutes(), savedS = now.getSeconds();
-    now.setHours(wholeHours, Math.floor(fracMinutes), Math.floor((fracMinutes % 1) * 60));
-
-    // Julian date from UTC
-    const y = now.getUTCFullYear();
-    const m = now.getUTCMonth() + 1;
-    const d = now.getUTCDate() + (now.getUTCHours() +
-              now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600) / 24;
-    const a = Math.floor((14 - m) / 12);
-    const y2 = y + 4800 - a;
-    const m2 = m + 12 * a - 3;
-    const JD = d + Math.floor((153 * m2 + 2) / 5) + 365 * y2 +
-               Math.floor(y2 / 4) - Math.floor(y2 / 100) + Math.floor(y2 / 400) - 32045;
+    // Compute Julian date from epoch ms + hour offset (no Date mutation needed)
+    // Start from midnight of the current date, then add offset hours
+    const tzOffsetMs = now.getTimezoneOffset() * 60000;
+    const midnightUtcMs = now.getTime() - (now.getTime() % 86400000);
+    // Effective UTC time in ms
+    const effectiveMs = midnightUtcMs + hours * 3600000 + tzOffsetMs;
+    // Julian date: JD = ms / 86400000 + 2440587.5
+    const JD = effectiveMs / 86400000 + 2440587.5;
 
     // Centuries since J2000.0
     const T = (JD - 2451545.0) / 36525.0;
@@ -755,9 +749,6 @@ export class DayNightSystem {
     const newMoonEpochJD = 2451550.26; // Jan 6, 2000 18:14 UTC
     const daysSinceNew = JD - newMoonEpochJD;
     const phase = ((daysSinceNew % synodicPeriod) + synodicPeriod) % synodicPeriod / synodicPeriod;
-
-    // Restore the shared Date object
-    now.setHours(savedH, savedM, savedS);
 
     return { altitude: sinAlt, azimuth, phase };
   }
@@ -853,7 +844,8 @@ export class DayNightSystem {
    * @param {object} [weather] - WeatherSystem instance (optional)
    */
   update(playerPos, camera, delta, weather) {
-    const now = new Date();
+    _now.setTime(Date.now());
+    const now = _now;
     const { elevation, azimuth } = this._getSunPosition(now);
     this.sunElevation = elevation;
     const palette = this._getPalette(elevation);
@@ -1121,9 +1113,13 @@ export class DayNightSystem {
     this.cloudTime += delta;
     const t = this.cloudTime;
 
-    // Tint clouds based on time of day
-    const isNight = elevation < -0.05;
-    const isTwilight = elevation >= -0.05 && elevation < 0.1;
+    // Determine time-of-day band for cloud tinting (cached to skip color updates)
+    const band = elevation < -0.05 ? 0 : elevation < 0.1 ? 1 : 2; // 0=night, 1=twilight, 2=day
+    const bandChanged = band !== this._lastCloudBand;
+    // Also re-tint when weather is active (changes per-frame)
+    const weatherActive = weather && weather.cloudDensity > 0.01;
+    const needColorUpdate = bandChanged || (band === 1) || weatherActive;
+    this._lastCloudBand = band;
 
     for (const cloud of this.cloudGroup.children) {
       // Drift with slight radial wobble and vertical bob
@@ -1150,32 +1146,34 @@ export class DayNightSystem {
         puff.scale.x = puff.userData.baseScaleX * breatheX;
         puff.scale.y = puff.userData.baseScaleY * breatheY;
 
-        // Color tinting
-        const basePuffOpacity = puff.material.userData?.baseOpacity ?? puff.material.opacity;
-        if (!puff.material.userData) puff.material.userData = {};
-        puff.material.userData.baseOpacity = basePuffOpacity;
+        // Color tinting — only when band changes or weather is active
+        if (needColorUpdate) {
+          const basePuffOpacity = puff.material.userData?.baseOpacity ?? puff.material.opacity;
+          if (!puff.material.userData) puff.material.userData = {};
+          puff.material.userData.baseOpacity = basePuffOpacity;
 
-        if (isNight) {
-          puff.material.color.setHex(0x222233);
-          puff.material.opacity = basePuffOpacity * 0.5;
-        } else if (isTwilight) {
-          const tw = (elevation + 0.05) / 0.15;
-          puff.material.color.lerpColors(
-            _cloudNightColor,
-            _cloudTwilightColor,
-            tw
-          );
-          puff.material.opacity = basePuffOpacity * (0.5 + tw * 0.5);
-        } else {
-          puff.material.color.setHex(0xffffff);
-          puff.material.opacity = basePuffOpacity;
-        }
+          if (band === 0) {
+            puff.material.color.setHex(0x222233);
+            puff.material.opacity = basePuffOpacity * 0.5;
+          } else if (band === 1) {
+            const tw = (elevation + 0.05) / 0.15;
+            puff.material.color.lerpColors(
+              _cloudNightColor,
+              _cloudTwilightColor,
+              tw
+            );
+            puff.material.opacity = basePuffOpacity * (0.5 + tw * 0.5);
+          } else {
+            puff.material.color.setHex(0xffffff);
+            puff.material.opacity = basePuffOpacity;
+          }
 
-        // Weather: boost opacity + darken toward storm grey
-        if (weather && weather.cloudDensity > 0.01) {
-          puff.material.opacity += weather.cloudDensity * basePuffOpacity;
-          puff.material.opacity = Math.min(puff.material.opacity, 0.95);
-          puff.material.color.lerp(weather.stormCloudColor, weather.cloudDarkness);
+          // Weather: boost opacity + darken toward storm grey
+          if (weatherActive) {
+            puff.material.opacity += weather.cloudDensity * basePuffOpacity;
+            puff.material.opacity = Math.min(puff.material.opacity, 0.95);
+            puff.material.color.lerp(weather.stormCloudColor, weather.cloudDarkness);
+          }
         }
       }
     }
@@ -1184,11 +1182,10 @@ export class DayNightSystem {
   _updateShootingStars(playerPos, elevation, delta) {
     // Only at night
     if (elevation > 0.05) {
-      // Clean up any active ones
+      // Return active ones to pool
       for (const s of this.shootingStars) {
-        this.scene.remove(s.mesh);
-        s.mesh.geometry.dispose();
-        s.mesh.material.dispose();
+        s.mesh.visible = false;
+        this._shootingStarPool.push(s);
       }
       this.shootingStars.length = 0;
       return;
@@ -1211,9 +1208,8 @@ export class DayNightSystem {
       const t = s.life / s.duration;
 
       if (t >= 1) {
-        this.scene.remove(s.mesh);
-        s.mesh.geometry.dispose();
-        s.mesh.material.dispose();
+        s.mesh.visible = false;
+        this._shootingStarPool.push(s);
         this.shootingStars.splice(i, 1);
         continue;
       }
@@ -1253,39 +1249,53 @@ export class DayNightSystem {
     const vy = -speed * (0.3 + Math.random() * 0.4);
     const vz = Math.sin(dirAngle) * speed;
 
-    const head = new THREE.Vector3(startX, startY, startZ);
-    const tail = head.clone();
-    const velocity = new THREE.Vector3(vx, vy, vz);
+    // Reuse from pool if available
+    let entry = this._shootingStarPool.pop();
+    if (entry) {
+      entry.head.set(startX, startY, startZ);
+      entry.tail.set(startX, startY, startZ);
+      entry.velocity.set(vx, vy, vz);
+      entry.speed = speed;
+      entry.tailLength = 15 + Math.random() * 25;
+      entry.duration = 0.4 + Math.random() * 0.8;
+      entry.life = 0;
+      entry.mesh.visible = true;
+      entry.mesh.material.opacity = 0;
+      const pos = entry.mesh.geometry.getAttribute('position');
+      pos.setXYZ(0, startX, startY, startZ);
+      pos.setXYZ(1, startX, startY, startZ);
+      pos.needsUpdate = true;
+    } else {
+      const head = new THREE.Vector3(startX, startY, startZ);
+      const tail = head.clone();
+      const velocity = new THREE.Vector3(vx, vy, vz);
 
-    const positions = new Float32Array(6);
-    positions[0] = tail.x; positions[1] = tail.y; positions[2] = tail.z;
-    positions[3] = head.x; positions[4] = head.y; positions[5] = head.z;
+      const positions = new Float32Array(6);
+      positions[0] = tail.x; positions[1] = tail.y; positions[2] = tail.z;
+      positions[3] = head.x; positions[4] = head.y; positions[5] = head.z;
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0,
-      fog: false,
-      linewidth: 1,
-    });
+      const mat = new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        fog: false,
+        linewidth: 1,
+      });
 
-    const mesh = new THREE.Line(geo, mat);
-    mesh.frustumCulled = false;
-    this.scene.add(mesh);
+      const mesh = new THREE.Line(geo, mat);
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
 
-    this.shootingStars.push({
-      mesh,
-      head,
-      tail,
-      velocity,
-      speed,
-      tailLength: 15 + Math.random() * 25,
-      duration: 0.4 + Math.random() * 0.8,
-      life: 0,
-    });
+      entry = { mesh, head, tail, velocity, speed,
+        tailLength: 15 + Math.random() * 25,
+        duration: 0.4 + Math.random() * 0.8,
+        life: 0 };
+    }
+
+    this.shootingStars.push(entry);
   }
 
   /**

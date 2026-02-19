@@ -3,8 +3,8 @@ import * as THREE from 'three';
 
 const FLOCK_COUNT = 5;
 const BIRDS_PER_FLOCK = 8;
-const BIRD_ALTITUDE_MIN = 18;
-const BIRD_ALTITUDE_MAX = 40;
+const BIRD_ALTITUDE_MIN = 55;
+const BIRD_ALTITUDE_MAX = 80;
 const FLOCK_RADIUS_MIN = 25;
 const FLOCK_RADIUS_MAX = 80;
 const FLOCK_SPEED = 5;           // m/s orbit speed

@@ -149,6 +149,13 @@ export class InputManager {
     if (this.keys['KeyS']) this.leftStick.y = 1;
     if (this.keys['KeyA']) this.leftStick.x = -1;
     if (this.keys['KeyD']) this.leftStick.x = 1;
+    // Normalize diagonal so W+A isn't 41% faster than W alone
+    const lx = this.leftStick.x, ly = this.leftStick.y;
+    const len = Math.sqrt(lx * lx + ly * ly);
+    if (len > 1) {
+      this.leftStick.x = lx / len;
+      this.leftStick.y = ly / len;
+    }
     if (this.keys['KeyQ']) this.rightStick.x = -1;
     if (this.keys['KeyE']) this.rightStick.x = 1;
     if (this.keys['Space']) this.jumpPressed = true;

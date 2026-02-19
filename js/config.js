@@ -102,6 +102,28 @@ export const CONFIG = {
   STREAM_WARP: 22,            // more meander
   STREAM_SHARPNESS: 2,        // wider channels (lower = broader)
 
+  // Mountain chains (additive ridge noise — inverse of stream carving)
+  MOUNTAIN_SCALE: 0.003,          // lower freq than streams = broader chains
+  MOUNTAIN_HEIGHT: 45,            // max additive height
+  MOUNTAIN_WARP: 35,              // domain warp amount
+  MOUNTAIN_SHARPNESS: 1.0,        // ridge sharpness (lower = broader ridges)
+  MOUNTAIN_THRESHOLD: 0.25,       // ridge value below this = no mountain
+  FOOTHILL_HEIGHT: 6,             // max foothill height (gentle rolling hills)
+  FOOTHILL_SCALE: 0.008,          // higher freq = smaller hills
+
+  // Altitude zones (Y thresholds for biome transitions)
+  SUBALPINE_START: 10,
+  TREELINE_START: 16,
+  ALPINE_START: 20,
+  SNOWLINE_START: 24,
+  TREELINE_SCALE_MIN: 0.3,       // tree scale at treeline (fraction of normal)
+
+  // Mountain ground colors
+  SUBALPINE_COLOR: { r: 0.15, g: 0.28, b: 0.08 },  // dark forest green
+  TUSSOCK_COLOR: { r: 0.55, g: 0.50, b: 0.30 },     // tan/olive
+  ALPINE_ROCK_COLOR: { r: 0.45, g: 0.42, b: 0.38 }, // grey-brown rock
+  SNOW_COLOR: { r: 1.4, g: 1.42, b: 1.5 },           // bright glowing snow (>1.0 for emissive bloom)
+
   // Colors
   GROUND_LOW_COLOR: { r: 0.13, g: 0.24, b: 0.06 },   // dark green (low, near-shore)
   GROUND_MID_COLOR: { r: 0.28, g: 0.45, b: 0.12 },   // mid green

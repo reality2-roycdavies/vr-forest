@@ -41,6 +41,13 @@ const warpNoise2D = createNoise2D(rng8);
 const rng9 = mulberry32(CONFIG.TERRAIN_SEED + 8);
 const collectibleNoise2D = createNoise2D(rng9);
 
+const rng10 = mulberry32(CONFIG.TERRAIN_SEED + 9);
+const mountainNoise2D = createNoise2D(rng10);
+const rng11 = mulberry32(CONFIG.TERRAIN_SEED + 10);
+const mountainWarpNoise2D = createNoise2D(rng11);
+const rng12 = mulberry32(CONFIG.TERRAIN_SEED + 11);
+const mountainDetailNoise2D = createNoise2D(rng12);
+
 /**
  * Multi-octave fractal noise
  */
@@ -88,7 +95,60 @@ export function getTerrainHeight(worldX, worldZ) {
   const normalizedH = (baseHeight / CONFIG.TERRAIN_HEIGHT + 1) * 0.5; // 0..1
   const carveMask = Math.max(0, 1 - normalizedH * 0.8);               // carves across most terrain
 
-  return baseHeight - channel * CONFIG.STREAM_DEPTH * carveMask;
+  const streamH = baseHeight - channel * CONFIG.STREAM_DEPTH * carveMask;
+
+  // Mountain chains — additive ridge noise (inverse of stream carving)
+  const mWarp = CONFIG.MOUNTAIN_WARP;
+  const mwx = mountainWarpNoise2D(worldX * 0.004, worldZ * 0.004) * mWarp;
+  const mwz = mountainWarpNoise2D(worldX * 0.004 + 200, worldZ * 0.004 + 200) * mWarp;
+
+  const mScale = CONFIG.MOUNTAIN_SCALE;
+  const mRaw = mountainNoise2D((worldX + mwx) * mScale, (worldZ + mwz) * mScale);
+  const mRidge = 1 - mRaw * mRaw; // smooth parabolic peak (no knife edge)
+  const mChannel = Math.pow(mRidge, CONFIG.MOUNTAIN_SHARPNESS);
+
+  // Detail noise — smooth (non-ridge) noise modulates ridge height for organic variation
+  const mDetail = mountainDetailNoise2D((worldX + mwx) * mScale * 2.5, (worldZ + mwz) * mScale * 2.5);
+  const mBlended = mChannel * (0.7 + mDetail * 0.3); // modulates 0.4..1.0 of main ridge
+
+  // Amplitude modulation — large-scale variation so peaks differ in height
+  const ampMod = mountainDetailNoise2D(worldX * 0.0012, worldZ * 0.0012) * 0.4 + 0.6; // 0.2..1.0
+
+  // Only build mountains where ridge is strong enough
+  const mMask = Math.max(0, mBlended - CONFIG.MOUNTAIN_THRESHOLD) / (1 - CONFIG.MOUNTAIN_THRESHOLD);
+
+  // Suppress mountains near spawn (0,0) so player starts in forest clearing
+  const spawnDist = Math.sqrt(worldX * worldX + worldZ * worldZ);
+  const spawnFade = Math.min(1, Math.max(0, (spawnDist - 60) / 40)); // fade in 60-100m from origin
+
+  // Foothills — rolling hills that appear near mountains, using unthresholded ridge as proximity
+  const foothillNoise = mountainDetailNoise2D(worldX * CONFIG.FOOTHILL_SCALE, worldZ * CONFIG.FOOTHILL_SCALE);
+  const foothillBase = (foothillNoise * 0.5 + 0.5); // 0..1
+  // Foothills scale with proximity to mountain ridges (mBlended before threshold)
+  const foothillProximity = Math.min(1, mBlended * 2.5); // ramp up near ridges
+  const foothillH = foothillBase * foothillProximity * CONFIG.FOOTHILL_HEIGHT;
+
+  return streamH + (mMask * ampMod * CONFIG.MOUNTAIN_HEIGHT + foothillH) * spawnFade;
+}
+
+/**
+ * Mountain factor at world coordinates (0 = no mountain, 1 = peak)
+ */
+export function getMountainFactor(worldX, worldZ) {
+  const mWarp = CONFIG.MOUNTAIN_WARP;
+  const mwx = mountainWarpNoise2D(worldX * 0.004, worldZ * 0.004) * mWarp;
+  const mwz = mountainWarpNoise2D(worldX * 0.004 + 200, worldZ * 0.004 + 200) * mWarp;
+  const mScale = CONFIG.MOUNTAIN_SCALE;
+  const mRaw = mountainNoise2D((worldX + mwx) * mScale, (worldZ + mwz) * mScale);
+  const mRidge = 1 - mRaw * mRaw; // smooth parabolic peak (no knife edge)
+  const mChannel = Math.pow(mRidge, CONFIG.MOUNTAIN_SHARPNESS);
+  const mDetail = mountainDetailNoise2D((worldX + mwx) * mScale * 2.5, (worldZ + mwz) * mScale * 2.5);
+  const mBlended = mChannel * (0.7 + mDetail * 0.3);
+  const ampMod = mountainDetailNoise2D(worldX * 0.0012, worldZ * 0.0012) * 0.4 + 0.6;
+  const mMask = Math.max(0, mBlended - CONFIG.MOUNTAIN_THRESHOLD) / (1 - CONFIG.MOUNTAIN_THRESHOLD);
+  const spawnDist = Math.sqrt(worldX * worldX + worldZ * worldZ);
+  const spawnFade = Math.min(1, Math.max(0, (spawnDist - 60) / 40));
+  return mMask * ampMod * spawnFade;
 }
 
 /**

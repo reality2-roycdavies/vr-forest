@@ -105,17 +105,23 @@ export class WeatherSystem {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uColor: { value: new THREE.Color(0.7, 0.75, 0.85) },
+        uSnowBlend: { value: 0.0 },
       },
       vertexShader: `
         attribute float aOpacity;
+        uniform float uSnowBlend;
         varying float vOpacity;
         varying float vDepth;
+        varying float vSnow;
         void main() {
           vOpacity = aOpacity;
+          vSnow = uSnowBlend;
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
           vDepth = -mvPos.z;
-          // Tall thin streaks — height gives the rain-line look
-          gl_PointSize = clamp(90.0 / max(1.0, -mvPos.z), 2.0, 45.0);
+          // Rain: tall thin streaks; Snow: smaller, softer dots
+          float rainSize = clamp(90.0 / max(1.0, -mvPos.z), 2.0, 45.0);
+          float snowSize = clamp(40.0 / max(1.0, -mvPos.z), 1.5, 18.0);
+          gl_PointSize = mix(rainSize, snowSize, uSnowBlend);
           gl_Position = projectionMatrix * mvPos;
         }
       `,
@@ -123,18 +129,20 @@ export class WeatherSystem {
         uniform vec3 uColor;
         varying float vOpacity;
         varying float vDepth;
+        varying float vSnow;
         void main() {
-          // Hair-thin vertical streak: extreme horizontal squeeze, soft vertical taper
           vec2 c = gl_PointCoord - vec2(0.5);
-          // Very narrow (x * 80) = only center ~12% of width survives
-          // Tall (y * 0.8) = nearly full height used
-          float dist = c.x * c.x * 80.0 + c.y * c.y * 0.8;
+          // Rain: thin vertical streak (x*80, y*0.8)
+          // Snow: round soft dot (x*6, y*6)
+          float xSq = c.x * c.x * mix(80.0, 6.0, vSnow);
+          float ySq = c.y * c.y * mix(0.8, 6.0, vSnow);
+          float dist = xSq + ySq;
           if (dist > 1.0) discard;
-          // Soft core — brighter at center, fades toward edges
-          float core = exp(-dist * 3.0);
+          // Snow: softer falloff for fluffy look
+          float core = exp(-dist * mix(3.0, 1.5, vSnow));
           // Distance fade
           float distFade = 1.0 - smoothstep(8.0, 22.0, vDepth);
-          float alpha = core * vOpacity * distFade * 0.7;
+          float alpha = core * vOpacity * distFade * mix(0.7, 0.5, vSnow);
           gl_FragColor = vec4(uColor, alpha);
         }
       `,
@@ -158,6 +166,13 @@ export class WeatherSystem {
     this._rainMesh.visible = shouldShow;
     if (!shouldShow) return;
 
+    // Snow zone: blend rain→snow based on altitude
+    const snowStart = CONFIG.SNOWLINE_START;
+    const treelineY = CONFIG.TREELINE_START;
+    const terrainY = this._playerTerrainY || 0;
+    // snowBlend: 0 at treeline, 1 at snowline (fully snow)
+    const snowBlend = clamp01((terrainY - treelineY) / (snowStart - treelineY));
+
     const count = CONFIG.RAIN_PARTICLE_COUNT;
     const activeCount = Math.floor(count * this.rainIntensity);
     const radius = CONFIG.RAIN_RADIUS;
@@ -166,9 +181,13 @@ export class WeatherSystem {
     const opacities = this._rainOpacities;
     const speeds = this._rainSpeeds;
 
-    // Wind sideways push
-    const windX = windDir ? windDir.x * CONFIG.RAIN_WIND_INFLUENCE * this.windMultiplier : 0;
-    const windZ = windDir ? windDir.y * CONFIG.RAIN_WIND_INFLUENCE * this.windMultiplier : 0;
+    // Wind sideways push — more drift for snow
+    const windScale = lerp(1.0, 2.5, snowBlend);
+    const windX = windDir ? windDir.x * CONFIG.RAIN_WIND_INFLUENCE * this.windMultiplier * windScale : 0;
+    const windZ = windDir ? windDir.y * CONFIG.RAIN_WIND_INFLUENCE * this.windMultiplier * windScale : 0;
+
+    // Snow falls much slower — small floaty flakes
+    const speedScale = lerp(1.0, 0.12, snowBlend);
 
     for (let i = 0; i < count; i++) {
       if (i >= activeCount) {
@@ -176,10 +195,15 @@ export class WeatherSystem {
         continue;
       }
 
-      // Move down + wind push
-      positions[i * 3] += windX * delta;
-      positions[i * 3 + 1] -= speeds[i] * delta;
-      positions[i * 3 + 2] += windZ * delta;
+      // First activation: set opacity for particles transitioning from inactive
+      if (opacities[i] === 0) {
+        opacities[i] = 0.5 + Math.random() * 0.5;
+      }
+
+      // Move down + wind push (snow drifts gently sideways — floaty)
+      positions[i * 3] += (windX + snowBlend * Math.sin(positions[i * 3 + 1] * 0.4 + i * 0.7) * 0.5) * delta;
+      positions[i * 3 + 1] -= speeds[i] * speedScale * delta;
+      positions[i * 3 + 2] += (windZ + snowBlend * Math.cos(positions[i * 3 + 1] * 0.5 + i * 1.1) * 0.5) * delta;
 
       // Respawn at top if below ground or too far from center
       const dx = positions[i * 3];
@@ -191,10 +215,17 @@ export class WeatherSystem {
         positions[i * 3 + 1] = height + Math.random() * 2;
         positions[i * 3 + 2] = Math.sin(angle) * r;
         speeds[i] = CONFIG.RAIN_SPEED_MIN + Math.random() * (CONFIG.RAIN_SPEED_MAX - CONFIG.RAIN_SPEED_MIN);
+        opacities[i] = 0.5 + Math.random() * 0.5;
       }
-
-      opacities[i] = 0.5 + Math.random() * 0.5;
     }
+
+    // Particle color: rain blue-grey → snow white; shape: streaks → soft dots
+    const mat = this._rainMesh.material;
+    const rc = mat.uniforms.uColor.value;
+    rc.r = lerp(0.7, 1.0, snowBlend);
+    rc.g = lerp(0.75, 1.0, snowBlend);
+    rc.b = lerp(0.85, 1.0, snowBlend);
+    mat.uniforms.uSnowBlend.value = snowBlend;
 
     // Position rain cylinder at player
     this._rainMesh.position.set(playerPos.x, playerPos.y, playerPos.z);
@@ -385,29 +416,41 @@ export class WeatherSystem {
   _updateRainAudioGains() {
     if (!this._rainAudioActive) return;
     const ri = this.rainIntensity;
+
+    // Fade rain audio to silence at altitude (snow zone = quiet)
+    const terrainY = this._playerTerrainY || 0;
+    const treelineY = CONFIG.TREELINE_START;
+    const snowStart = CONFIG.SNOWLINE_START;
+    const altFade = 1 - clamp01((terrainY - treelineY) / (snowStart - treelineY));
+
     // Patter: linear scale
     if (this._patterGain) {
-      this._patterGain.gain.value = ri * 0.12;
+      this._patterGain.gain.value = ri * 0.12 * altFade;
     }
     // Wash: quadratic scale — louder in heavy rain
     if (this._washGain) {
-      this._washGain.gain.value = ri * ri * 0.15;
+      this._washGain.gain.value = ri * ri * 0.15 * altFade;
     }
     // Body: fills the midrange, with slow gusting modulation
     if (this._bodyGain) {
-      this._bodyGain.gain.value = ri * 0.08;
-      this._bodyLFOGain.gain.value = ri * 0.03; // modulation depth
+      this._bodyGain.gain.value = ri * 0.08 * altFade;
+      this._bodyLFOGain.gain.value = ri * 0.03 * altFade;
     }
     // Sizzle: high-freq surface detail, grows with intensity
     if (this._sizzleGain) {
-      this._sizzleGain.gain.value = ri * ri * 0.05;
-      this._sizzleLFOGain.gain.value = ri * 0.02;
+      this._sizzleGain.gain.value = ri * ri * 0.05 * altFade;
+      this._sizzleLFOGain.gain.value = ri * 0.02 * altFade;
     }
   }
 
   _updateSpatialDrips(delta) {
     if (!this._audioCtx || !this._noiseBuffer || !this._playerPos || !this._spatialBus) return;
     if (this.rainIntensity < 0.1) return;
+
+    // Suppress drips at altitude (snow zone — no rain hitting surfaces)
+    const terrainY = this._playerTerrainY || 0;
+    const altFade = 1 - clamp01((terrainY - CONFIG.TREELINE_START) / (CONFIG.SNOWLINE_START - CONFIG.TREELINE_START));
+    if (altFade < 0.05) return;
 
     this._dripTimer += delta;
     // More drips in heavier rain
@@ -534,8 +577,12 @@ export class WeatherSystem {
     if (!this._reverbIR) {
       this._reverbIR = this._createReverbIR(ctx, 5);
     }
-    const convolver = ctx.createConvolver();
-    convolver.buffer = this._reverbIR;
+    // Reuse convolver node when possible (disconnect previous routing)
+    if (!this._convolver || this._convolver.context !== ctx) {
+      this._convolver = ctx.createConvolver();
+      this._convolver.buffer = this._reverbIR;
+    }
+    const convolver = this._convolver;
 
     // --- Master thunder bus (everything routes here → reverb → output) ---
     const dryGain = ctx.createGain();
@@ -749,7 +796,8 @@ export class WeatherSystem {
    * @param {THREE.Vector3} playerPos - player world position
    * @param {THREE.Vector2|null} windDir - wind XZ direction
    */
-  update(delta, sunElevation, playerPos, windDir) {
+  update(delta, sunElevation, playerPos, windDir, terrainHeight) {
+    this._playerTerrainY = terrainHeight || 0;
     this._updateStateMachine(delta);
     this._updateDerivedParams();
     this._updateGroundWetness(delta);
@@ -790,11 +838,15 @@ export class WeatherSystem {
 
   /**
    * Set weather to a specific target intensity. Overrides auto-cycling.
+   * Uses a longer hold duration so manual selection persists before auto-cycling resumes.
    * @param {number} intensity - 0 (sunny), 1 (cloudy), 2 (rainy)
    */
   setTarget(intensity) {
     this.targetIntensity = Math.max(0, Math.min(2, intensity));
     this.holdTimer = 0;
+    // Hold longer after manual selection (5-8 min) so it feels intentional
+    this.holdDuration = CONFIG.WEATHER_HOLD_MAX + 60 +
+      Math.random() * (CONFIG.WEATHER_HOLD_MAX - CONFIG.WEATHER_HOLD_MIN);
     this.locked = false; // allow it to arrive then hold
   }
 

@@ -64,19 +64,38 @@ hmapTex.wrapS = hmapTex.wrapT = THREE.ClampToEdgeWrapping;
 hmapTex.magFilter = THREE.LinearFilter;
 hmapTex.minFilter = THREE.LinearFilter;
 const hmapCenter = { x: 0, z: 0 };
+// Staggered heightmap update: spread 16k samples across multiple frames
+let _hmapPending = false;
+let _hmapNextRow = 0;
+let _hmapTargetX = 0, _hmapTargetZ = 0;
+const HMAP_ROWS_PER_FRAME = 16; // 16 rows × 128 cols = 2048 samples/frame → 8 frames total
+
 function updateHeightmap(cx, cz) {
+  _hmapTargetX = cx;
+  _hmapTargetZ = cz;
+  _hmapNextRow = 0;
+  _hmapPending = true;
+  hmapCenter.x = cx;
+  hmapCenter.z = cz;
+}
+
+function _tickHeightmap() {
+  if (!_hmapPending) return;
   const half = HMAP_SIZE / 2;
   const step = HMAP_SIZE / HMAP_RES;
-  for (let iz = 0; iz < HMAP_RES; iz++) {
+  const endRow = Math.min(_hmapNextRow + HMAP_ROWS_PER_FRAME, HMAP_RES);
+  for (let iz = _hmapNextRow; iz < endRow; iz++) {
     for (let ix = 0; ix < HMAP_RES; ix++) {
-      const wx = cx - half + ix * step;
-      const wz = cz - half + iz * step;
+      const wx = _hmapTargetX - half + ix * step;
+      const wz = _hmapTargetZ - half + iz * step;
       hmapData[iz * HMAP_RES + ix] = getTerrainHeight(wx, wz);
     }
   }
-  hmapTex.needsUpdate = true;
-  hmapCenter.x = cx;
-  hmapCenter.z = cz;
+  _hmapNextRow = endRow;
+  if (_hmapNextRow >= HMAP_RES) {
+    _hmapPending = false;
+    hmapTex.needsUpdate = true;
+  }
 }
 
 const waterTimeUniform = { value: 0 };
@@ -333,34 +352,7 @@ vr.dolly.position.set(0, 0, 0);
 vr.dolly.rotation.y = Math.PI; // face 180° toward the lake
 chunkManager.forceLoadAll(0, 0);
 
-// --- Nearby tree helper for audio rustling ---
 const _cameraDir = new THREE.Vector3();
-
-const _nearbyTrees = [];
-function getNearbyTrees(playerPos, radius) {
-  _nearbyTrees.length = 0;
-  const trees = _nearbyTrees;
-  const cx = Math.floor(playerPos.x / CONFIG.CHUNK_SIZE);
-  const cz = Math.floor(playerPos.z / CONFIG.CHUNK_SIZE);
-  const radiusSq = radius * radius;
-
-  for (let dz = -1; dz <= 1; dz++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const key = `${cx + dx},${cz + dz}`;
-      const chunk = chunkManager.activeChunks.get(key);
-      if (!chunk || !chunk.active) continue;
-
-      for (const tree of chunk.treePositions) {
-        const ddx = playerPos.x - tree.x;
-        const ddz = playerPos.z - tree.z;
-        if (ddx * ddx + ddz * ddz < radiusSq) {
-          trees.push(tree);
-        }
-      }
-    }
-  }
-  return trees;
-}
 
 // --- Time offset overlay (desktop) ---
 const timeEl = document.createElement('div');
@@ -568,10 +560,25 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
       } else if (h <= shoreY) {
         color = '#8b6e3c';
       } else {
-        const t = Math.min(1, (h - shoreY) / 8);
-        const r = Math.floor(30 + t * 20);
-        const g = Math.floor(60 + t * 40);
-        const b = Math.floor(15 + t * 10);
+        let r, g, b;
+        if (h > 24) {
+          // Snow
+          r = 240; g = 243; b = 248;
+        } else if (h > 20) {
+          // Alpine rock
+          r = 115; g = 107; b = 97;
+        } else if (h > 16) {
+          // Tussock
+          r = 140; g = 128; b = 77;
+        } else if (h > 10) {
+          // Subalpine (darker green)
+          r = 38; g = 72; b = 20;
+        } else {
+          const t = Math.min(1, (h - shoreY) / 8);
+          r = Math.floor(30 + t * 20);
+          g = Math.floor(60 + t * 40);
+          b = Math.floor(15 + t * 10);
+        }
         color = `rgb(${r},${g},${b})`;
       }
 
@@ -645,10 +652,21 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
 
 // --- Render Loop ---
 let timeHudFade = 0;
+let weatherHudFade = 0;
+let _lastWeatherState = '';
 const clock = new THREE.Clock();
 
-// Initial heightmap generation
-updateHeightmap(0, 0);
+// Initial heightmap generation (synchronous full pass for first frame)
+{
+  const half = HMAP_SIZE / 2;
+  const step = HMAP_SIZE / HMAP_RES;
+  for (let iz = 0; iz < HMAP_RES; iz++) {
+    for (let ix = 0; ix < HMAP_RES; ix++) {
+      hmapData[iz * HMAP_RES + ix] = getTerrainHeight(-half + ix * step, -half + iz * step);
+    }
+  }
+  hmapTex.needsUpdate = true;
+}
 
 function onFrame() {
   const delta = Math.min(clock.getDelta(), 0.1); // Cap delta to avoid jumps
@@ -668,20 +686,22 @@ function onFrame() {
   waterPlane.position.x = Math.round(pos.x / WATER_GRID_STEP) * WATER_GRID_STEP;
   waterPlane.position.z = Math.round(pos.z / WATER_GRID_STEP) * WATER_GRID_STEP;
   waterTimeUniform.value += delta;
-  // Update terrain heightmap when player moves significantly
+  // Update terrain heightmap when player moves significantly (staggered across frames)
   const hmDx = pos.x - hmapCenter.x, hmDz = pos.z - hmapCenter.z;
   if (hmDx * hmDx + hmDz * hmDz > 25) { // >5m moved
     updateHeightmap(pos.x, pos.z);
     hmapCenterUniform.value.set(pos.x, pos.z);
   }
+  _tickHeightmap();
   updateGroundTime(waterTimeUniform.value);
   vegPool.updateFoamTime(waterTimeUniform.value);
 
   // Wind animation
   updateWind(delta);
 
-  // Weather system
-  weather.update(delta, dayNight.sunElevation, pos, windUniforms.uWindDirection.value);
+  // Weather system (pass terrain height for snow-zone awareness)
+  const terrainAtPos = getTerrainHeight(pos.x, pos.z);
+  weather.update(delta, dayNight.sunElevation, pos, windUniforms.uWindDirection.value, terrainAtPos);
   // Weather drives wind strength
   windUniforms.uWindStrength.value = weather.windMultiplier;
   // Weather drives ground wetness
@@ -700,10 +720,19 @@ function onFrame() {
     else if (input.weatherCycle === 3) weather.setTarget(2);  // Rainy
     else if (input.weatherCycle === -1) weather.cycleForward();
   }
-  // Update weather HUD
+  // Update weather HUD (auto-fade like time HUD)
   const transitioning = Math.abs(weather.weatherIntensity - weather.targetIntensity) > 0.05;
-  updateWeatherHud(weather.getStateName(), transitioning);
-  vrWeatherSprite.visible = vr.isInVR();
+  const currentWeatherState = weather.getStateName();
+  if (currentWeatherState !== _lastWeatherState || transitioning) {
+    weatherHudFade = 3.0; // show for 3 seconds on change
+    _lastWeatherState = currentWeatherState;
+  } else {
+    weatherHudFade = Math.max(0, weatherHudFade - delta);
+  }
+  updateWeatherHud(currentWeatherState, transitioning);
+  const weatherHudOpacity = Math.min(1, weatherHudFade);
+  vrWeatherSprite.visible = vr.isInVR() && weatherHudOpacity > 0.01;
+  vrWeatherMat.opacity = weatherHudOpacity;
 
   // Time scrubbing (right grip + stick Y in VR, [ ] on desktop)
   if (input.timeAdjust !== 0) {
@@ -746,10 +775,13 @@ function onFrame() {
   // Wildlife peek events
   wildlife.update(delta, pos, dayNight.sunElevation);
 
-  // Audio (birds, footsteps, crickets, rustles, water ambient, spatial)
+  // Audio (birds, footsteps, crickets, water ambient, spatial)
   vr.camera.getWorldDirection(_cameraDir);
-  const nearbyTrees = getNearbyTrees(pos, CONFIG.RUSTLE_TRIGGER_DIST);
-  const waterProximity = Math.max(0, 1 - Math.abs(pos.y - CONFIG.WATER_LEVEL) / 8);
+  // Water proximity: reuse terrain height computed for weather
+  const terrainAtPlayer = terrainAtPos;
+  const waterProximity = terrainAtPlayer < CONFIG.WATER_LEVEL
+    ? Math.max(0, 1 - (CONFIG.WATER_LEVEL - terrainAtPlayer) / 8)
+    : 0;
   audio.update(
     delta,
     dayNight.sunElevation,
@@ -758,9 +790,10 @@ function onFrame() {
     movement.isMoving,
     movement.groundType,
     movement.bobPhase,
-    nearbyTrees,
+    null,
     waterProximity,
-    weather
+    weather,
+    movement.skiSpeed || 0
   );
   // Weather rain audio (uses shared audio context + noise buffer + spatial bus for 3D drips)
   weather.updateAudio(audio.ctx, audio.masterGain, audio._noiseBuffer, audio.spatialBus, pos, delta);

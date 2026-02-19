@@ -43,11 +43,14 @@ export class ChunkManager {
     }
 
     // Unload chunks that are too far
+    const maxPoolSize = (loadR * 2 + 1) * (loadR * 2 + 1); // cap pool to ~1 full load radius
     for (const [key, chunk] of this.activeChunks) {
       const dist = Math.max(Math.abs(chunk.cx - cx), Math.abs(chunk.cz - cz));
       if (dist > unloadR) {
         chunk.deactivate();
-        this.chunkPool.push(chunk);
+        if (this.chunkPool.length < maxPoolSize) {
+          this.chunkPool.push(chunk);
+        }
         this.activeChunks.delete(key);
       }
     }

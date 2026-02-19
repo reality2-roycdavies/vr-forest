@@ -1,7 +1,7 @@
 // Locomotion + snap turn + terrain following + jump + walk bob + rock climbing + swimming
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
-import { getTerrainHeight } from './terrain/noise.js';
+import { getTerrainHeight, getMountainFactor } from './terrain/noise.js';
 
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
@@ -34,6 +34,11 @@ export class MovementSystem {
 
     // Swimming
     this.isSwimming = false;
+
+    // Skiing momentum
+    this.skiVelX = 0;
+    this.skiVelZ = 0;
+    this.isOnSnow = false;
   }
 
   update(delta) {
@@ -61,6 +66,9 @@ export class MovementSystem {
       this.currentGroundY = solidGroundY;
     }
 
+    // --- Detect snow surface for ski physics ---
+    this.isOnSnow = !this.isSwimming && terrainY > CONFIG.SNOWLINE_START && rockY <= terrainY + 0.01;
+
     // --- Continuous locomotion (left stick) ---
     const canSprint = this.input.sprintPressed && this.collectibles && this.collectibles.score > 0 && !this.isSwimming;
     const moveSpeed = this.isSwimming ? CONFIG.SWIM_SPEED : (canSprint ? CONFIG.SPRINT_SPEED : CONFIG.MOVE_SPEED);
@@ -80,23 +88,79 @@ export class MovementSystem {
         _move.normalize();
         _move.multiplyScalar(moveSpeed * delta);
 
-        const newX = dolly.position.x + _move.x;
-        const newZ = dolly.position.z + _move.z;
-
-        if (this.isSwimming || !this._collidesWithTree(newX, newZ)) {
-          dolly.position.x = newX;
-          dolly.position.z = newZ;
-          isMoving = true;
+        if (this.isOnSnow) {
+          // On snow: input drives ski velocity — enough to climb
+          this.skiVelX += _move.x * 5.0;
+          this.skiVelZ += _move.z * 5.0;
         } else {
-          if (!this._collidesWithTree(newX, dolly.position.z)) {
+          const newX = dolly.position.x + _move.x;
+          const newZ = dolly.position.z + _move.z;
+
+          if (this.isSwimming || !this._collidesWithTree(newX, newZ)) {
             dolly.position.x = newX;
-            isMoving = true;
-          } else if (!this._collidesWithTree(dolly.position.x, newZ)) {
             dolly.position.z = newZ;
             isMoving = true;
+          } else {
+            if (!this._collidesWithTree(newX, dolly.position.z)) {
+              dolly.position.x = newX;
+              isMoving = true;
+            } else if (!this._collidesWithTree(dolly.position.x, newZ)) {
+              dolly.position.z = newZ;
+              isMoving = true;
+            }
           }
         }
       }
+    }
+
+    // --- Ski physics: gravity-driven downhill slide + friction ---
+    if (this.isOnSnow && this.isGrounded) {
+      // Compute slope from terrain gradient
+      const eps = 0.5;
+      const hL = getTerrainHeight(px - eps, pz);
+      const hR = getTerrainHeight(px + eps, pz);
+      const hD = getTerrainHeight(px, pz - eps);
+      const hU = getTerrainHeight(px, pz + eps);
+      const slopeX = (hL - hR) / (2 * eps); // positive = downhill in +X
+      const slopeZ = (hD - hU) / (2 * eps);
+
+      // Gravity pushes downhill (slope * gravity * scale)
+      const skiGravity = 3.5;
+      this.skiVelX += slopeX * skiGravity * delta;
+      this.skiVelZ += slopeZ * skiGravity * delta;
+
+      // Friction — less when coasting (no input), more when actively braking
+      const hasInput = Math.abs(left.x) > 0 || Math.abs(left.y) > 0;
+      const friction = hasInput ? 0.97 : 0.995;
+      this.skiVelX *= friction;
+      this.skiVelZ *= friction;
+
+      // Speed cap
+      const skiSpeed = Math.sqrt(this.skiVelX * this.skiVelX + this.skiVelZ * this.skiVelZ);
+      const maxSkiSpeed = 10;
+      if (skiSpeed > maxSkiSpeed) {
+        const scale = maxSkiSpeed / skiSpeed;
+        this.skiVelX *= scale;
+        this.skiVelZ *= scale;
+      }
+
+      // Apply ski velocity
+      this.skiSpeed = skiSpeed;
+      if (skiSpeed > 0.01) {
+        const newX = dolly.position.x + this.skiVelX * delta;
+        const newZ = dolly.position.z + this.skiVelZ * delta;
+        dolly.position.x = newX;
+        dolly.position.z = newZ;
+        // Only report "moving" at meaningful speed — prevents footstep sounds when nearly stopped
+        if (skiSpeed > 0.3) isMoving = true;
+      }
+    } else {
+      this.skiSpeed = 0;
+      // Off snow: bleed ski velocity quickly
+      this.skiVelX *= 0.85;
+      this.skiVelZ *= 0.85;
+      if (Math.abs(this.skiVelX) < 0.01) this.skiVelX = 0;
+      if (Math.abs(this.skiVelZ) < 0.01) this.skiVelZ = 0;
     }
 
     // --- Snap turn (right stick X) — disabled when mouse look active ---
@@ -152,11 +216,12 @@ export class MovementSystem {
     // --- Sprint state (set before bob so footstep rate matches) ---
     this.isSprinting = canSprint && isMoving;
 
-    // --- Walk / swim bob ---
+    // --- Walk / swim / ski bob ---
     if (isMoving && this.isGrounded) {
       const sprintBobSpeed = CONFIG.WALK_BOB_SPEED * (CONFIG.SPRINT_SPEED / CONFIG.MOVE_SPEED);
-      const bobSpeed = this.isSwimming ? CONFIG.SWIM_BOB_SPEED : (this.isSprinting ? sprintBobSpeed : CONFIG.WALK_BOB_SPEED);
-      const bobAmount = this.isSwimming ? CONFIG.SWIM_BOB_AMOUNT : CONFIG.WALK_BOB_AMOUNT;
+      // Skiing: slower, gentler bob for gliding feel
+      const bobSpeed = this.isSwimming ? CONFIG.SWIM_BOB_SPEED : this.isOnSnow ? 1.0 : (this.isSprinting ? sprintBobSpeed : CONFIG.WALK_BOB_SPEED);
+      const bobAmount = this.isSwimming ? CONFIG.SWIM_BOB_AMOUNT : this.isOnSnow ? 0.012 : CONFIG.WALK_BOB_AMOUNT;
       this.bobPhase += delta * bobSpeed;
       this.bobAmplitude = bobAmount;
     } else {
@@ -189,8 +254,8 @@ export class MovementSystem {
         }
       }
     } else if (!this.input.sprintPressed) {
-      // Only reset accumulator when sprint key is fully released
-      // (not just when out of points mid-sprint)
+      // Reset accumulator when sprint key is fully released
+      this._sprintDrainAccum = 0;
     }
 
     // Track airborne for landing detection
@@ -200,8 +265,12 @@ export class MovementSystem {
     this.isMoving = isMoving && this.isGrounded;
     if (terrainY < CONFIG.WATER_LEVEL + 0.1) {
       this.groundType = 'water';
+    } else if (rockY > terrainY + 0.01) {
+      this.groundType = 'rock';
+    } else if (terrainY > CONFIG.SNOWLINE_START) {
+      this.groundType = 'snow';
     } else {
-      this.groundType = (rockY > terrainY + 0.01) ? 'rock' : 'grass';
+      this.groundType = 'grass';
     }
   }
 

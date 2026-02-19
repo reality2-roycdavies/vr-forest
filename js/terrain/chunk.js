@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { generateTerrainData } from './terrain-generator.js';
-import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity } from './noise.js';
+import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity, getMountainFactor } from './noise.js';
 import { getGroundMaterial } from './ground-material.js';
 
 export class Chunk {
@@ -99,11 +99,24 @@ export class Chunk {
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL) continue;
 
-          const type = Math.abs(Math.floor(density * 30)) % CONFIG.TREE_TYPES;
-          const scale = CONFIG.TREE_MIN_HEIGHT +
+          // Mountain treeline: exclude above treeline, shrink in subalpine
+          if (y > CONFIG.TREELINE_START + 2) continue;
+
+          let type = Math.abs(Math.floor(density * 30)) % CONFIG.TREE_TYPES;
+          let scale = CONFIG.TREE_MIN_HEIGHT +
             (density - CONFIG.TREE_DENSITY_THRESHOLD) /
             (1 - CONFIG.TREE_DENSITY_THRESHOLD) *
             (CONFIG.TREE_MAX_HEIGHT - CONFIG.TREE_MIN_HEIGHT);
+
+          let altitudeScale = 1.0;
+          if (y > CONFIG.SUBALPINE_START) {
+            altitudeScale = 1 - (y - CONFIG.SUBALPINE_START) /
+              (CONFIG.TREELINE_START + 2 - CONFIG.SUBALPINE_START);
+            altitudeScale = Math.max(CONFIG.TREELINE_SCALE_MIN, altitudeScale);
+            // Above subalpine: pines only (type 0)
+            type = 0;
+          }
+          scale *= altitudeScale;
 
           this.treePositions.push({ x: jx, y: y - 0.15, z: jz, type, scale });
         }
@@ -131,14 +144,25 @@ export class Chunk {
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL + 2.5) continue; // no vegetation on sand
 
+          // Above treeline: no ferns/grass
+          if (y > CONFIG.TREELINE_START + 2) continue;
+
           // Type: 0=grass, 2=fern
           // Skip grass on dirt areas (high tree density)
           const treeDens = getTreeDensity(jx, jz);
           let type;
-          // Ferns mostly under trees, some in open areas at high density
-          if (density > 0.35 && (treeDens > 0.1 || density > 0.6)) type = 2;
-          else if (treeDens > 0.3) continue;  // no grass on dirt under trees
-          else type = 0;                       // grass
+
+          // In subalpine: reduce grass density, no ferns
+          if (y > CONFIG.SUBALPINE_START) {
+            if (density > 0.35) type = 0; // grass only, no ferns
+            else continue; // fewer grass tufts
+            // skip fern logic below
+          } else {
+            // Ferns mostly under trees, some in open areas at high density
+            if (density > 0.35 && (treeDens > 0.1 || density > 0.6)) type = 2;
+            else if (treeDens > 0.3) continue;  // no grass on dirt under trees
+            else type = 0;                       // grass
+          }
 
           const scale = 0.5 + density * 0.8;
           this.vegPositions.push({ x: jx, y, z: jz, type, scale });
@@ -194,6 +218,7 @@ export class Chunk {
           const jz = wz + jitter.z * 0.8;
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL) continue;
+          if (y > CONFIG.SUBALPINE_START) continue;
 
           // Same color for whole cluster
           const colorIdx = Math.abs(Math.floor((jx * 7.7 + jz * 3.3) * 100)) % numColors;
@@ -230,11 +255,25 @@ export class Chunk {
         const wz = worldOffZ + lz;
         const density = getRockDensity(wx, wz);
 
-        if (density > CONFIG.ROCK_DENSITY_THRESHOLD) {
-          const jitter = getJitter(wx + 300, wz + 300);
-          const jx = wx + jitter.x * 1.5;
-          const jz = wz + jitter.z * 1.5;
-          const y = getTerrainHeight(jx, jz);
+        // More rocks at altitude (alpine zone)
+        let threshold = CONFIG.ROCK_DENSITY_THRESHOLD;
+        const jitterR = getJitter(wx + 300, wz + 300);
+        const jxR = wx + jitterR.x * 1.5;
+        const jzR = wz + jitterR.z * 1.5;
+        const yR = getTerrainHeight(jxR, jzR);
+        if (yR > CONFIG.SNOWLINE_START) {
+          continue; // no rocks in snow zone
+        } else if (yR > CONFIG.ALPINE_START) {
+          threshold -= 0.2;
+        } else if (yR > CONFIG.TREELINE_START) {
+          threshold -= 0.1;
+        }
+
+        if (density > threshold) {
+          const jitter = jitterR;
+          const jx = jxR;
+          const jz = jzR;
+          const y = yR;
           if (y < CONFIG.SHORE_LEVEL) continue;
 
           // Size varies: 0=small, 1=medium, 2=large boulder

@@ -46,6 +46,12 @@ export class AmbientAudio {
     this._waterModTimeout = null;
     this._waterShimmerModTimeout = null;
 
+    // Ski slide sound
+    this._skiSlideActive = false;
+    this._skiSlideSource = null;
+    this._skiSlideGain = null;
+    this._skiSlideFilter = null;
+
     // Morepork (NZ owl) — nighttime call-and-response conversation
     this._moreporkBuffer = null;
     this._moreporkConvo = null;       // active conversation state
@@ -85,7 +91,7 @@ export class AmbientAudio {
    * Call each frame with extended parameters for all audio subsystems.
    * @param {object} [weather] - WeatherSystem instance (optional, passed as last arg)
    */
-  update(delta, sunElevation, playerPos, cameraDir, isMoving, groundType, bobPhase, nearbyTrees, waterProximity, weather) {
+  update(delta, sunElevation, playerPos, cameraDir, isMoving, groundType, bobPhase, nearbyTrees, waterProximity, weather, skiSpeed) {
     if (!this.started || !this.ctx) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
 
@@ -133,6 +139,9 @@ export class AmbientAudio {
     if (waterProximity !== undefined) {
       this._updateWaterAmbient(waterProximity);
     }
+
+    // Ski slide — continuous swoosh when sliding on snow
+    this._updateSkiSlide(skiSpeed || 0);
 
     // Rustling leaves — disabled, synthetic noise doesn't convincingly replicate leaves
     // if (nearbyTrees && playerPos) {
@@ -279,7 +288,31 @@ export class AmbientAudio {
     gain.gain.linearRampToValueAtTime(0, startTime + 0.14);
 
     osc.connect(gain);
-    gain.connect(this.masterGain);
+
+    // Spatialize chirps at a random position around the player
+    if (this.spatialBus && this.listener) {
+      const panner = ctx.createPanner();
+      panner.panningModel = 'HRTF';
+      panner.distanceModel = 'inverse';
+      panner.refDistance = 5;
+      panner.maxDistance = 60;
+      panner.rolloffFactor = 0.8;
+      // Place at random angle, 10-30m from listener
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 10 + Math.random() * 20;
+      const lPos = this.listener;
+      const lx = lPos.positionX ? lPos.positionX.value : 0;
+      const ly = lPos.positionY ? lPos.positionY.value : 0;
+      const lz = lPos.positionZ ? lPos.positionZ.value : 0;
+      panner.positionX.value = lx + Math.cos(angle) * dist;
+      panner.positionY.value = ly + 3 + Math.random() * 5;
+      panner.positionZ.value = lz + Math.sin(angle) * dist;
+      gain.connect(panner);
+      panner.connect(this.spatialBus);
+    } else {
+      gain.connect(this.masterGain);
+    }
+
     osc.start(startTime);
     osc.stop(startTime + 0.15);
   }
@@ -291,6 +324,9 @@ export class AmbientAudio {
       this._lastBobSign = 0;
       return;
     }
+
+    // Suppress discrete footsteps when ski slide is active (continuous sound handles it)
+    if (this._skiSlideActive) return;
 
     const bobValue = Math.sin(bobPhase * Math.PI * 2);
     const currentSign = bobValue >= 0 ? 1 : -1;
@@ -307,6 +343,8 @@ export class AmbientAudio {
       this._waterStep();
     } else if (groundType === 'rock') {
       this._rockStep();
+    } else if (groundType === 'snow') {
+      this._snowStep();
     } else {
       this._grassStep();
     }
@@ -411,6 +449,72 @@ export class AmbientAudio {
     toe.stop(now + toeDelay + 0.06);
   }
 
+  _snowStep() {
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const variation = 1 + (Math.random() - 0.5) * CONFIG.FOOTSTEP_PITCH_VARIATION * 2;
+    const vol = CONFIG.FOOTSTEP_VOLUME;
+
+    // 1. Snow crunch — compressed, crunchy mid-frequency noise
+    const crunch = ctx.createBufferSource();
+    crunch.buffer = this._noiseBuffer;
+    crunch.playbackRate.value = 0.35 + Math.random() * 0.15;
+
+    const crunchBP = ctx.createBiquadFilter();
+    crunchBP.type = 'bandpass';
+    crunchBP.frequency.setValueAtTime(1200 * variation, now);
+    crunchBP.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+    crunchBP.Q.value = 1.2;
+
+    const crunchGain = ctx.createGain();
+    crunchGain.gain.setValueAtTime(vol * 1.8, now);
+    crunchGain.gain.setTargetAtTime(vol * 0.8, now + 0.04, 0.03);
+    crunchGain.gain.setTargetAtTime(0, now + 0.12, 0.06);
+
+    crunch.connect(crunchBP);
+    crunchBP.connect(crunchGain);
+    crunchGain.connect(this.masterGain);
+    crunch.start(now);
+    crunch.stop(now + 0.3);
+
+    // 2. Ski swoosh — longer high-frequency sweep, gliding character
+    const swoosh = ctx.createBufferSource();
+    swoosh.buffer = this._noiseBuffer;
+    swoosh.playbackRate.value = 0.8 + Math.random() * 0.4;
+
+    const swooshBP = ctx.createBiquadFilter();
+    swooshBP.type = 'bandpass';
+    swooshBP.frequency.setValueAtTime(3500 * variation, now + 0.02);
+    swooshBP.frequency.exponentialRampToValueAtTime(1800, now + 0.25);
+    swooshBP.Q.value = 0.5;
+
+    const swooshGain = ctx.createGain();
+    swooshGain.gain.setValueAtTime(0, now);
+    swooshGain.gain.setTargetAtTime(vol * 1.0, now + 0.02, 0.02);
+    swooshGain.gain.setTargetAtTime(0, now + 0.1, 0.08);
+
+    swoosh.connect(swooshBP);
+    swooshBP.connect(swooshGain);
+    swooshGain.connect(this.masterGain);
+    swoosh.start(now);
+    swoosh.stop(now + 0.35);
+
+    // 3. Sub-crunch — low thud of compressed snow
+    const thud = ctx.createOscillator();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(100 * variation, now);
+    thud.frequency.exponentialRampToValueAtTime(40, now + 0.06);
+
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(vol * 1.0, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    thud.connect(thudGain);
+    thudGain.connect(this.masterGain);
+    thud.start(now);
+    thud.stop(now + 0.09);
+  }
+
   _waterStep() {
     const ctx = this.ctx;
     const now = ctx.currentTime;
@@ -492,6 +596,75 @@ export class AmbientAudio {
     sprayGain.connect(this.masterGain);
     spray.start(now + 0.03);
     spray.stop(now + 0.5);
+  }
+
+  // ======== Ski slide — continuous swoosh when sliding downhill on snow ========
+
+  _updateSkiSlide(skiSpeed) {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const shouldBeActive = skiSpeed > 0.15;
+
+    if (shouldBeActive && !this._skiSlideActive) {
+      // Start ski slide loop — shaped to sound like snow carving, not wind
+      this._skiSlideActive = true;
+
+      this._skiSlideSource = ctx.createBufferSource();
+      this._skiSlideSource.buffer = this._noiseBuffer;
+      this._skiSlideSource.loop = true;
+      this._skiSlideSource.playbackRate.value = 0.25; // very slow = gritty, granular
+
+      // Tight bandpass — crunchy mid-range, no airy highs
+      this._skiSlideFilter = ctx.createBiquadFilter();
+      this._skiSlideFilter.type = 'bandpass';
+      this._skiSlideFilter.frequency.value = 600;
+      this._skiSlideFilter.Q.value = 1.8;
+
+      // Cut highs hard — removes the white noise / wind character
+      this._skiSlideHigh = ctx.createBiquadFilter();
+      this._skiSlideHigh.type = 'lowpass';
+      this._skiSlideHigh.frequency.value = 2000;
+      this._skiSlideHigh.Q.value = 0.5;
+
+      this._skiSlideGain = ctx.createGain();
+      this._skiSlideGain.gain.value = 0;
+
+      this._skiSlideSource.connect(this._skiSlideFilter);
+      this._skiSlideFilter.connect(this._skiSlideHigh);
+      this._skiSlideHigh.connect(this._skiSlideGain);
+      this._skiSlideGain.connect(this.masterGain);
+      this._skiSlideSource.start();
+    } else if (!shouldBeActive && this._skiSlideActive) {
+      // Stop ski slide — slow fade out for smooth transition
+      this._skiSlideActive = false;
+      const now = ctx.currentTime;
+      if (this._skiSlideGain) {
+        this._skiSlideGain.gain.setTargetAtTime(0, now, 0.4);
+      }
+      const src = this._skiSlideSource;
+      setTimeout(() => {
+        try { src?.stop(); } catch (e) { /* already stopped */ }
+      }, 2000);
+      this._skiSlideSource = null;
+      this._skiSlideGain = null;
+      this._skiSlideFilter = null;
+      this._skiSlideHigh = null;
+    }
+
+    // Modulate volume, pitch, and filter by speed
+    if (this._skiSlideActive && this._skiSlideGain) {
+      const t = Math.min(1, skiSpeed / 10); // 0..1 normalized speed
+      const now = ctx.currentTime;
+      // Volume: gentle at low speed, moderate at high — never loud
+      const vol = CONFIG.FOOTSTEP_VOLUME * (0.4 + t * 1.2);
+      this._skiSlideGain.gain.setTargetAtTime(vol, now, 0.08);
+      // Playback rate: slow granular crunch → slightly faster carve
+      this._skiSlideSource.playbackRate.setTargetAtTime(0.2 + t * 0.25, now, 0.1);
+      // Filter center rises slightly with speed — more carve, less rumble
+      this._skiSlideFilter.frequency.setTargetAtTime(500 + t * 600, now, 0.1);
+      // Lowpass opens a touch at speed for edge detail
+      this._skiSlideHigh.frequency.setTargetAtTime(1500 + t * 1200, now, 0.1);
+    }
   }
 
   // ======== Crickets — night ambient, 4 sine voices with chirp bursts ========
@@ -1312,6 +1485,12 @@ export class AmbientAudio {
     this._cricketVoices = [];
     this._cricketActive = false;
     this._cricketGain = null;
+
+    // Stop ski slide
+    this._skiSlideActive = false;
+    try { this._skiSlideSource?.stop(); } catch (e) { /* already stopped */ }
+    this._skiSlideSource = null;
+    this._skiSlideGain = null;
 
     // Stop water ambient
     this._waterActive = false;

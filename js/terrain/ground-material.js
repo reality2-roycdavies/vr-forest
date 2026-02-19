@@ -58,14 +58,22 @@ export function getGroundMaterial() {
       shader.uniforms.uWetness = groundMaterial.userData.wetnessUniform;
       shader.uniforms.sandMap = { value: groundMaterial.userData.sandTex };
       shader.uniforms.dirtMap = { value: groundMaterial.userData.dirtTex };
+      shader.uniforms.subalpineColor = { value: new THREE.Color(CONFIG.SUBALPINE_COLOR.r, CONFIG.SUBALPINE_COLOR.g, CONFIG.SUBALPINE_COLOR.b) };
+      shader.uniforms.tussockColor = { value: new THREE.Color(CONFIG.TUSSOCK_COLOR.r, CONFIG.TUSSOCK_COLOR.g, CONFIG.TUSSOCK_COLOR.b) };
+      shader.uniforms.alpineRockColor = { value: new THREE.Color(CONFIG.ALPINE_ROCK_COLOR.r, CONFIG.ALPINE_ROCK_COLOR.g, CONFIG.ALPINE_ROCK_COLOR.b) };
+      shader.uniforms.snowColor = { value: new THREE.Color(CONFIG.SNOW_COLOR.r, CONFIG.SNOW_COLOR.g, CONFIG.SNOW_COLOR.b) };
+      shader.uniforms.subalpineStart = { value: CONFIG.SUBALPINE_START };
+      shader.uniforms.treelineStart = { value: CONFIG.TREELINE_START };
+      shader.uniforms.alpineStart = { value: CONFIG.ALPINE_START };
+      shader.uniforms.snowlineStart = { value: CONFIG.SNOWLINE_START };
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        '#include <common>\nvarying vec3 vWorldPos;\nattribute float treeDensity;\nvarying float vTreeDensity;'
+        '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute float treeDensity;\nvarying float vTreeDensity;'
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;'
+        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;\nvWorldNormal = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);'
       );
 
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -87,7 +95,16 @@ export function getGroundMaterial() {
          uniform float uWetness;
          uniform sampler2D sandMap;
          uniform sampler2D dirtMap;
+         uniform vec3 subalpineColor;
+         uniform vec3 tussockColor;
+         uniform vec3 alpineRockColor;
+         uniform vec3 snowColor;
+         uniform float subalpineStart;
+         uniform float treelineStart;
+         uniform float alpineStart;
+         uniform float snowlineStart;
          varying vec3 vWorldPos;
+         varying vec3 vWorldNormal;
          varying float vTreeDensity;
 
          // Per-pixel value noise for dirt patches (no triangle artifacts)
@@ -154,12 +171,45 @@ export function getGroundMaterial() {
          float dirtFactor = smoothstep(0.5, 0.7, treeDens + dirtDetail);
          // Suppress dirt on sand — use grassBlend (already wide smoothstep)
          dirtFactor *= grassBlend;
+
+         // --- Mountain altitude zones with ragged boundaries ---
+         float zoneNoise = _vnoise(vWorldPos.xz * 0.08) * 4.0 - 2.0;
+         float zn2 = _vnoise(vWorldPos.xz * 0.22 + 50.0) * 2.0 - 1.0;
+         float zoneOffset = zoneNoise + zn2;
+
+         float subalpineH = subalpineStart + zoneOffset;
+         float treelineH = treelineStart + zoneOffset;
+         float alpineH = alpineStart + zoneOffset;
+         float snowlineH = snowlineStart + zoneOffset;
+
+         // Tussock blend (used to suppress dirt above treeline)
+         float tussockBlend = smoothstep(treelineH - 1.5, treelineH + 2.0, h);
+
+         // Suppress dirt above treeline
+         dirtFactor *= (1.0 - tussockBlend);
+
          if (dirtFactor > 0.01) {
            // Smooth blend between dirt shades instead of hard threshold
            float dirtShade = smoothstep(0.2, 0.4, ht);
            vec3 dColor = mix(mix(dirtColor, dirtDarkColor, 0.4), dirtColor, dirtShade);
            terrainColor = mix(terrainColor, dColor, dirtFactor);
          }
+
+         // Subalpine: darker green
+         float subalpineBlend = smoothstep(subalpineH - 1.0, subalpineH + 2.0, h);
+         terrainColor = mix(terrainColor, subalpineColor, subalpineBlend * grassBlend);
+
+         // Treeline: tussock
+         terrainColor = mix(terrainColor, tussockColor, tussockBlend);
+
+         // Alpine: exposed rock
+         float alpineBlend = smoothstep(alpineH - 1.0, alpineH + 2.0, h);
+         terrainColor = mix(terrainColor, alpineRockColor, alpineBlend);
+
+         // Snow: slope-aware (flat = snow, steep = rock)
+         float snowBlend = smoothstep(snowlineH - 1.0, snowlineH + 2.0, h);
+         float slopeFlat = smoothstep(0.6, 0.85, vWorldNormal.y);
+         terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
          // Dynamic waterline that follows waves
          float dynWater = waterLevel + _waveH(vWorldPos.xz, uTime);
@@ -217,8 +267,9 @@ export function getGroundMaterial() {
            vec3 detail = mix(sandTexDetail * 2.5, grassTexDetail, grassBlend);
            detail = mix(detail, dirtTexDetail, dirtFactor);
 
-           // Apply as strong additive detail — suppress near waterline
+           // Apply as strong additive detail — suppress near waterline and at altitude
            float detailSuppress = smoothstep(dynWater - 0.2, dynWater + 0.5, h);
+           detailSuppress *= (1.0 - tussockBlend);
            diffuseColor.rgb += detail * 1.2 * detailSuppress;
          #endif`
       );
