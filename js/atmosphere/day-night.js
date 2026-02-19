@@ -1,8 +1,10 @@
 // Day/night cycle tied to real-world time with sun, clouds, and dynamic lighting
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { getStarCatalog } from './star-catalog.js';
 
 const _color = new THREE.Color();
+const _starEuler = new THREE.Euler(0, 0, 0, 'ZYX');
 const _sunPos = new THREE.Vector3();
 const _sunDir = new THREE.Vector3();
 const _moonDir = new THREE.Vector3();
@@ -39,15 +41,26 @@ const _fakeTimeHours = _fakeTimeParam ? (() => {
 const PALETTES = {
   // sunElevation ranges: night < -0.1, twilight -0.1..0.05, day > 0.05
   night: {
-    skyTop:    new THREE.Color(0x0a1228),
-    skyBottom: new THREE.Color(0x080c14),
-    fog:       new THREE.Color(0x060810),
+    skyTop:    new THREE.Color(0x081020),
+    skyBottom: new THREE.Color(0x060a10),
+    fog:       new THREE.Color(0x04060a),
     sun:       new THREE.Color(0x444466),
     sunIntensity: 0,
-    hemiSky:   new THREE.Color(0x2a3558),
-    hemiGround: new THREE.Color(0x141a24),
-    hemiIntensity: 0.5,
-    ambient:   0.45,
+    hemiSky:   new THREE.Color(0x1a2540),
+    hemiGround: new THREE.Color(0x0c1018),
+    hemiIntensity: 0.3,
+    ambient:   0.25,
+  },
+  deepNight: {
+    skyTop:    new THREE.Color(0x030508),
+    skyBottom: new THREE.Color(0x020304),
+    fog:       new THREE.Color(0x010203),
+    sun:       new THREE.Color(0x333344),
+    sunIntensity: 0,
+    hemiSky:   new THREE.Color(0x0c1420),
+    hemiGround: new THREE.Color(0x06080c),
+    hemiIntensity: 0.15,
+    ambient:   0.12,
   },
   twilight: {
     skyTop:    new THREE.Color(0x1a1a50),
@@ -227,9 +240,8 @@ export class DayNightSystem {
     this.moonMesh.renderOrder = -1;
     scene.add(this.moonMesh);
 
-    // --- Stars (for night) ---
+    // --- Stars (for night) — real constellation positions ---
     this.stars = this._createStars();
-    this.stars.material.transparent = true;
     scene.add(this.stars);
 
     // --- Shooting stars (pooled to avoid geometry allocation/disposal) ---
@@ -288,20 +300,74 @@ export class DayNightSystem {
   }
 
   _createStars() {
-    const count = 300;
+    const catalog = getStarCatalog();
+    const count = catalog.length;
+    const R = CONFIG.SKY_RADIUS * 0.95;
+
     const positions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const brightness = new Float32Array(count);
+
     for (let i = 0; i < count; i++) {
-      // Random points on a sphere
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = CONFIG.SKY_RADIUS * 0.95;
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = Math.abs(r * Math.cos(phi)); // only upper hemisphere
-      positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      const { ra, dec, mag } = catalog[i];
+      // Place in J2000 equatorial coordinates on sphere
+      // X = towards vernal equinox, Y = north pole, Z = completes right-hand
+      const cosDec = Math.cos(dec);
+      positions[i * 3]     =  cosDec * Math.cos(ra) * R;
+      positions[i * 3 + 1] =  Math.sin(dec) * R;
+      positions[i * 3 + 2] = -cosDec * Math.sin(ra) * R;
+
+      sizes[i] = Math.max(0.8, 3.5 - mag * 0.5);
+      brightness[i] = Math.max(0.3, 1.0 - mag * 0.12);
     }
+
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5, fog: false, sizeAttenuation: false });
+    geo.setAttribute('aSize', new THREE.Float32BufferAttribute(sizes, 1));
+    geo.setAttribute('aBrightness', new THREE.Float32BufferAttribute(brightness, 1));
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uOpacity: { value: 1.0 },
+        uTime: { value: 0.0 },
+      },
+      vertexShader: `
+        attribute float aSize;
+        attribute float aBrightness;
+        varying float vBrightness;
+        varying float vPhase;
+        void main() {
+          vBrightness = aBrightness;
+          // Unique phase per star for twinkling (position-derived)
+          vPhase = position.x * 37.7 + position.z * 59.3;
+          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize;
+          gl_Position = projectionMatrix * mvPos;
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        uniform float uTime;
+        varying float vBrightness;
+        varying float vPhase;
+        void main() {
+          // Soft circular point
+          vec2 c = gl_PointCoord - 0.5;
+          float d = dot(c, c);
+          if (d > 0.25) discard;
+          float alpha = smoothstep(0.25, 0.06, d);
+          // Subtle twinkling
+          float twinkle = 0.85 + 0.15 * sin(uTime * 2.7 + vPhase)
+                                     * sin(uTime * 1.3 + vPhase * 0.7);
+          gl_FragColor = vec4(vec3(0.95, 0.95, 1.0) * vBrightness * twinkle,
+                              alpha * uOpacity);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      fog: false,
+    });
+
     return new THREE.Points(geo, mat);
   }
 
@@ -813,6 +879,28 @@ export class DayNightSystem {
   }
 
   /**
+   * Local Sidereal Time for star field rotation.
+   * Uses same JD/GMST math as _getMoonPosition.
+   */
+  _getLocalSiderealTime(now) {
+    let hours;
+    if (_fakeTimeHours !== null) {
+      hours = _fakeTimeHours;
+    } else {
+      hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+    }
+    hours += this.timeOffset;
+
+    const tzOffsetMs = now.getTimezoneOffset() * 60000;
+    const midnightUtcMs = now.getTime() - (now.getTime() % 86400000);
+    const effectiveMs = midnightUtcMs + hours * 3600000 + tzOffsetMs;
+    const JD = effectiveMs / 86400000 + 2440587.5;
+
+    const GMST = (280.46061837 + 360.98564736629 * (JD - 2451545.0)) % 360;
+    return (GMST + this.longitude) * (Math.PI / 180);
+  }
+
+  /**
    * Blend between two palettes
    */
   _lerpPalette(a, b, t) {
@@ -832,8 +920,12 @@ export class DayNightSystem {
    * Get blended palette for current sun elevation
    */
   _getPalette(elevation) {
-    if (elevation < -0.1) {
-      return PALETTES.night;
+    if (elevation < -0.35) {
+      return PALETTES.deepNight;
+    } else if (elevation < -0.1) {
+      // Night darkens progressively toward deep night
+      const t = (elevation + 0.1) / -0.25; // 0 at -0.1, 1 at -0.35
+      return this._lerpPalette(PALETTES.night, PALETTES.deepNight, t);
     } else if (elevation < -0.02) {
       // Night to twilight
       const t = (elevation + 0.1) / 0.08;
@@ -942,22 +1034,30 @@ export class DayNightSystem {
     }
     this.moonMat.uniforms.opacity.value = moonOpacity;
     this.moonMat.uniforms.phase.value = moon.phase;
-    // Compute sun direction on the moon disc (so lit side faces scene sun)
-    if (camera) {
-      _moonToSun.copy(_sunPos).sub(_moonPos);
-      camera.matrixWorld.extractBasis(_camRight, _camUp, _camFwd);
-      const sx = _moonToSun.dot(_camRight);
-      const sy = _moonToSun.dot(_camUp);
-      const len = Math.sqrt(sx * sx + sy * sy) || 1;
-      this.moonMat.uniforms.sunDirOnDisc.value.set(sx / len, sy / len);
-    }
+    // Compute sun direction on the moon disc (lit side faces scene sun).
+    // Project onto moon mesh's own local axes (not camera), so the
+    // phase shadow stays fixed regardless of camera rotation.
+    _moonToSun.copy(_sunPos).sub(_moonPos);
+    this.moonMesh.updateMatrixWorld();
+    this.moonMesh.matrixWorld.extractBasis(_camRight, _camUp, _camFwd);
+    const sx = _moonToSun.dot(_camRight);
+    const sy = _moonToSun.dot(_camUp);
+    const len = Math.sqrt(sx * sx + sy * sy) || 1;
+    this.moonMat.uniforms.sunDirOnDisc.value.set(sx / len, sy / len);
 
-    // Stars visibility
+    // Stars visibility + equatorial rotation
     this.stars.position.copy(playerPos);
     let starOpacity = Math.max(0, Math.min(1, (-elevation + 0.05) / 0.15));
     if (weather) starOpacity *= (1 - weather.starDimming);
-    this.stars.material.opacity = starOpacity;
+    this.stars.material.uniforms.uOpacity.value = starOpacity;
+    this.stars.material.uniforms.uTime.value += (delta || 0.016);
     this.stars.visible = elevation < 0.1 && starOpacity > 0.01;
+    if (this.stars.visible) {
+      const lst = this._getLocalSiderealTime(now);
+      const latRad = this.latitude * (Math.PI / 180);
+      _starEuler.set(0, Math.PI - lst, -(Math.PI / 2 - latRad));
+      this.stars.rotation.copy(_starEuler);
+    }
 
     // --- Sun/moon light + shadow (reuse single DirectionalLight) ---
     _sunDir.copy(_sunPos).normalize();

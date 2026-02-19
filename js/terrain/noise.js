@@ -131,7 +131,11 @@ export function getTerrainHeight(worldX, worldZ) {
   const foothillProximity = Math.min(1, mBlended * 2.5); // ramp up near ridges
   const foothillH = foothillBase * foothillProximity * CONFIG.FOOTHILL_HEIGHT;
 
-  return streamH + (mMask * ampMod * CONFIG.MOUNTAIN_HEIGHT + foothillH) * spawnFade;
+  // Valley depression — deepen terrain between mountain ridges to create mountain lakes
+  // Active near mountains (foothillProximity > 0) but not on the ridges (mMask low)
+  const valleyDip = foothillProximity * (1 - mMask) * CONFIG.MOUNTAIN_VALLEY_DEPTH;
+
+  return streamH + (mMask * ampMod * CONFIG.MOUNTAIN_HEIGHT + foothillH - valleyDip) * spawnFade;
 }
 
 /**

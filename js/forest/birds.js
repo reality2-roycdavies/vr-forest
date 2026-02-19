@@ -1,10 +1,14 @@
 // Distant bird flocks — visual chevrons + crow-like caw audio
 import * as THREE from 'three';
+import { getTerrainHeight, getMountainFactor } from '../terrain/noise.js';
 
 const FLOCK_COUNT = 5;
 const BIRDS_PER_FLOCK = 8;
-const BIRD_ALTITUDE_MIN = 55;
-const BIRD_ALTITUDE_MAX = 80;
+const BIRD_ALTITUDE_MIN = 15;
+const BIRD_ALTITUDE_MAX = 35;
+const BIRD_CLEARANCE = 12;          // min meters above terrain surface
+const MOUNTAIN_AVOID_THRESHOLD = 0.15;
+const MOUNTAIN_AVOID_SPEED = 3;     // orbit speed multiplier over mountains
 const FLOCK_RADIUS_MIN = 25;
 const FLOCK_RADIUS_MAX = 80;
 const FLOCK_SPEED = 5;           // m/s orbit speed
@@ -134,12 +138,21 @@ export class BirdFlockSystem {
       const driftR = Math.sin(this.time * 0.1 + flock.radiusDrift) * 15;
       const driftA = Math.sin(this.time * 0.08 + flock.altDrift) * 5;
       const r = flock.radius + driftR;
-      const alt = flock.altitude + driftA;
 
       // Flock center in world space (orbits around player)
       const cx = playerPos.x + Math.cos(flock.angle) * r;
       const cz = playerPos.z + Math.sin(flock.angle) * r;
-      const cy = alt;
+
+      // Terrain-following: fly above ground with clearance
+      const terrainY = getTerrainHeight(cx, cz);
+      const baseAlt = flock.altitude + driftA;
+      const cy = Math.max(baseAlt, terrainY + BIRD_CLEARANCE);
+
+      // Mountain avoidance: speed up orbit to pass through mountain areas quickly
+      const mtnFactor = getMountainFactor(cx, cz);
+      if (isDay && mtnFactor > MOUNTAIN_AVOID_THRESHOLD) {
+        flock.angle += flock.clockwise * flock.speed / flock.radius * delta * MOUNTAIN_AVOID_SPEED * mtnFactor;
+      }
 
       // Forward direction (tangent to circle)
       const fx = -Math.sin(flock.angle) * flock.clockwise;
@@ -212,7 +225,7 @@ export class BirdFlockSystem {
     const r = flock.radius + driftR;
     const sx = playerPos.x + Math.cos(flock.angle) * r;
     const sz = playerPos.z + Math.sin(flock.angle) * r;
-    const sy = flock.altitude;
+    const sy = Math.max(flock.altitude, getTerrainHeight(sx, sz) + BIRD_CLEARANCE);
 
     // 1-3 caws in quick succession
     const cawCount = 1 + Math.floor(Math.random() * 3);

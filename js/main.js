@@ -536,8 +536,10 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
   const waterY = CONFIG.WATER_LEVEL;
   const shoreY = CONFIG.SHORE_LEVEL;
 
-  // Forward/right vectors from camera direction (Three.js right-handed)
-  const fx = cameraDir.x, fz = cameraDir.z;
+  // Forward/right vectors from camera direction, normalized in XZ plane
+  // (prevents minimap shrinking when looking up/down)
+  const rawLen = Math.sqrt(cameraDir.x * cameraDir.x + cameraDir.z * cameraDir.z) || 1;
+  const fx = cameraDir.x / rawLen, fz = cameraDir.z / rawLen;
 
   ctx.clearRect(0, 0, size, size);
 
@@ -633,10 +635,11 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
   ctx.closePath();
   ctx.fill();
 
-  // North indicator — "N" orbits the edge showing where -Z (north) is
+  // North indicator — "N" orbits the edge showing where +X (north) is
+  // (+X = astronomical north, matching sun/moon/star azimuth convention)
   const nDist = half - 10;
-  const nx = half - fx * nDist;
-  const ny = half + fz * nDist;
+  const nx = half - fz * nDist;
+  const ny = half - fx * nDist;
   ctx.fillStyle = '#ff4444';
   ctx.font = `bold ${Math.round(size * 0.08)}px monospace`;
   ctx.textAlign = 'center';

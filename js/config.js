@@ -121,6 +121,7 @@ export const CONFIG = {
   MOUNTAIN_WARP: 35,              // domain warp amount
   MOUNTAIN_SHARPNESS: 1.0,        // ridge sharpness (lower = broader ridges)
   MOUNTAIN_THRESHOLD: 0.25,       // ridge value below this = no mountain
+  MOUNTAIN_VALLEY_DEPTH: 5,       // valley depression between ridges (creates mountain lakes)
   FOOTHILL_HEIGHT: 6,             // max foothill height (gentle rolling hills)
   FOOTHILL_SCALE: 0.008,          // higher freq = smaller hills
 

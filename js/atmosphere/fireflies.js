@@ -1,5 +1,7 @@
 // Fireflies that appear at night - glowing particles around the player
 import * as THREE from 'three';
+import { getTerrainHeight } from '../terrain/noise.js';
+import { CONFIG } from '../config.js';
 
 const COUNT = 30;
 const SPREAD = 30;
@@ -117,8 +119,17 @@ export class FireflySystem {
       const bob = Math.sin(this.time * f.bobSpeed + f.phase) * f.bobAmount;
 
       const wx = playerPos.x + f.x + dx;
-      const wy = playerPos.y + f.y + bob;
       const wz = playerPos.z + f.z + dz;
+
+      // Hide fireflies over water — place off-screen if terrain is submerged
+      const groundY = getTerrainHeight(wx, wz);
+      if (groundY < CONFIG.SHORE_LEVEL) {
+        glowPos.setXYZ(i, 0, -1000, 0);
+        corePos.setXYZ(i, 0, -1000, 0);
+        continue;
+      }
+
+      const wy = groundY + f.y + bob;
 
       glowPos.setXYZ(i, wx, wy, wz);
       corePos.setXYZ(i, wx, wy, wz);
@@ -148,10 +159,16 @@ export class FireflySystem {
     corePos.needsUpdate = true;
     coreCol.needsUpdate = true;
 
-    // Respawn flies that drifted too far
+    // Respawn flies that drifted too far or are over water
     for (const f of this.flies) {
       const d2 = f.x * f.x + f.z * f.z;
       if (d2 > SPREAD * SPREAD) {
+        f.x = (Math.random() - 0.5) * SPREAD;
+        f.z = (Math.random() - 0.5) * SPREAD;
+      }
+      // Reposition if over water
+      const gY = getTerrainHeight(playerPos.x + f.x, playerPos.z + f.z);
+      if (gY < CONFIG.SHORE_LEVEL) {
         f.x = (Math.random() - 0.5) * SPREAD;
         f.z = (Math.random() - 0.5) * SPREAD;
       }
