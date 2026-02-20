@@ -1123,8 +1123,8 @@ export class DayNightSystem {
     this.ambientLight.intensity = palette.ambient;
     if (weather) {
       this.ambientLight.intensity *= (1 - weather.lightDimming);
-      // Lightning flash: additive ambient burst
-      this.ambientLight.intensity += weather.lightningFlash * 0.8;
+      // Lightning flash: additive ambient burst (strong enough to illuminate the scene)
+      this.ambientLight.intensity += weather.lightningFlash * 2.0;
     }
 
     // --- Fog (distance adapts to time of day) ---
@@ -1195,15 +1195,25 @@ export class DayNightSystem {
       const blend = weather.cloudDarkness; // 0 → 0.9 as weather intensifies
       this.skyUniforms.bottomColor.value.lerp(sceneFogColor, blend);
       this.skyUniforms.topColor.value.lerp(sceneFogColor, blend);
-      // Lightning flash — additive white burst
+      // Lightning flash — additive white burst on sky, fog, and background
       if (weather.lightningFlash > 0.01) {
-        const f = weather.lightningFlash * 0.4;
+        const f = weather.lightningFlash * 1.2;
         this.skyUniforms.topColor.value.r += f;
         this.skyUniforms.topColor.value.g += f;
         this.skyUniforms.topColor.value.b += f;
         this.skyUniforms.bottomColor.value.r += f;
         this.skyUniforms.bottomColor.value.g += f;
         this.skyUniforms.bottomColor.value.b += f;
+        this.skyUniforms.fogColor.value.r += f;
+        this.skyUniforms.fogColor.value.g += f;
+        this.skyUniforms.fogColor.value.b += f;
+        // Flash the scene fog/background too so the whole world lights up
+        this.scene.fog.color.r += f;
+        this.scene.fog.color.g += f;
+        this.scene.fog.color.b += f;
+        this.scene.background.r += f;
+        this.scene.background.g += f;
+        this.scene.background.b += f;
       }
     }
     this.skyMesh.position.set(playerPos.x, 0, playerPos.z);
