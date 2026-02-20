@@ -212,8 +212,7 @@
 
 <!-- ============ 7. PART 2 DIVIDER ============ -->
 <section data-background-gradient="linear-gradient(135deg, #0a0a0f 0%, #4a148c 100%)">
-  <p class="section-title">Part 2</p>
-  <h1>Growing<br>Strong Ideas</h1>
+  <h2 style="color:#fff; font-size:2em;">Growing Strong Ideas</h2>
   <aside class="notes">
     Part 2. I want to tell you a story.
   </aside>
@@ -248,21 +247,17 @@
 <!-- ============ 9. THIS IS SCIENCE ============ -->
 <section>
   <h2>This Is the Story of Science</h2>
-  <br>
-  <div style="font-size:0.82em; max-width:700px; margin:0 auto;">
+  <div style="font-size:0.78em; max-width:700px; margin:0 auto;">
     <div class="quote">
       People think science is about facts and figures.<br>
       People think science is about powerful people being 'right'.<br><br>
-      <strong style="color:#e0e0e0;">It's not.</strong><br><br>
-      Science is about people growing strong ideas.
+      <strong style="color:#e0e0e0;">It's not.</strong> Science is about people growing strong ideas.
     </div>
   </div>
   <br>
-  <div style="font-size:0.78em;">
-    <p>Ideas gain strength by <span class="highlight">surviving attempts to break them</span>.</p>
-    <p style="color:#90a4ae; font-size:0.85em;">Not by being "proven." Not by consensus. By surviving testing.</p>
-    <p style="color:#90a4ae; font-size:0.85em;">Anyone can do this. You just need to ask: <em>what would prove this wrong?</em></p>
-  </div>
+  <p style="font-size:0.78em;">Ideas gain strength by <span class="highlight">surviving attempts to break them</span>.</p>
+  <p style="font-size:0.68em; color:#90a4ae;">Not by being "proven." Not by consensus. By surviving testing.<br>
+  Anyone can do this. Just ask: <em>what would prove this wrong?</em></p>
   <aside class="notes">
     The Story of Hine IS the story of science. Karl Popper called it 
     conjecture and refutation. Ideas gain strength by surviving serious 
@@ -277,19 +272,13 @@
 <!-- ============ 10. REAL EXAMPLE ============ -->
 <section>
   <h2>A Spec Falls — And Gets Stronger</h2>
-  <p class="subtitle">Real example from my other project, Reality2</p>
-  <br>
-  <div style="font-size:0.78em; text-align:left; max-width:700px; margin:0 auto;">
-    <p><span class="emoji">📝</span> <strong>The spec said:</strong> "Here's how two devices discover each other over Bluetooth."</p>
-    <br>
-    <p><span class="emoji">🏗️</span> <strong>We built it.</strong> Two devices, following the spec exactly.</p>
-    <br>
-    <p><span class="emoji">🤷</span> <strong>Nothing.</strong> They couldn't see each other. No error. Just… silence.</p>
-    <br>
-    <p><span class="emoji">🔍</span> <strong>The discovery:</strong> The Bluetooth library automatically wraps the message.<br>
-    <span style="color:#90a4ae;">So the message was double-wrapped — like putting a letter in two envelopes.<br>
-    The address was hidden inside the outer one.</span></p>
-    <br>
+  <p class="subtitle">Real example from Reality2</p>
+  <div style="font-size:0.72em; text-align:left; max-width:700px; margin:0 auto;">
+    <p><span class="emoji">📝</span> <strong>Spec:</strong> "How two devices discover each other over Bluetooth."</p>
+    <p><span class="emoji">🏗️</span> <strong>Built it.</strong> Two devices, following the spec exactly.</p>
+    <p><span class="emoji">🤷</span> <strong>Nothing.</strong> Couldn't see each other. No error. Just… silence.</p>
+    <p><span class="emoji">🔍</span> <strong>Why:</strong> The Bluetooth library auto-wraps the message.
+    Double-wrapped — <span style="color:#90a4ae;">like a letter in two envelopes. Address hidden inside.</span></p>
     <p><span class="emoji">🔧</span> <strong>The code was correct.</strong> The <em>spec</em> was wrong. So we fixed the spec.</p>
   </div>
   <aside class="notes">
@@ -305,27 +294,23 @@
 <section>
   <h2>Honest Confidence</h2>
   <p class="subtitle">Know what you trust — and what you don't</p>
-  <br>
-  <div style="font-size:0.72em; text-align:left; max-width:700px; margin:0 auto;">
-    <p><strong>VR Forest Terrain</strong> — you just walked around in it</p>
+  <div style="font-size:0.7em; text-align:left; max-width:700px; margin:0 auto;">
+    <p><strong>VR Forest Terrain</strong> <span style="color:#90a4ae;">— you just walked around in it</span></p>
     <div class="confidence-bar"><div class="confidence-fill green-fill" style="width:85%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Spec written, built, tested on real headsets ✅</p>
 
-    <p style="margin-top:0.8em;"><strong>Bluetooth Discovery</strong> — devices finding each other</p>
+    <p style="margin-top:0.6em;"><strong>Bluetooth Discovery</strong> <span style="color:#90a4ae;">— failed, spec fixed, getting stronger</span></p>
     <div class="confidence-bar"><div class="confidence-fill yellow-fill" style="width:48%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Built, tested, failed, spec fixed ✅ — getting stronger</p>
 
-    <p style="margin-top:0.8em;"><strong>Trust &amp; Security</strong> — how devices prove identity</p>
+    <p style="margin-top:0.6em;"><strong>Trust &amp; Security</strong> <span style="color:#90a4ae;">— reviewed but never built</span></p>
     <div class="confidence-bar"><div class="confidence-fill red-fill" style="width:22%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Reviewed but never built — known gaps, low confidence</p>
   </div>
   <br>
-  <p style="font-size:0.72em;">
-    <span class="good">Green</span> = survived serious testing &nbsp;&nbsp;
-    <span style="color:#f9a825;">Yellow</span> = tested, learning &nbsp;&nbsp;
+  <p style="font-size:0.7em;">
+    <span class="good">Green</span> = survived testing &nbsp;&nbsp;
+    <span style="color:#f9a825;">Yellow</span> = learning &nbsp;&nbsp;
     <span class="warn">Red</span> = untested
   </p>
-  <p style="font-size:0.65em; color:#90a4ae; margin-top:0.3em;">Most projects don't tell you which parts they're confident about.<br>We think they should.</p>
+  <p style="font-size:0.65em; color:#90a4ae;">Most projects don't tell you which parts they trust. We think they should.</p>
   <aside class="notes">
     We track this in a dashboard. Each spec earns confidence by surviving tests. 
     Green — survived serious refutation. You walked through it on your headsets. 
