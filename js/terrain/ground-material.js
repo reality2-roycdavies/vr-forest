@@ -187,7 +187,7 @@ export function getGroundMaterial() {
          float snowlineH = snowlineStart + zoneOffset;
 
          // Tussock blend (used to suppress dirt above treeline)
-         float tussockBlend = smoothstep(treelineH - 1.5, treelineH + 2.0, h);
+         float tussockBlend = smoothstep(treelineH - 3.0, treelineH + 4.0, h);
 
          // Suppress dirt above treeline
          dirtFactor *= (1.0 - tussockBlend);
@@ -199,20 +199,20 @@ export function getGroundMaterial() {
            terrainColor = mix(terrainColor, dColor, dirtFactor);
          }
 
-         // Subalpine: darker green
-         float subalpineBlend = smoothstep(subalpineH - 1.0, subalpineH + 2.0, h);
+         // Subalpine: darker green (wide transition)
+         float subalpineBlend = smoothstep(subalpineH - 3.0, subalpineH + 4.0, h);
          terrainColor = mix(terrainColor, subalpineColor, subalpineBlend * grassBlend);
 
          // Treeline: tussock
          terrainColor = mix(terrainColor, tussockColor, tussockBlend);
 
-         // Alpine: exposed rock
-         float alpineBlend = smoothstep(alpineH - 1.0, alpineH + 2.0, h);
+         // Alpine: exposed rock (wide transition)
+         float alpineBlend = smoothstep(alpineH - 3.0, alpineH + 4.0, h);
          terrainColor = mix(terrainColor, alpineRockColor, alpineBlend);
 
-         // Snow: slope-aware (flat = snow, steep = rock)
-         float snowBlend = smoothstep(snowlineH - 1.0, snowlineH + 2.0, h);
-         float slopeFlat = smoothstep(0.6, 0.85, vWorldNormal.y);
+         // Snow: slope-aware (flat = snow, steep = rock), wide transition
+         float snowBlend = smoothstep(snowlineH - 3.0, snowlineH + 4.0, h);
+         float slopeFlat = smoothstep(0.5, 0.9, vWorldNormal.y);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
          // Dynamic waterline that follows waves
@@ -272,9 +272,9 @@ export function getGroundMaterial() {
            vec3 detail = mix(sandTexDetail * 2.5, grassTexDetail, grassBlend);
            detail = mix(detail, dirtTexDetail, dirtFactor);
 
-           // Apply as strong additive detail — suppress near waterline and at altitude
+           // Apply as strong additive detail — suppress near waterline and fade at altitude
            float detailSuppress = smoothstep(dynWater - 0.2, dynWater + 0.5, h);
-           detailSuppress *= (1.0 - tussockBlend);
+           detailSuppress *= (1.0 - smoothstep(0.0, 1.0, tussockBlend));
            diffuseColor.rgb += detail * 1.2 * detailSuppress;
          #endif`
       );
