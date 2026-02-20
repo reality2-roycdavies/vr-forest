@@ -177,9 +177,11 @@ export function getGroundMaterial() {
          dirtFactor *= grassBlend;
 
          // --- Mountain altitude zones with ragged boundaries ---
-         float zoneNoise = _vnoise(vWorldPos.xz * 0.08) * 4.0 - 2.0;
-         float zn2 = _vnoise(vWorldPos.xz * 0.22 + 50.0) * 2.0 - 1.0;
-         float zoneOffset = zoneNoise + zn2;
+         // Three octaves of value noise to break up grid-aligned corners
+         float zoneNoise = _vnoise(vWorldPos.xz * 0.06) * 4.0 - 2.0;
+         float zn2 = _vnoise(vWorldPos.xz * 0.17 + 50.0) * 2.0 - 1.0;
+         float zn3 = _vnoise(vWorldPos.xz * 0.43 + 120.0) * 1.0 - 0.5;
+         float zoneOffset = zoneNoise + zn2 + zn3;
 
          float subalpineH = subalpineStart + zoneOffset;
          float treelineH = treelineStart + zoneOffset;
