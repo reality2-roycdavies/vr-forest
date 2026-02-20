@@ -13,7 +13,7 @@
     --r-heading-color: #ffffff;
     --r-link-color: #4fc3f7;
   }
-  .reveal { font-size: clamp(22px, 3vw, 38px); }
+  .reveal { font-size: 34px; }
   .reveal h1 { font-size: 2.2em; font-weight: 700; text-shadow: 0 0 30px rgba(79,195,247,0.3); }
   .reveal h2 { font-size: 1.6em; font-weight: 600; color: #4fc3f7; }
   .reveal h3 { font-size: 1.2em; color: #81d4fa; }
@@ -48,11 +48,6 @@
     padding: 1em;
   }
   .reveal .two-col { flex-wrap: wrap; }
-  @media (max-width: 600px) {
-    .reveal .two-col { flex-direction: column; gap: 0.5em; }
-    .reveal .pipeline { flex-direction: column; }
-    .reveal .pipeline .arrow { transform: rotate(90deg); }
-  }
 </style>
 </head>
 <body>
@@ -160,7 +155,7 @@
 <!-- ============ 4b. GALLERY FALLBACK ============ -->
 <section>
   <h2>The Forest</h2>
-  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr; gap:8px; height:70vh;">
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr; gap:8px; width:100%; height:480px;">
     <img src="images/mountains.jpg" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">
     <img src="images/river-clear.jpg" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">
     <img src="images/night-fireflies.jpg" style="width:100%; height:100%; object-fit:cover; border-radius:6px;">
@@ -423,11 +418,11 @@ Reveal.initialize({
   transition: 'slide',
   transitionSpeed: 'default',
   showNotes: false,
-  width: '100%',
-  height: '100%',
+  width: 1280,
+  height: 720,
   margin: 0.04,
   minScale: 0.2,
-  maxScale: 2.0,
+  maxScale: 3.0,
   center: true,
   controlsTutorial: false
 });
