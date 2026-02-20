@@ -22,7 +22,6 @@
   .reveal .warn { color: #ff7043; font-weight: bold; }
   .reveal .good { color: #66bb6a; font-weight: bold; }
   .reveal code { background: rgba(79,195,247,0.15); padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
-  .reveal pre code { background: rgba(0,0,0,0.5); padding: 16px; font-size: 0.55em; line-height: 1.4; }
   .reveal .emoji { font-size: 1.4em; }
   .reveal ul { text-align: left; }
   .reveal li { margin-bottom: 0.4em; }
@@ -39,181 +38,92 @@
   .reveal .red-fill { background: linear-gradient(90deg, #c62828, #ef5350); }
   .reveal .yellow-fill { background: linear-gradient(90deg, #f9a825, #ffee58); }
   .reveal .green-fill { background: linear-gradient(90deg, #2e7d32, #66bb6a); }
-  .reveal table { margin: 0 auto; font-size: 0.7em; }
-  .reveal table th { background: rgba(79,195,247,0.2); color: #4fc3f7; }
-  .reveal table td, .reveal table th { padding: 0.3em 0.8em; border: 1px solid rgba(255,255,255,0.1); }
   .reveal .section-title { font-size: 0.5em; text-transform: uppercase; letter-spacing: 0.2em; color: #4fc3f7; margin-bottom: -0.5em; }
   .slide-number { font-size: 14px !important; }
-  .reveal .r-frame { border: none !important; box-shadow: none !important; }
 </style>
 </head>
 <body>
 <div class="reveal">
 <div class="slides">
 
-<!-- ============ SLIDE 1: TITLE ============ -->
+<!-- ============ 1. TITLE ============ -->
 <section>
   <h1>Building a VR Forest<br>with AI</h1>
-  <p class="subtitle" style="font-size:0.9em;">Specs, not code — and the refutative development process</p>
-  <p style="font-size:0.55em; color:#666; font-style:italic; margin-top:0.5em;">…or, what I did at the beach on my summer break</p>
+  <p style="font-size:0.7em; color:#90a4ae; margin-top:0.5em;">Growing strong ideas through specs, not code</p>
+  <p style="font-size:0.55em; color:#555; font-style:italic;">…or, what I did at the beach on my summer break</p>
   <br>
   <p style="font-size:0.6em; color:#90a4ae;">
     Dr Roy C. Davies &nbsp;·&nbsp; Auckland AR/VR Meetup &nbsp;·&nbsp; 25 Feb 2026
   </p>
   <aside class="notes">
-    Kia ora everyone. I'm Roy — I've been building VR systems for about 30 years, 
-    and writing software for 40+. Tonight I want to show you something I built last week 
-    in 7 days using only AI, and then talk about the development philosophy behind it. 
-    Two parts: the cool thing, then the thinking behind the cool thing.
+    Kia ora everyone. I'm Roy — VR researcher and builder for 30-odd years, 
+    writing software for 40+. I teach assistive tech at Auckland Uni and 
+    supervise VR students at AcademyEX. Tonight: something I built at the beach 
+    in 7 days using only AI, and the thinking behind it. Two parts, ten minutes.
   </aside>
 </section>
 
-<!-- ============ SLIDE 2: ABOUT ME ============ -->
+<!-- ============ 2. THE SEED ============ -->
 <section>
-  <h2>Who Am I?</h2>
-  <div class="two-col">
-    <div>
-      <ul>
-        <li>VR/XR researcher &amp; builder — 30+ years</li>
-        <li>Assistive tech lecturer (Auckland Uni)</li>
-        <li>VR supervisor (AcademyEX)</li>
-        <li>Started on a Dragon 32 in the '80s 🐉</li>
-        <li>Built location-based AR before Pokémon Go</li>
-      </ul>
-    </div>
-    <div style="text-align:center;">
-      <div class="stat">40+</div>
-      <div class="stat-label">years of building things</div>
-      <br>
-      <div class="stat" style="font-size:1.8em;">0</div>
-      <div class="stat-label">lines of hand-written code<br>in this VR project</div>
-    </div>
-  </div>
-  <aside class="notes">
-    Quick background. Started building hardware in the 80s — modular robotics for wheelchairs 
-    on a Dragon 32. Did a PhD in Sweden. Built location-based AR games on the first iPhone 
-    (LookHere, then Imersia). Now I teach assistive tech at Auckland Uni and supervise VR students 
-    at AcademyEX. The big number here is the zero — I'll explain that.
-  </aside>
-</section>
-
-<!-- ============ SLIDE 2b: WHAT IS REALITY2 ============ -->
-<section>
-  <h2>My Other Project: Reality2</h2>
-  <p style="font-size:0.75em;">A quick detour — I'll come back to this in Part 2</p>
+  <h2>One Prompt</h2>
   <br>
-  <div style="font-size:0.75em; text-align:left; max-width:750px; margin:0 auto;">
-    <p><span class="emoji">😤</span> <strong>Two frictions that shouldn't exist:</strong><br>
-    <span style="color:#90a4ae;"><em>Connectivity</em> — pairing, apps, WiFi passwords, Bluetooth menus…<br>
-    <em>Authentication</em> — accounts, logins, permissions, "sign in to continue"…</span></p>
-    <br>
-    <p><span class="emoji">🦾</span> <strong>The vision: Calm Technology</strong><br>
-    <span style="color:#90a4ae;">Iron Man doesn't tap through menus — he gestures and the tech responds.<br>
-    Corning's <em>"A Day Made of Glass"</em> — surfaces that respond to presence, then fade away.<br>
-    Technology that lives in the periphery until you need it.</span></p>
-    <br>
-    <p><span class="emoji">🐝</span> <strong>Reality2:</strong> Building that interaction model for real.<br>
-    <span style="color:#90a4ae;">No apps. No pairing. No login. Devices respond to proximity and gesture.<br>
-    The tech disappears — just like the best VR does.</span></p>
-    <br>
-    <p><span class="emoji">🌊</span> <strong>First use case:</strong> Flood monitoring for NZ communities.<br>
-    <span style="color:#90a4ae;">Sensors in rivers → mesh network → community alerts.</span></p>
-  </div>
-  <br>
-  <p style="font-size:0.6em; color:#90a4ae;">46 technical specifications. Built using the process I'm about to show you.</p>
-  <aside class="notes">
-    Quick context for Part 2. I'm also building Reality2 — a platform for devices that 
-    connect automatically based on proximity. Think: no more Bluetooth pairing, no apps, 
-    no accounts. The first real-world use is flood monitoring for NZ communities — sensors 
-    in rivers that mesh together and alert people. It's a big project — 46 specifications — 
-    and I'm using the same development process I'm about to describe. That's where 
-    the real-world examples in Part 2 come from.
-  </aside>
-</section>
-
-<!-- ============ PART 1 DIVIDER ============ -->
-<section data-background-gradient="linear-gradient(135deg, #0a0a0f 0%, #1a237e 100%)">
-  <p class="section-title">Part 1</p>
-  <h1>Building a VR Forest<br>from Scratch with AI</h1>
-  <p style="font-size:0.7em; color:#90a4ae;">7 days · 0 hand-written code · 1 owl recording</p>
-  <aside class="notes">
-    Part 1: the demo. Let me show you what happened when I told an AI to build me an 
-    endless VR forest from scratch.
-  </aside>
-</section>
-
-<!-- ============ SLIDE 4: THE PROMPT ============ -->
-<section>
-  <h2>The Seed</h2>
-  <div class="quote" style="font-size:0.8em;">
+  <div class="quote" style="font-size:0.85em;">
     "I want to create, from scratch, a VR simulation using just Claude Code. 
     The simulation should allow a wearer to explore an endless, randomly generated forest."
   </div>
   <br>
-  <p style="font-size:0.7em;">That's it. That's the starting prompt.</p>
-  <p style="font-size:0.6em; color:#90a4ae;">
-    Decision: WebXR + Three.js &nbsp;·&nbsp; No build tools &nbsp;·&nbsp; No game engine &nbsp;·&nbsp; Static site
+  <div style="text-align:center;">
+    <div class="stat">0</div>
+    <div class="stat-label">lines of hand-written code</div>
+  </div>
+  <br>
+  <p style="font-size:0.65em; color:#90a4ae;">
+    WebXR + Three.js &nbsp;·&nbsp; No game engine &nbsp;·&nbsp; Static site &nbsp;·&nbsp; 7 days
   </p>
   <aside class="notes">
-    This was the actual prompt. One sentence. The constraint was deliberate — pure WebXR, 
-    no Unity, no Godot, no build pipeline. Just Three.js served as a static site. 
-    Because I wanted to prove what's possible with just AI-assisted development.
+    One sentence. That's the starting prompt. Pure WebXR, no Unity, no Godot. 
+    Just an AI and a conversation. Seven days. Zero lines of hand-written code. 
+    Let me show you what came out.
   </aside>
 </section>
 
-<!-- ============ SLIDE 5: WHAT WE BUILT ============ -->
+<!-- ============ 3. WHAT EMERGED ============ -->
 <section>
-  <h2>What Emerged — 7 Days Later</h2>
-  <div class="two-col" style="font-size:0.75em;">
+  <h2>What Emerged</h2>
+  <div class="two-col" style="font-size:0.72em;">
     <div>
-      <h3>🌲 World</h3>
       <ul>
         <li>Infinite procedural terrain</li>
-        <li>3 tree species (pine, oak, birch)</li>
-        <li>Grass, ferns, flowers, rocks</li>
+        <li>3 tree species, grass, ferns, rocks</li>
         <li>Ponds &amp; streams with wave shaders</li>
         <li>Mountain chains with snow</li>
-      </ul>
-    </div>
-    <div>
-      <h3>🌤️ Atmosphere</h3>
-      <ul>
-        <li>Real sun position from device time/GPS</li>
+        <li>Real sun position from device GPS</li>
         <li>438 real constellation stars</li>
+      </ul>
+    </div>
+    <div>
+      <ul>
         <li>Accurate moon with phase shader</li>
-        <li>Dynamic weather (rain, thunder, snow)</li>
-        <li>Rain sheltering under tree canopy</li>
-      </ul>
-    </div>
-  </div>
-  <div class="two-col" style="font-size:0.75em; margin-top:0.5em;">
-    <div>
-      <h3>🔊 Audio</h3>
-      <ul>
-        <li>All procedurally synthesised</li>
-        <li>Footsteps, crickets, thunder, rain</li>
-        <li>Spatial wildlife sounds</li>
-      </ul>
-    </div>
-    <div>
-      <h3>📱 Platform</h3>
-      <ul>
+        <li>Dynamic weather — rain, snow, thunder</li>
+        <li>Rain shelters under tree canopy</li>
+        <li>All audio procedurally synthesised</li>
         <li>Quest 3 native via browser</li>
-        <li>Desktop with keyboard/mouse</li>
-        <li>~12,000 lines of JS</li>
+        <li>~12,000 lines of JavaScript</li>
       </ul>
     </div>
   </div>
+  <br>
+  <p style="font-size:0.65em; color:#90a4ae;">Two external assets total: a morepork call and a moon photo. Everything else generated at runtime.</p>
   <aside class="notes">
-    Here's what came out. An infinite procedural forest with real astronomy — the stars 
-    are real constellations, the Southern Cross is in the right place, the moon has the 
-    correct phase. Weather systems, spatial audio, all procedurally generated. About 12,000 
-    lines of JavaScript. Two external assets total: a morepork owl call and a moon photograph. 
-    Everything else — every texture, every sound, every mesh — is generated at runtime.
+    An infinite forest with real astronomy — the Southern Cross is in the right place, 
+    the moon has tonight's actual phase. Weather systems, spatial audio, all procedural. 
+    12,000 lines of JS from 13 conversations over 7 days. Two borrowed assets: 
+    a morepork recording and a moon photograph. Everything else — every texture, 
+    every sound, every mesh — generated at runtime.
   </aside>
 </section>
 
-<!-- ============ SLIDE 6: DEMO LINK ============ -->
+<!-- ============ 4. DEMO ============ -->
 <section data-background-gradient="linear-gradient(135deg, #0a0a0f 0%, #1b5e20 100%)">
   <h2>Try It Right Now</h2>
   <br>
@@ -224,453 +134,269 @@
   </p>
   <br>
   <p style="font-size:0.65em; color:#90a4ae;">
-    Open in your Quest/Pico browser → tap "Enter VR"<br>
-    Or use desktop with keyboard &amp; mouse
+    Open in your Quest browser → tap "Enter VR"<br>
+    Or desktop with keyboard &amp; mouse
   </p>
   <aside class="notes">
-    If you have a headset with you, try this URL right now. It's a static site on GitHub Pages. 
-    WebXR — no app install, just open in the browser. On desktop it works too, you just navigate 
-    with keyboard and mouse. [PAUSE — let people try it]
+    If you have a headset, try this now. Static site on GitHub Pages. 
+    WebXR — no app install, just open the browser. Desktop works too. 
+    [PAUSE — let people try it]
   </aside>
 </section>
 
-<!-- ============ SLIDE 7: THE PROCESS ============ -->
+<!-- ============ 5. HUMAN = DIRECTOR ============ -->
 <section>
-  <h2>Human = Director, AI = Studio</h2>
+  <h2>Human = Director,<br>AI = Studio</h2>
+  <br>
   <div class="pipeline">
     <div class="step">🎯 Vision<br><small>Human</small></div>
     <div class="arrow">→</div>
-    <div class="step">🏗️ Architecture<br><small>AI</small></div>
+    <div class="step">🏗️ Build<br><small>AI</small></div>
     <div class="arrow">→</div>
-    <div class="step">💻 Implementation<br><small>AI</small></div>
-    <div class="arrow">→</div>
-    <div class="step">🥽 VR Testing<br><small>Human</small></div>
+    <div class="step">🥽 Test<br><small>Human</small></div>
     <div class="arrow">→</div>
     <div class="step">🗣️ Feedback<br><small>Human</small></div>
   </div>
   <br>
-  <p style="font-size:0.7em;">13 sessions &nbsp;·&nbsp; ~53 MB of conversation &nbsp;·&nbsp; Every iteration through dialogue</p>
-  <div class="quote" style="font-size:0.65em; margin-top:1em;">
+  <div class="quote" style="font-size:0.7em;">
     "The first bear growl sounded more like someone farting."<br>
     — actual development note
   </div>
+  <br>
+  <p style="font-size:0.7em;">AI generates. <span class="highlight">Humans curate.</span><br>
+  <span style="font-size:0.8em; color:#90a4ae;">Only a human in a headset knows if it <em>feels</em> right.</span></p>
   <aside class="notes">
-    The process was conversational. I was the creative director — I'd put on the headset, 
-    describe what I saw and what was wrong, and Claude would fix it. 13 sessions over 7 days. 
-    The bear growl story is real — procedural audio is hard. We iterated until it worked. 
-    Some things we cut — procedural leaf rustling was just never good enough, so we dropped it. 
-    That's a judgement call only a human in the headset can make.
+    I was the creative director. Put on headset, describe what's wrong, AI fixes it. 
+    The bear growl really did sound like a fart — AI was happy with it, I wasn't. 
+    We cut procedural leaf rustling entirely because it never sounded right. 
+    Those are judgement calls. Human judgement calls. AI is incredibly powerful 
+    but it has no taste.
   </aside>
 </section>
 
-<!-- ============ SLIDE 8: THE SPEC ============ -->
-<section>
-  <h2>Then I Wrote the Spec</h2>
-  <p style="font-size:0.8em;">After building, I captured <span class="highlight">everything</span> in a 3,000-line specification</p>
-  <br>
-  <div style="font-size:0.7em; text-align:left; max-width:700px; margin:0 auto;">
-    <table>
-      <tr><th>Section</th><th>What it covers</th></tr>
-      <tr><td>VF-TERRAIN</td><td>Noise params, chunk sizes, biome thresholds</td></tr>
-      <tr><td>VF-WATER</td><td>10+ wave equations, shore foam algorithm</td></tr>
-      <tr><td>VF-FOREST</td><td>3 tree types, geometry, instancing</td></tr>
-      <tr><td>VF-ATMOSPHERE</td><td>Sun/moon ephemeris, star catalog, clouds</td></tr>
-      <tr><td>VF-WEATHER</td><td>State machine, rain particles, thunder</td></tr>
-      <tr><td>VF-AUDIO</td><td>Synthesis chains, spatial audio config</td></tr>
-      <tr><td>VF-WILDLIFE</td><td>Creature behaviour, flocking, spawn rules</td></tr>
-    </table>
-  </div>
-  <br>
-  <p style="font-size:0.65em; color:#90a4ae;">Every magic number documented. Every design decision explained.</p>
-  <aside class="notes">
-    After building it, I wrote the spec. Not before — in this case I was exploring, 
-    so the spec came second. But now the spec IS the product. 3,000 lines across 15 spec files. 
-    Every parameter, every algorithm, every "why" decision. This is the important bit — 
-    the spec is now more valuable than the code.
-  </aside>
-</section>
-
-<!-- ============ SLIDE 9: SPEC AS SOURCE OF TRUTH ============ -->
+<!-- ============ 6. SPECS ARE THE PRODUCT ============ -->
 <section>
   <h2>The Key Insight</h2>
-  <h3 style="color:#ff7043; font-size:1.4em; margin-top:0.5em;">Specs are the product.<br>Code is a compilation step.</h3>
+  <h3 style="color:#ff7043; font-size:1.3em; margin-top:0.5em;">Specs are the product.<br>Code is a compilation step.</h3>
   <br>
-  <div class="two-col" style="font-size:0.7em;">
+  <div style="font-size:0.75em;">
+    <p>After building the forest, I captured <em>everything</em> in a 3,000-line specification.</p>
+    <p style="color:#90a4ae;">Every parameter. Every algorithm. Every design decision.</p>
+  </div>
+  <br>
+  <div class="two-col" style="font-size:0.68em;">
     <div>
       <h3>Traditional</h3>
-      <ol>
-        <li>Vague idea</li>
-        <li>Write code until it works</li>
-        <li>Maybe document it</li>
-        <li class="warn">Knowledge lives in the code</li>
-      </ol>
+      <p>Write code until it works<br>
+      <span class="warn">Knowledge lives in the code</span><br>
+      <span style="color:#90a4ae;">Developer leaves → mystery</span></p>
     </div>
     <div>
       <h3>Spec-Driven</h3>
-      <ol>
-        <li>Write precise specification</li>
-        <li>AI generates code from spec</li>
-        <li>Test code against spec</li>
-        <li class="good">Knowledge lives in the spec</li>
-      </ol>
+      <p>Write precise specification<br>
+      <span class="good">Knowledge lives in the spec</span><br>
+      <span style="color:#90a4ae;">Same spec + better AI next year = better result</span></p>
     </div>
   </div>
+  <br>
+  <p style="font-size:0.65em; color:#90a4ae;">If the AI can't build it from the spec alone, the <em>spec</em> has a gap — not the AI.</p>
   <aside class="notes">
-    This is the core idea. In traditional dev, the code IS the knowledge. Lose the developer, 
-    lose the understanding. In spec-driven dev, the spec is the source of truth. The code is 
-    disposable — regenerate it anytime. Different AI, different engine, same spec, same result. 
-    The developer's role shifts from typist to technical director.
+    Here's the big idea. After building the forest, I wrote the spec — 3,000 lines 
+    covering every parameter and every decision. Now the spec IS the product. 
+    The code is disposable — regenerate it for any platform, any engine. 
+    Platforms come and go. Quest today, Apple tomorrow. The spec survives all of them. 
+    And here's the test: if an AI can't build it from the spec alone, the spec 
+    has a gap. That's a feature — it tells you where your thinking is incomplete.
   </aside>
 </section>
 
-<!-- ============ SLIDE 10: PLATFORM INDEPENDENCE ============ -->
-<section>
-  <h2>Platform Independence</h2>
-  <p style="font-size:0.8em;">The same spec can generate implementations for:</p>
-  <br>
-  <div class="pipeline">
-    <div class="step" style="background:rgba(102,187,106,0.15); border-color:#66bb6a;">Three.js ✅</div>
-    <div class="step">Godot</div>
-    <div class="step">Unity</div>
-    <div class="step">Unreal</div>
-    <div class="step">Custom engine</div>
-  </div>
-  <br>
-  <p style="font-size:0.7em;">If the AI can't build it from the spec alone,<br>
-  <span class="warn">the spec has a gap</span> — not the AI.</p>
-  <br>
-  <p style="font-size:0.6em; color:#90a4ae;">
-    Spec describes <em>behaviour</em>, not <em>implementation</em>.<br>
-    "4-octave simplex noise with persistence 0.45" — not "call THREE.SimplexNoise()"
-  </p>
-  <aside class="notes">
-    The spec is platform-independent. It says "4-octave simplex noise with persistence 0.45" — 
-    not "call this Three.js function." That means you could hand this spec to an AI targeting 
-    Godot or Unity and get the same forest. If the AI can't build it from the spec, the spec 
-    is incomplete. That's a feature, not a bug — it tells you where your spec needs work.
-  </aside>
-</section>
-
-<!-- ============ PART 2 DIVIDER ============ -->
+<!-- ============ 7. PART 2 DIVIDER ============ -->
 <section data-background-gradient="linear-gradient(135deg, #0a0a0f 0%, #4a148c 100%)">
   <p class="section-title">Part 2</p>
-  <h1>The Refutative<br>Development Process</h1>
-  <p style="font-size:0.7em; color:#90a4ae;">Conjecture &amp; Refutation for Software</p>
+  <h1>Growing<br>Strong Ideas</h1>
   <aside class="notes">
-    Part 2: the philosophy. This is where it gets interesting — we're going to apply 
-    Karl Popper's philosophy of science to software development. Stay with me — 
-    this is practical, not academic.
+    Part 2. I want to tell you a story.
   </aside>
 </section>
 
-<!-- ============ SLIDE 12: POPPER IN 30 SECONDS ============ -->
+<!-- ============ 8. THE STORY OF HINE ============ -->
 <section>
-  <h2>Popper in 30 Seconds</h2>
+  <h2>The Story of Hine</h2>
   <br>
-  <div style="font-size:0.85em;">
-    <p><span class="emoji">🔬</span> Science doesn't <em>prove</em> theories.</p>
-    <p><span class="emoji">💥</span> Science <em>tries to break</em> them.</p>
-    <p><span class="emoji">✅</span> Theories that <em>survive</em> are provisionally accepted.</p>
+  <div style="font-size:0.78em; text-align:left; max-width:750px; margin:0 auto;">
+    <p><span class="emoji">🌱</span> <strong>An idea is like a child. Let's call her Hine.</strong></p>
+    <p style="color:#90a4ae;">She started small, growing inside you. You protected her, helped her grow stronger.</p>
+    <br>
+    <p><span class="emoji">🏘️</span> <strong>It takes a village to grow a child. It's the same with ideas.</strong></p>
+    <p style="color:#90a4ae;">You shared Hine — starting with your closest whānau, then wider.</p>
+    <br>
+    <p><span class="emoji">💪</span> <strong>But Hine must be tested.</strong></p>
+    <p style="color:#90a4ae;">You build obstacle courses. Each time she falls, you hurt.<br>Each time she falls, you both learn. Each time, she grows stronger.</p>
+    <br>
+    <p><span class="emoji">💔</span> <strong>Not all idea-children survive.</strong></p>
+    <p style="color:#90a4ae;">You still remember Hemi with great fondness.<br>But from Hemi's passing came Hine.</p>
   </div>
-  <br>
-  <div class="quote" style="font-size:0.7em;">
-    "A theory that explains everything, explains nothing."<br>— Karl Popper
-  </div>
-  <br>
-  <p style="font-size:0.75em;">
-    <span class="highlight">Spec</span> = conjecture &nbsp;&nbsp;
-    <span class="highlight">Implementation</span> = experiment &nbsp;&nbsp;
-    <span class="highlight">Bug</span> = falsification
-  </p>
   <aside class="notes">
-    Quick Popper primer. Science doesn't prove theories — it tries to break them. 
-    A theory is good not because it's been proven but because it's survived serious 
-    attempts to disprove it. Apply that to software: your spec is a conjecture about 
-    what the system should do. Every implementation attempt is an experiment testing 
-    that conjecture. When something goes wrong, you've falsified the spec — 
-    and that's GOOD. That's how you improve.
+    An idea is like a child. You nurture her, protect her, share her carefully 
+    with your whānau. But ideas need to face the world. You build obstacle courses. 
+    She falls, you pick her up, go again. And some ideas don't survive — you remember 
+    Hemi with fondness, but from Hemi came Hine. Anyone who's had an idea they loved 
+    knows exactly what this feels like.
   </aside>
 </section>
 
-<!-- ============ SLIDE 13: THE CYCLE ============ -->
+<!-- ============ 9. THIS IS SCIENCE ============ -->
 <section>
-  <h2>The Refutative Cycle</h2>
+  <h2>This Is the Story of Science</h2>
   <br>
-  <div class="pipeline" style="font-size:0.8em;">
-    <div class="step" style="background:rgba(79,195,247,0.2);">📝 Write Spec<br><small>(conjecture)</small></div>
-    <div class="arrow">→</div>
-    <div class="step" style="background:rgba(255,112,67,0.2);">🏗️ Implement<br><small>(experiment)</small></div>
-    <div class="arrow">→</div>
-    <div class="step" style="background:rgba(255,112,67,0.2);">🧪 Test<br><small>(attempted refutation)</small></div>
-    <div class="arrow">→</div>
-    <div class="step" style="background:rgba(102,187,106,0.2);">🔧 Fix the Spec<br><small>(not the code)</small></div>
-  </div>
-  <br>
-  <p style="font-size:0.75em; margin-top:1em;">Three outcomes when something breaks:</p>
-  <table style="font-size:0.6em;">
-    <tr><th>Outcome</th><th>Meaning</th><th>Action</th></tr>
-    <tr><td>Code wrong</td><td>Spec was clear, AI got it wrong</td><td>Regenerate</td></tr>
-    <tr><td class="warn">Spec ambiguous</td><td>Spec could be read two ways</td><td>Clarify spec</td></tr>
-    <tr><td class="warn">Spec incomplete</td><td>Something wasn't specified</td><td>Add to spec</td></tr>
-  </table>
-  <p style="font-size:0.6em; color:#90a4ae; margin-top:0.5em;">The interesting outcomes are rows 2 and 3 — they improve the spec.</p>
-  <aside class="notes">
-    Here's the cycle in practice. Write spec, implement, test, fix the spec. 
-    Not fix the code — fix the SPEC. There are three possible outcomes when 
-    something fails. The first is boring — the AI just messed up. The interesting 
-    ones are when the spec was ambiguous or incomplete. Those are genuine falsifications 
-    that make your spec better.
-  </aside>
-</section>
-
-<!-- ============ SLIDE 14: REAL EXAMPLE - BEACON ============ -->
-<section>
-  <h2>Real Example: Bluetooth Discovery</h2>
-  <p class="subtitle">A spec was falsified by real hardware</p>
-  <br>
-  <div style="font-size:0.75em; text-align:left; max-width:750px; margin:0 auto;">
-    <p><span class="emoji">📝</span> <strong>The spec said:</strong><br>
-    "Here's exactly how a device should advertise itself over Bluetooth"</p>
-    <br>
-    <p><span class="emoji">🏗️</span> <strong>We built it:</strong><br>
-    Two devices, following the spec to the letter</p>
-    <br>
-    <p><span class="emoji">💥</span> <strong>What happened:</strong><br>
-    Nothing. They couldn't see each other. No error. Just… silence.</p>
-    <br>
-    <p><span class="emoji">🔍</span> <strong>The discovery:</strong><br>
-    The spec described the <em>complete</em> message. But the Bluetooth library 
-    automatically adds a wrapper. So the devices were double-wrapping — 
-    like putting a letter in two envelopes.</p>
-    <br>
-    <p><span class="emoji">🔧</span> <strong>The fix:</strong><br>
-    Updated the <em>spec</em>, not just the code. Added a warning for future implementers.</p>
-  </div>
-  <aside class="notes">
-    Real example from Reality2. We wrote a spec for how devices discover each other over 
-    Bluetooth. Two devices, same code, following the spec exactly. And... nothing. They 
-    couldn't see each other. No error message — just silence. Turned out the spec described 
-    the complete raw message, but the Bluetooth library automatically adds a wrapper around it. 
-    So the message was double-wrapped — like putting a letter in two envelopes. The address 
-    was hidden inside the outer envelope. The important thing: the CODE was correct — it did 
-    exactly what the spec said. The SPEC was wrong. So we fixed the spec and added a warning 
-    for anyone implementing it in the future. That's refutation in action.
-  </aside>
-</section>
-
-<!-- ============ SLIDE 15: DUAL MODEL AUDIT ============ -->
-<section>
-  <h2>Two AIs, Same Specs, Different Eyes</h2>
-  <p class="subtitle">Independent review finds complementary problems</p>
-  <br>
-  <div class="two-col" style="font-size:0.75em;">
-    <div style="border:1px solid #4fc3f7; border-radius:12px; padding:1em;">
-      <h3 style="margin-top:0;">AI Reviewer #1</h3>
-      <p style="font-size:1.2em; font-weight:bold;">28 issues found</p>
-      <p>Good at spotting internal contradictions<br>
-      <span style="color:#90a4ae;">"Section 3 says X but Section 7 says Y"</span></p>
-    </div>
-    <div style="border:1px solid #ff7043; border-radius:12px; padding:1em;">
-      <h3 style="margin-top:0; color:#ff7043;">AI Reviewer #2</h3>
-      <p style="font-size:1.2em; font-weight:bold;">13 issues found</p>
-      <p>Good at spotting big-picture gaps<br>
-      <span style="color:#90a4ae;">"Your old plan contradicts your new spec"</span></p>
+  <div style="font-size:0.82em; max-width:700px; margin:0 auto;">
+    <div class="quote">
+      People think science is about facts and figures.<br>
+      People think science is about powerful people being 'right'.<br><br>
+      <strong style="color:#e0e0e0;">It's not.</strong><br><br>
+      Science is about people growing strong ideas.
     </div>
   </div>
   <br>
-  <p style="font-size:0.8em;"><span class="highlight">4 issues found by both</span> — when two independent reviewers<br>agree something's wrong, it's almost certainly wrong.</p>
-  <aside class="notes">
-    I gave all 46 specs to two different AI models — independently. Neither saw the other's 
-    output. One was better at finding detailed contradictions within specs. The other was 
-    better at finding big-picture inconsistencies between documents. Four issues were flagged 
-    by BOTH — those are almost certainly real problems. It's like having two proofreaders 
-    with different strengths. The combination is more powerful than either alone.
-  </aside>
-</section>
-
-<!-- ============ SLIDE 16: WHAT THEY FOUND ============ -->
-<section>
-  <h2>What They Found</h2>
-  <br>
-  <div style="font-size:0.75em; text-align:left; max-width:750px; margin:0 auto;">
-    <p><span class="warn">1.</span> <strong>Two specs described the same thing differently</strong><br>
-    <small style="color:#90a4ae;">Like two architects drawing the same door in different sizes</small></p>
-    <br>
-    <p><span class="warn">2.</span> <strong>A security feature had no lifecycle story</strong><br>
-    <small style="color:#90a4ae;">"Here's a key" — but when does it expire? Who rotates it?</small></p>
-    <br>
-    <p><span class="warn">3.</span> <strong>Old planning docs contradicted current specs</strong><br>
-    <small style="color:#90a4ae;">Old plan: "sensors aren't nodes" — New spec: "everything is a node"</small></p>
-    <br>
-    <p><span class="warn">4.</span> <strong>No "superseded" labels on outdated documents</strong><br>
-    <small style="color:#90a4ae;">People reading old docs would get the wrong picture</small></p>
+  <div style="font-size:0.78em;">
+    <p>Ideas gain strength by <span class="highlight">surviving attempts to break them</span>.</p>
+    <p style="color:#90a4ae; font-size:0.85em;">Not by being "proven." Not by consensus. By surviving testing.</p>
+    <p style="color:#90a4ae; font-size:0.85em;">Anyone can do this. You just need to ask: <em>what would prove this wrong?</em></p>
   </div>
-  <br>
-  <p style="font-size:0.7em; color:#90a4ae;">All four fixed within 24 hours. The specs are now stronger.</p>
   <aside class="notes">
-    Here's what they found — explained without the jargon. Two specs described the same 
-    feature differently — that's a contradiction. A security key had no rotation story — 
-    it would just sit there forever. Old planning docs hadn't been labelled as outdated. 
-    None of these would have been caught by testing the code — the code would work fine. 
-    The SPECS had the problems. And now they're fixed. That's the refutative process working.
+    The Story of Hine IS the story of science. Karl Popper called it 
+    conjecture and refutation. Ideas gain strength by surviving serious 
+    attempts to break them. Not by consensus, not by authority. 
+    Apply it to software: your spec is Hine. Every test is an obstacle course. 
+    Every bug is a fall she learns from. And anyone can do this — you don't need 
+    a PhD. You just need intellectual honesty and the courage to ask: 
+    what would prove this wrong?
   </aside>
 </section>
 
-<!-- ============ SLIDE 17: CONFIDENCE DASHBOARD ============ -->
+<!-- ============ 10. REAL EXAMPLE ============ -->
 <section>
-  <h2>Tracking Confidence</h2>
-  <p class="subtitle">How do you know which specs you can trust?</p>
+  <h2>A Spec Falls — And Gets Stronger</h2>
+  <p class="subtitle">Real example from my other project, Reality2</p>
   <br>
-  <div style="font-size:0.7em; text-align:left; max-width:700px; margin:0 auto;">
-    <p><strong>Bluetooth Discovery</strong> — how devices find each other</p>
-    <div class="confidence-bar"><div class="confidence-fill yellow-fill" style="width:48%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Built &amp; tested on real hardware ✅ · Bug found &amp; fixed ✅</p>
+  <div style="font-size:0.78em; text-align:left; max-width:700px; margin:0 auto;">
+    <p><span class="emoji">📝</span> <strong>The spec said:</strong> "Here's how two devices discover each other over Bluetooth."</p>
+    <br>
+    <p><span class="emoji">🏗️</span> <strong>We built it.</strong> Two devices, following the spec exactly.</p>
+    <br>
+    <p><span class="emoji">🤷</span> <strong>Nothing.</strong> They couldn't see each other. No error. Just… silence.</p>
+    <br>
+    <p><span class="emoji">🔍</span> <strong>The discovery:</strong> The Bluetooth library automatically wraps the message.<br>
+    <span style="color:#90a4ae;">So the message was double-wrapped — like putting a letter in two envelopes.<br>
+    The address was hidden inside the outer one.</span></p>
+    <br>
+    <p><span class="emoji">🔧</span> <strong>The code was correct.</strong> The <em>spec</em> was wrong. So we fixed the spec.</p>
+  </div>
+  <aside class="notes">
+    Real example. Two devices, same code, following the spec perfectly. Silence. 
+    The spec described the complete raw message, but the Bluetooth library wraps it 
+    automatically. Double-wrapped — like a letter in two envelopes. The code did 
+    exactly what the spec said. The SPEC was wrong. Hine fell. We picked her up, 
+    fixed the spec, added a warning for future implementers. She's stronger now.
+  </aside>
+</section>
 
-    <p style="margin-top:0.8em;"><strong>VR Forest Terrain</strong> — the infinite landscape</p>
+<!-- ============ 11. CONFIDENCE ============ -->
+<section>
+  <h2>Honest Confidence</h2>
+  <p class="subtitle">Know what you trust — and what you don't</p>
+  <br>
+  <div style="font-size:0.72em; text-align:left; max-width:700px; margin:0 auto;">
+    <p><strong>VR Forest Terrain</strong> — you just walked around in it</p>
     <div class="confidence-bar"><div class="confidence-fill green-fill" style="width:85%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Built ✅ · You just walked around in it ✅</p>
+    <p style="color:#90a4ae; font-size:0.85em;">Spec written, built, tested on real headsets ✅</p>
+
+    <p style="margin-top:0.8em;"><strong>Bluetooth Discovery</strong> — devices finding each other</p>
+    <div class="confidence-bar"><div class="confidence-fill yellow-fill" style="width:48%;"></div></div>
+    <p style="color:#90a4ae; font-size:0.85em;">Built, tested, failed, spec fixed ✅ — getting stronger</p>
 
     <p style="margin-top:0.8em;"><strong>Trust &amp; Security</strong> — how devices prove identity</p>
     <div class="confidence-bar"><div class="confidence-fill red-fill" style="width:22%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ⚠️ · Known gaps · Not yet built</p>
+    <p style="color:#90a4ae; font-size:0.85em;">Reviewed but never built — known gaps, low confidence</p>
   </div>
   <br>
-  <p style="font-size:0.7em;">
+  <p style="font-size:0.72em;">
     <span class="good">Green</span> = survived serious testing &nbsp;&nbsp;
-    <span style="color:#f9a825;">Yellow</span> = some testing, known issues &nbsp;&nbsp;
-    <span class="warn">Red</span> = not yet tested
+    <span style="color:#f9a825;">Yellow</span> = tested, learning &nbsp;&nbsp;
+    <span class="warn">Red</span> = untested
   </p>
-  <br>
-  <p style="font-size:0.6em; color:#90a4ae;">And yes — this dashboard follows the same calm tech principles.<br>
-  Green means don't think about it. Problems announce themselves.</p>
+  <p style="font-size:0.65em; color:#90a4ae; margin-top:0.3em;">Most projects don't tell you which parts they're confident about.<br>We think they should.</p>
   <aside class="notes">
-    We track all this in a dashboard. Each spec earns confidence by surviving tests — 
-    reviews, implementations, real-world deployments. Red means it hasn't been tested much yet. 
-    Green means it's survived multiple rounds of refutation. The VR Forest terrain spec is 
-    green — you just experienced it on your headsets. The trust and security spec is red — 
-    it's been reviewed but never implemented. We know it has gaps. That's honest. 
-    Most software projects don't tell you which parts they're confident about and which they're not.
-    And notice — this dashboard uses the same calm tech principles we talked about earlier. 
-    Green is peripheral, you ignore it. Red promotes itself to your attention. You don't check 
-    the dashboard — it tells you when something matters.
+    We track this in a dashboard. Each spec earns confidence by surviving tests. 
+    Green — survived serious refutation. You walked through it on your headsets. 
+    Yellow — been tested, been broken, getting stronger. Red — not yet tested, 
+    and we're honest about that. Most software projects don't tell you which parts 
+    they trust and which they don't. We think that honesty is more valuable than 
+    false certainty.
   </aside>
 </section>
 
-<!-- ============ SLIDE 19: WHY THIS MATTERS ============ -->
+<!-- ============ 12. TAKEAWAYS ============ -->
 <section>
-  <h2>Why This Matters</h2>
+  <h2>Five Ideas to Take Home</h2>
   <br>
-  <div style="font-size:0.75em;">
-    <p><span class="emoji">🔄</span> <strong>Platforms come and go</strong><br>
-    <span style="color:#90a4ae;">Quest today, Apple tomorrow, who knows next year. Specs survive all of them.</span></p>
+  <div style="font-size:0.82em;">
+    <p><span class="stat" style="font-size:1.1em;">1</span> &nbsp;
+    <strong>AI builds. You direct.</strong><br>
+    <span style="font-size:0.7em; color:#90a4ae;">The creative vision is still yours.</span></p>
     <br>
-    <p><span class="emoji">🤖</span> <strong>AI keeps getting better</strong><br>
-    <span style="color:#90a4ae;">Same spec + better AI next year = better result, no extra work.</span></p>
+    <p><span class="stat" style="font-size:1.1em;">2</span> &nbsp;
+    <strong>Write the spec, not the code.</strong><br>
+    <span style="font-size:0.7em; color:#90a4ae;">Your spec is Hine — the durable asset. Code is ephemeral.</span></p>
     <br>
-    <p><span class="emoji">🧠</span> <strong>Knowledge doesn't walk out the door</strong><br>
-    <span style="color:#90a4ae;">When the developer leaves, the code becomes a mystery. The spec stays readable.</span></p>
+    <p><span class="stat" style="font-size:1.1em;">3</span> &nbsp;
+    <strong>Build obstacle courses for your ideas.</strong><br>
+    <span style="font-size:0.7em; color:#90a4ae;">Each fall makes them stronger.</span></p>
     <br>
-    <p><span class="emoji">✅</span> <strong>You can check the spec without running the code</strong><br>
-    <span style="color:#90a4ae;">Non-developers can review specs. Try reviewing 12,000 lines of shader code.</span></p>
+    <p><span class="stat" style="font-size:1.1em;">4</span> &nbsp;
+    <strong>Anyone can do this.</strong><br>
+    <span style="font-size:0.7em; color:#90a4ae;">You don't need a PhD. Just ask: what would prove this wrong?</span></p>
     <br>
-    <p><span class="emoji">🛡️</span> <strong>This process works with or without AI</strong><br>
-    <span style="color:#90a4ae;">AI speeds things up enormously — but spec-driven refutative development is good practice anyway.<br>
-    If AI fails us tomorrow, a team of developers can still build from these documents.</span></p>
+    <p><span class="stat" style="font-size:1.1em;">5</span> &nbsp;
+    <strong>Be honest about what you know and what you don't.</strong><br>
+    <span style="font-size:0.7em; color:#90a4ae;">Honest confidence beats false certainty.</span></p>
   </div>
+  <br>
+  <p style="font-size:1.1em; color:#4fc3f7; font-style:italic;">And the forest of ideas grows. 🌲</p>
   <aside class="notes">
-    Why care? Whether you're a developer or not. Platforms change constantly — 
-    we've all been burned by rewriting for new SDKs or new headsets. A spec survives 
-    platform death. As AI improves, your same spec produces better implementations for free. 
-    And — crucially — non-technical people can read and review a spec. You can't review code 
-    unless you're a developer. You CAN review a document that says "the forest should have 
-    three tree species with these proportions." That makes the whole team part of quality control.
+    Five things. One: AI is the studio, you're the director. Two: invest in specs, 
+    not code — they're your Hine. Three: test your ideas seriously — every fall 
+    makes them stronger. Four: anyone can do this, it's just structured honesty. 
+    Five: be transparent about confidence — say what you know and what you don't. 
+    And the forest of ideas grows — that's from the Hine story, 
+    and you just walked through a literal forest of ideas on your headsets.
   </aside>
 </section>
 
-<!-- ============ SLIDE 20: HUMAN IN THE LOOP ============ -->
-<section>
-  <h2>The Human Still Matters</h2>
-  <p class="subtitle">AI is the tool. You are the quality control.</p>
-  <br>
-  <div style="font-size:0.75em;">
-    <p><span class="emoji">🥽</span> <strong>Only a human in a headset knows if it <em>feels</em> right</strong><br>
-    <span style="color:#90a4ae;">The bear growl that sounded like a fart? AI thought it was fine.</span></p>
-    <br>
-    <p><span class="emoji">🎯</span> <strong>AI generates. Humans curate.</strong><br>
-    <span style="color:#90a4ae;">AI gives you 10 options in seconds. Choosing the right one is your job.</span></p>
-    <br>
-    <p><span class="emoji">🔍</span> <strong>Specs ARE human quality control</strong><br>
-    <span style="color:#90a4ae;">Anyone can read a spec and ask "is this what we actually want?"<br>You can't do that with 12,000 lines of code.</span></p>
-    <br>
-    <p><span class="emoji">⚖️</span> <strong>Judgement calls don't come from data</strong><br>
-    <span style="color:#90a4ae;">Should the rain stop under trees? Should the stars be accurate?<br>Those are design decisions. Human decisions.</span></p>
-  </div>
-  <aside class="notes">
-    This is important. AI is incredibly powerful, but it has no taste. 
-    The first bear growl sounded like a fart — AI was perfectly happy with it. 
-    I wasn't. We cut procedural leaf rustling entirely because it never sounded right — 
-    that's a judgement call only a human can make. The spec-driven approach actually 
-    INCREASES human involvement in the important parts — the what and the why — 
-    while offloading the tedious parts — the how. And because specs are readable by 
-    anyone, not just developers, you get broader quality control. Your designer, your 
-    client, your users can all read the spec and say "that's not what I meant."
-  </aside>
-</section>
-
-<!-- ============ SLIDE 21: TAKEAWAYS ============ -->
-<section>
-  <h2>Four Things to Take Home</h2>
-  <br>
-  <div style="font-size:0.85em;">
-    <p><span class="stat" style="font-size:1.2em;">1</span> &nbsp;
-    <strong>Write the spec, not the code</strong><br>
-    <span style="font-size:0.7em; color:#90a4ae;">Your spec is your durable asset. Code is ephemeral.</span></p>
-    <br>
-    <p><span class="stat" style="font-size:1.2em;">2</span> &nbsp;
-    <strong>Try to break your own specs</strong><br>
-    <span style="font-size:0.7em; color:#90a4ae;">Implementation is a refutation test. Embrace the failures.</span></p>
-    <br>
-    <p><span class="stat" style="font-size:1.2em;">3</span> &nbsp;
-    <strong>Use multiple AI reviewers</strong><br>
-    <span style="font-size:0.7em; color:#90a4ae;">Different models find different bugs. Independence is the key.</span></p>
-    <br>
-    <p><span class="stat" style="font-size:1.2em;">4</span> &nbsp;
-    <strong>Stay in the loop</strong><br>
-    <span style="font-size:0.7em; color:#90a4ae;">AI builds. You decide what's good. That's the job now.</span></p>
-  </div>
-  <aside class="notes">
-    Three takeaways. One: invest in specs, not code. Two: actively try to break your specs — 
-    that's how they get good. Three: use multiple AI models for review — they have different 
-    strengths and the combination is more powerful than either alone.
-  </aside>
-</section>
-
-<!-- ============ SLIDE 21: LINKS & QUESTIONS ============ -->
+<!-- ============ 13. LINKS ============ -->
 <section>
   <h2>Links &amp; Questions</h2>
   <br>
-  <div style="font-size:0.7em; text-align:left; max-width:700px; margin:0 auto;">
-    <p>🌲 <strong>VR Forest demo:</strong><br>
+  <div style="font-size:0.72em; text-align:left; max-width:700px; margin:0 auto;">
+    <p>🌲 <strong>VR Forest:</strong><br>
     <a href="https://reality2-roycdavies.github.io/vr-forest/" style="color:#4fc3f7;">reality2-roycdavies.github.io/vr-forest</a></p>
     <br>
-    <p>📄 <strong>VR Forest repo</strong> (specs + code + transcripts):<br>
+    <p>📄 <strong>Repo</strong> (specs + code + transcripts):<br>
     <a href="https://github.com/reality2-roycdavies/vr-forest" style="color:#4fc3f7;">github.com/reality2-roycdavies/vr-forest</a></p>
     <br>
-    <p>📐 <strong>Reality2 project:</strong><br>
+    <p>📐 <strong>Reality2:</strong><br>
     <span style="color:#4fc3f7;">reality2.ai</span> <span style="color:#90a4ae;">(coming soon)</span></p>
   </div>
   <br>
   <p style="font-size:1.2em; margin-top:0.5em;">Questions? 🤔</p>
-  <p style="font-size:0.45em; color:#555; margin-top:2em;">Oh — and this slide deck was also made by AI. From a spec, obviously. 😊</p>
-  <p style="font-size:0.5em; color:#90a4ae; margin-top:2em;">
+  <p style="font-size:0.45em; color:#555; margin-top:2em;">This slide deck was also made by AI. From a spec, obviously. 😊</p>
+  <p style="font-size:0.5em; color:#90a4ae; margin-top:1em;">
     Dr Roy C. Davies &nbsp;·&nbsp; Auckland AR/VR Meetup &nbsp;·&nbsp; 25 February 2026
   </p>
   <aside class="notes">
-    Here are the links. The VR Forest is live — try it on your headsets. 
-    The repo has the full specs, all the code, and the complete conversation transcripts 
-    if you want to see exactly how a human-AI development conversation works. 
-    The Reality2 specs repo has the BEACON spec, the dual-model audit comparison, 
-    and the confidence dashboard. Questions?
+    Links. The VR Forest is live — try it on your headsets. The repo has everything 
+    including the full conversation transcripts if you want to see how a human-AI 
+    development conversation actually works. Questions?
   </aside>
 </section>
 
