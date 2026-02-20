@@ -63,6 +63,7 @@ export class WeatherSystem {
     this._lightningTimer = 0;
     this._lightningInterval = this._nextLightningInterval();
     this._flashValue = 0;
+    this._skyFlashValue = 0;  // lags behind _flashValue so bolt is visible first
     this._thunderPending = [];
     this._boltMesh = null;
     this._boltOpacity = 0;
@@ -194,17 +195,19 @@ export class WeatherSystem {
     geo.setDrawRange(0, 0); // hidden until triggered
 
     const mat = new THREE.LineBasicMaterial({
-      color: 0xccccff,
+      color: 0xffffff,
       transparent: true,
       opacity: 1.0,
       depthWrite: false,
       fog: false,
-      blending: THREE.AdditiveBlending,
     });
+    // Render on top so bolt is visible against flashed sky
+    this._boltRenderOrder = 9999;
 
     this._boltMesh = new THREE.LineSegments(geo, mat);
     this._boltMesh.frustumCulled = false;
     this._boltMesh.visible = false;
+    this._boltMesh.renderOrder = 9999;
     this._boltPositions = positions;
     scene.add(this._boltMesh);
   }
@@ -434,6 +437,15 @@ export class WeatherSystem {
       this._flashValue = Math.max(0, this._flashValue - delta / CONFIG.LIGHTNING_FLASH_DECAY);
     }
 
+    // Sky flash ramps up to match _flashValue then decays with it
+    // This slight lag means the bolt is visible against dark sky first
+    if (this._skyFlashValue < this._flashValue) {
+      this._skyFlashValue += delta / 0.04; // ramp up over ~40ms (2-3 frames)
+      this._skyFlashValue = Math.min(this._skyFlashValue, this._flashValue);
+    } else {
+      this._skyFlashValue = this._flashValue; // decay together
+    }
+
     // Decay bolt visual (slightly slower than flash for lingering afterimage)
     if (this._boltOpacity > 0) {
       this._boltOpacity = Math.max(0, this._boltOpacity - delta / (CONFIG.LIGHTNING_FLASH_DECAY * 1.5));
@@ -441,8 +453,8 @@ export class WeatherSystem {
       if (this._boltOpacity <= 0) this._boltMesh.visible = false;
     }
 
-    // Always update the public flash value (so decay is visible even between strikes)
-    this.lightningFlash = this._flashValue;
+    // Always update the public flash values
+    this.lightningFlash = this._skyFlashValue;
 
     // Tick pending thunder even when no new strikes are firing
     for (let i = this._thunderPending.length - 1; i >= 0; i--) {
