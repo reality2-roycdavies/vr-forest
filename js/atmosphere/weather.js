@@ -194,11 +194,12 @@ export class WeatherSystem {
     geo.setDrawRange(0, 0); // hidden until triggered
 
     const mat = new THREE.LineBasicMaterial({
-      color: 0xeeeeff,
+      color: 0xccccff,
       transparent: true,
       opacity: 1.0,
       depthWrite: false,
       fog: false,
+      blending: THREE.AdditiveBlending,
     });
 
     this._boltMesh = new THREE.LineSegments(geo, mat);
@@ -440,6 +441,18 @@ export class WeatherSystem {
       if (this._boltOpacity <= 0) this._boltMesh.visible = false;
     }
 
+    // Always update the public flash value (so decay is visible even between strikes)
+    this.lightningFlash = this._flashValue;
+
+    // Tick pending thunder even when no new strikes are firing
+    for (let i = this._thunderPending.length - 1; i >= 0; i--) {
+      this._thunderPending[i].delay -= delta;
+      if (this._thunderPending[i].delay <= 0) {
+        const t = this._thunderPending.splice(i, 1)[0];
+        this._playThunder(t.volume, t.isClose);
+      }
+    }
+
     if (this.rainIntensity < 0.1 || (this._playerTerrainY || 0) >= CONFIG.SNOWLINE_START) {
       this._lightningTimer = 0;
       return;
@@ -455,30 +468,20 @@ export class WeatherSystem {
       if (playerPos) boltDist = this._generateBolt(playerPos);
 
       // Flash brightness scales with proximity
-      const flashScale = clamp01(1.2 - boltDist / 800);
-      this._flashValue = (0.6 + Math.random() * 0.4) * flashScale;
+      const flashScale = clamp01(1.3 - boltDist / 250);
+      this._flashValue = (0.7 + Math.random() * 0.3) * flashScale;
+      this.lightningFlash = this._flashValue;
 
       // Thunder delay based on distance (speed of sound ≈ 343 m/s)
       const thunderDelay = boltDist / 343;
       // Volume inversely related to distance
-      const volume = clamp01(1.1 - boltDist / 1000);
+      const volume = clamp01(1.2 - boltDist / 250);
       this._thunderPending.push({
         delay: thunderDelay,
         volume: volume,
-        isClose: boltDist < 350,
+        isClose: boltDist < 100,
       });
     }
-
-    // Tick thunder delays
-    for (let i = this._thunderPending.length - 1; i >= 0; i--) {
-      this._thunderPending[i].delay -= delta;
-      if (this._thunderPending[i].delay <= 0) {
-        const t = this._thunderPending.splice(i, 1)[0];
-        this._playThunder(t.volume, t.isClose);
-      }
-    }
-
-    this.lightningFlash = this._flashValue;
   }
 
   // ======== Rain audio ========

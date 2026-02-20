@@ -217,8 +217,8 @@ export const CONFIG = {
   THUNDER_INTERVAL_MIN: 6,              // seconds between flashes (at full rain)
   THUNDER_INTERVAL_MAX: 18,
   LIGHTNING_FLASH_DECAY: 0.2,          // seconds for flash to fade
-  LIGHTNING_BOLT_MIN_DIST: 200,        // min bolt distance from player (meters)
-  LIGHTNING_BOLT_MAX_DIST: 900,        // max bolt distance from player (meters)
+  LIGHTNING_BOLT_MIN_DIST: 60,         // min bolt distance from player (meters)
+  LIGHTNING_BOLT_MAX_DIST: 200,        // max bolt distance from player (meters)
 
   // Rain audio
   RAIN_PATTER_FREQ: 3200,
