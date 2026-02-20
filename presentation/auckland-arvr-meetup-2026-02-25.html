@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Specs, Not Code — Auckland AR/VR Meetup</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css">
+<style>
+  :root {
+    --r-background-color: #0a0a0f;
+    --r-main-color: #e0e0e0;
+    --r-heading-color: #ffffff;
+    --r-link-color: #4fc3f7;
+  }
+  .reveal { font-size: 32px; }
+  .reveal h1 { font-size: 2.2em; font-weight: 700; text-shadow: 0 0 30px rgba(79,195,247,0.3); }
+  .reveal h2 { font-size: 1.6em; font-weight: 600; color: #4fc3f7; }
+  .reveal h3 { font-size: 1.2em; color: #81d4fa; }
+  .reveal .subtitle { color: #90a4ae; font-size: 0.7em; margin-top: -0.3em; }
+  .reveal .highlight { color: #4fc3f7; font-weight: bold; }
+  .reveal .warn { color: #ff7043; font-weight: bold; }
+  .reveal .good { color: #66bb6a; font-weight: bold; }
+  .reveal code { background: rgba(79,195,247,0.15); padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
+  .reveal pre code { background: rgba(0,0,0,0.5); padding: 16px; font-size: 0.55em; line-height: 1.4; }
+  .reveal .emoji { font-size: 1.4em; }
+  .reveal ul { text-align: left; }
+  .reveal li { margin-bottom: 0.4em; }
+  .reveal .two-col { display: flex; gap: 2em; align-items: flex-start; }
+  .reveal .two-col > div { flex: 1; }
+  .reveal .stat { font-size: 2.5em; font-weight: 700; color: #4fc3f7; line-height: 1.1; }
+  .reveal .stat-label { font-size: 0.55em; color: #90a4ae; }
+  .reveal .quote { font-style: italic; color: #b0bec5; border-left: 4px solid #4fc3f7; padding-left: 1em; margin: 0.5em 0; text-align: left; }
+  .reveal .pipeline { display: flex; align-items: center; gap: 0.5em; justify-content: center; flex-wrap: wrap; }
+  .reveal .pipeline .step { background: rgba(79,195,247,0.15); border: 1px solid #4fc3f7; border-radius: 8px; padding: 0.4em 0.8em; font-size: 0.7em; }
+  .reveal .pipeline .arrow { color: #4fc3f7; font-size: 1.2em; }
+  .reveal .confidence-bar { height: 24px; border-radius: 12px; background: #1a1a2e; overflow: hidden; margin: 4px 0; }
+  .reveal .confidence-fill { height: 100%; border-radius: 12px; }
+  .reveal .red-fill { background: linear-gradient(90deg, #c62828, #ef5350); }
+  .reveal .yellow-fill { background: linear-gradient(90deg, #f9a825, #ffee58); }
+  .reveal .green-fill { background: linear-gradient(90deg, #2e7d32, #66bb6a); }
+  .reveal table { margin: 0 auto; font-size: 0.7em; }
+  .reveal table th { background: rgba(79,195,247,0.2); color: #4fc3f7; }
+  .reveal table td, .reveal table th { padding: 0.3em 0.8em; border: 1px solid rgba(255,255,255,0.1); }
+  .reveal .section-title { font-size: 0.5em; text-transform: uppercase; letter-spacing: 0.2em; color: #4fc3f7; margin-bottom: -0.5em; }
+  .slide-number { font-size: 14px !important; }
+  .reveal .r-frame { border: none !important; box-shadow: none !important; }
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ============ SLIDE 1: TITLE ============ -->
+<section>
+  <h1>Specs, Not Code</h1>
+  <p class="subtitle" style="font-size:0.9em;">Building a VR Forest with AI<br>& the Refutative Development Process</p>
+  <br>
+  <p style="font-size:0.6em; color:#90a4ae;">
+    Dr Roy C. Davies &nbsp;·&nbsp; Auckland AR/VR Meetup &nbsp;·&nbsp; 25 Feb 2026
+  </p>
+  <aside class="notes">
+    Kia ora everyone. I'm Roy — I've been building VR systems for about 30 years, 
+    and writing software for 40+. Tonight I want to show you something I built last week 
+    in 7 days using only AI, and then talk about the development philosophy behind it. 
+    Two parts: the cool thing, then the thinking behind the cool thing.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 2: ABOUT ME ============ -->
+<section>
+  <h2>Who Am I?</h2>
+  <div class="two-col">
+    <div>
+      <ul>
+        <li>VR/XR researcher &amp; builder</li>
+        <li>40+ years: Dragon 32 → mesh networking</li>
+        <li>Assistive tech &amp; accessibility</li>
+        <li>Reality2 platform — transient device mesh</li>
+      </ul>
+    </div>
+    <div style="text-align:center;">
+      <div class="stat">40+</div>
+      <div class="stat-label">years of building things</div>
+      <br>
+      <div class="stat" style="font-size:1.8em;">0</div>
+      <div class="stat-label">lines of hand-written code<br>in this VR project</div>
+    </div>
+  </div>
+  <aside class="notes">
+    Quick background. I've been doing this a while — started on a Dragon 32 in the 80s, 
+    did VR research, now I build assistive tech and the Reality2 platform. 
+    The big number here is the zero — I'll explain that.
+  </aside>
+</section>
+
+<!-- ============ PART 1 DIVIDER ============ -->
+<section data-background-gradient="linear-gradient(135deg, #0a0a0f 0%, #1a237e 100%)">
+  <p class="section-title">Part 1</p>
+  <h1>Building a VR Forest<br>from Scratch with AI</h1>
+  <p style="font-size:0.7em; color:#90a4ae;">7 days · 0 hand-written code · 1 owl recording</p>
+  <aside class="notes">
+    Part 1: the demo. Let me show you what happened when I told an AI to build me an 
+    endless VR forest from scratch.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 4: THE PROMPT ============ -->
+<section>
+  <h2>The Seed</h2>
+  <div class="quote" style="font-size:0.8em;">
+    "I want to create, from scratch, a VR simulation using just Claude Code. 
+    The simulation should allow a wearer to explore an endless, randomly generated forest."
+  </div>
+  <br>
+  <p style="font-size:0.7em;">That's it. That's the starting prompt.</p>
+  <p style="font-size:0.6em; color:#90a4ae;">
+    Decision: WebXR + Three.js &nbsp;·&nbsp; No build tools &nbsp;·&nbsp; No game engine &nbsp;·&nbsp; Static site
+  </p>
+  <aside class="notes">
+    This was the actual prompt. One sentence. The constraint was deliberate — pure WebXR, 
+    no Unity, no Godot, no build pipeline. Just Three.js served as a static site. 
+    Because I wanted to prove what's possible with just AI-assisted development.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 5: WHAT WE BUILT ============ -->
+<section>
+  <h2>What Emerged — 7 Days Later</h2>
+  <div class="two-col" style="font-size:0.75em;">
+    <div>
+      <h3>🌲 World</h3>
+      <ul>
+        <li>Infinite procedural terrain</li>
+        <li>3 tree species (pine, oak, birch)</li>
+        <li>Grass, ferns, flowers, rocks</li>
+        <li>Ponds &amp; streams with wave shaders</li>
+        <li>Mountain chains with snow</li>
+      </ul>
+    </div>
+    <div>
+      <h3>🌤️ Atmosphere</h3>
+      <ul>
+        <li>Real sun position from device time/GPS</li>
+        <li>438 real constellation stars</li>
+        <li>Accurate moon with phase shader</li>
+        <li>Dynamic weather (rain, thunder, snow)</li>
+        <li>Rain sheltering under tree canopy</li>
+      </ul>
+    </div>
+  </div>
+  <div class="two-col" style="font-size:0.75em; margin-top:0.5em;">
+    <div>
+      <h3>🔊 Audio</h3>
+      <ul>
+        <li>All procedurally synthesised</li>
+        <li>Footsteps, crickets, thunder, rain</li>
+        <li>Spatial wildlife sounds</li>
+      </ul>
+    </div>
+    <div>
+      <h3>📱 Platform</h3>
+      <ul>
+        <li>Quest 3 native via browser</li>
+        <li>Desktop with keyboard/mouse</li>
+        <li>~12,000 lines of JS</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    Here's what came out. An infinite procedural forest with real astronomy — the stars 
+    are real constellations, the Southern Cross is in the right place, the moon has the 
+    correct phase. Weather systems, spatial audio, all procedurally generated. About 12,000 
+    lines of JavaScript. Two external assets total: a morepork owl call and a moon photograph. 
+    Everything else — every texture, every sound, every mesh — is generated at runtime.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 6: DEMO LINK ============ -->
+<section data-background-gradient="linear-gradient(135deg, #0a0a0f 0%, #1b5e20 100%)">
+  <h2>Try It Right Now</h2>
+  <br>
+  <p style="font-size:1.4em;">
+    <a href="https://reality2-roycdavies.github.io/vr-forest/" target="_blank" style="color:#66bb6a;">
+      reality2-roycdavies.github.io/vr-forest
+    </a>
+  </p>
+  <br>
+  <p style="font-size:0.65em; color:#90a4ae;">
+    Open in your Quest/Pico browser → tap "Enter VR"<br>
+    Or use desktop with keyboard &amp; mouse
+  </p>
+  <aside class="notes">
+    If you have a headset with you, try this URL right now. It's a static site on GitHub Pages. 
+    WebXR — no app install, just open in the browser. On desktop it works too, you just navigate 
+    with keyboard and mouse. [PAUSE — let people try it]
+  </aside>
+</section>
+
+<!-- ============ SLIDE 7: THE PROCESS ============ -->
+<section>
+  <h2>Human = Director, AI = Studio</h2>
+  <div class="pipeline">
+    <div class="step">🎯 Vision<br><small>Human</small></div>
+    <div class="arrow">→</div>
+    <div class="step">🏗️ Architecture<br><small>AI</small></div>
+    <div class="arrow">→</div>
+    <div class="step">💻 Implementation<br><small>AI</small></div>
+    <div class="arrow">→</div>
+    <div class="step">🥽 VR Testing<br><small>Human</small></div>
+    <div class="arrow">→</div>
+    <div class="step">🗣️ Feedback<br><small>Human</small></div>
+  </div>
+  <br>
+  <p style="font-size:0.7em;">13 sessions &nbsp;·&nbsp; ~53 MB of conversation &nbsp;·&nbsp; Every iteration through dialogue</p>
+  <div class="quote" style="font-size:0.65em; margin-top:1em;">
+    "The first bear growl sounded more like someone farting."<br>
+    — actual development note
+  </div>
+  <aside class="notes">
+    The process was conversational. I was the creative director — I'd put on the headset, 
+    describe what I saw and what was wrong, and Claude would fix it. 13 sessions over 7 days. 
+    The bear growl story is real — procedural audio is hard. We iterated until it worked. 
+    Some things we cut — procedural leaf rustling was just never good enough, so we dropped it. 
+    That's a judgement call only a human in the headset can make.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 8: THE SPEC ============ -->
+<section>
+  <h2>Then I Wrote the Spec</h2>
+  <p style="font-size:0.8em;">After building, I captured <span class="highlight">everything</span> in a 3,000-line specification</p>
+  <br>
+  <div style="font-size:0.7em; text-align:left; max-width:700px; margin:0 auto;">
+    <table>
+      <tr><th>Section</th><th>What it covers</th></tr>
+      <tr><td>VF-TERRAIN</td><td>Noise params, chunk sizes, biome thresholds</td></tr>
+      <tr><td>VF-WATER</td><td>10+ wave equations, shore foam algorithm</td></tr>
+      <tr><td>VF-FOREST</td><td>3 tree types, geometry, instancing</td></tr>
+      <tr><td>VF-ATMOSPHERE</td><td>Sun/moon ephemeris, star catalog, clouds</td></tr>
+      <tr><td>VF-WEATHER</td><td>State machine, rain particles, thunder</td></tr>
+      <tr><td>VF-AUDIO</td><td>Synthesis chains, spatial audio config</td></tr>
+      <tr><td>VF-WILDLIFE</td><td>Creature behaviour, flocking, spawn rules</td></tr>
+    </table>
+  </div>
+  <br>
+  <p style="font-size:0.65em; color:#90a4ae;">Every magic number documented. Every design decision explained.</p>
+  <aside class="notes">
+    After building it, I wrote the spec. Not before — in this case I was exploring, 
+    so the spec came second. But now the spec IS the product. 3,000 lines across 15 spec files. 
+    Every parameter, every algorithm, every "why" decision. This is the important bit — 
+    the spec is now more valuable than the code.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 9: SPEC AS SOURCE OF TRUTH ============ -->
+<section>
+  <h2>The Key Insight</h2>
+  <h3 style="color:#ff7043; font-size:1.4em; margin-top:0.5em;">Specs are the product.<br>Code is a compilation step.</h3>
+  <br>
+  <div class="two-col" style="font-size:0.7em;">
+    <div>
+      <h3>Traditional</h3>
+      <ol>
+        <li>Vague idea</li>
+        <li>Write code until it works</li>
+        <li>Maybe document it</li>
+        <li class="warn">Knowledge lives in the code</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Spec-Driven</h3>
+      <ol>
+        <li>Write precise specification</li>
+        <li>AI generates code from spec</li>
+        <li>Test code against spec</li>
+        <li class="good">Knowledge lives in the spec</li>
+      </ol>
+    </div>
+  </div>
+  <aside class="notes">
+    This is the core idea. In traditional dev, the code IS the knowledge. Lose the developer, 
+    lose the understanding. In spec-driven dev, the spec is the source of truth. The code is 
+    disposable — regenerate it anytime. Different AI, different engine, same spec, same result. 
+    The developer's role shifts from typist to technical director.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 10: PLATFORM INDEPENDENCE ============ -->
+<section>
+  <h2>Platform Independence</h2>
+  <p style="font-size:0.8em;">The same spec can generate implementations for:</p>
+  <br>
+  <div class="pipeline">
+    <div class="step" style="background:rgba(102,187,106,0.15); border-color:#66bb6a;">Three.js ✅</div>
+    <div class="step">Godot</div>
+    <div class="step">Unity</div>
+    <div class="step">Unreal</div>
+    <div class="step">Custom engine</div>
+  </div>
+  <br>
+  <p style="font-size:0.7em;">If the AI can't build it from the spec alone,<br>
+  <span class="warn">the spec has a gap</span> — not the AI.</p>
+  <br>
+  <p style="font-size:0.6em; color:#90a4ae;">
+    Spec describes <em>behaviour</em>, not <em>implementation</em>.<br>
+    "4-octave simplex noise with persistence 0.45" — not "call THREE.SimplexNoise()"
+  </p>
+  <aside class="notes">
+    The spec is platform-independent. It says "4-octave simplex noise with persistence 0.45" — 
+    not "call this Three.js function." That means you could hand this spec to an AI targeting 
+    Godot or Unity and get the same forest. If the AI can't build it from the spec, the spec 
+    is incomplete. That's a feature, not a bug — it tells you where your spec needs work.
+  </aside>
+</section>
+
+<!-- ============ PART 2 DIVIDER ============ -->
+<section data-background-gradient="linear-gradient(135deg, #0a0a0f 0%, #4a148c 100%)">
+  <p class="section-title">Part 2</p>
+  <h1>The Refutative<br>Development Process</h1>
+  <p style="font-size:0.7em; color:#90a4ae;">Conjecture &amp; Refutation for Software</p>
+  <aside class="notes">
+    Part 2: the philosophy. This is where it gets interesting — we're going to apply 
+    Karl Popper's philosophy of science to software development. Stay with me — 
+    this is practical, not academic.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 12: POPPER IN 30 SECONDS ============ -->
+<section>
+  <h2>Popper in 30 Seconds</h2>
+  <br>
+  <div style="font-size:0.85em;">
+    <p><span class="emoji">🔬</span> Science doesn't <em>prove</em> theories.</p>
+    <p><span class="emoji">💥</span> Science <em>tries to break</em> them.</p>
+    <p><span class="emoji">✅</span> Theories that <em>survive</em> are provisionally accepted.</p>
+  </div>
+  <br>
+  <div class="quote" style="font-size:0.7em;">
+    "A theory that explains everything, explains nothing."<br>— Karl Popper
+  </div>
+  <br>
+  <p style="font-size:0.75em;">
+    <span class="highlight">Spec</span> = conjecture &nbsp;&nbsp;
+    <span class="highlight">Implementation</span> = experiment &nbsp;&nbsp;
+    <span class="highlight">Bug</span> = falsification
+  </p>
+  <aside class="notes">
+    Quick Popper primer. Science doesn't prove theories — it tries to break them. 
+    A theory is good not because it's been proven but because it's survived serious 
+    attempts to disprove it. Apply that to software: your spec is a conjecture about 
+    what the system should do. Every implementation attempt is an experiment testing 
+    that conjecture. When something goes wrong, you've falsified the spec — 
+    and that's GOOD. That's how you improve.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 13: THE CYCLE ============ -->
+<section>
+  <h2>The Refutative Cycle</h2>
+  <br>
+  <div class="pipeline" style="font-size:0.8em;">
+    <div class="step" style="background:rgba(79,195,247,0.2);">📝 Write Spec<br><small>(conjecture)</small></div>
+    <div class="arrow">→</div>
+    <div class="step" style="background:rgba(255,112,67,0.2);">🏗️ Implement<br><small>(experiment)</small></div>
+    <div class="arrow">→</div>
+    <div class="step" style="background:rgba(255,112,67,0.2);">🧪 Test<br><small>(attempted refutation)</small></div>
+    <div class="arrow">→</div>
+    <div class="step" style="background:rgba(102,187,106,0.2);">🔧 Fix the Spec<br><small>(not the code)</small></div>
+  </div>
+  <br>
+  <p style="font-size:0.75em; margin-top:1em;">Three outcomes when something breaks:</p>
+  <table style="font-size:0.6em;">
+    <tr><th>Outcome</th><th>Meaning</th><th>Action</th></tr>
+    <tr><td>Code wrong</td><td>Spec was clear, AI got it wrong</td><td>Regenerate</td></tr>
+    <tr><td class="warn">Spec ambiguous</td><td>Spec could be read two ways</td><td>Clarify spec</td></tr>
+    <tr><td class="warn">Spec incomplete</td><td>Something wasn't specified</td><td>Add to spec</td></tr>
+  </table>
+  <p style="font-size:0.6em; color:#90a4ae; margin-top:0.5em;">The interesting outcomes are rows 2 and 3 — they improve the spec.</p>
+  <aside class="notes">
+    Here's the cycle in practice. Write spec, implement, test, fix the spec. 
+    Not fix the code — fix the SPEC. There are three possible outcomes when 
+    something fails. The first is boring — the AI just messed up. The interesting 
+    ones are when the spec was ambiguous or incomplete. Those are genuine falsifications 
+    that make your spec better.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 14: REAL EXAMPLE - BEACON ============ -->
+<section>
+  <h2>Real Example: R2-BEACON</h2>
+  <p class="subtitle">A spec was falsified by real hardware</p>
+  <br>
+  <div style="font-size:0.7em; text-align:left; max-width:750px; margin:0 auto;">
+    <p><span class="emoji">📝</span> <strong>Spec said:</strong> "Here's the 31-byte BLE advertising structure"</p>
+    <p><span class="emoji">🏗️</span> <strong>Implementation:</strong> Pass structure to nRF SoftDevice API</p>
+    <p><span class="emoji">💥</span> <strong>Falsified:</strong> Scanner sees <code>0x1E</code> where it expects <code>0xB2</code></p>
+    <p><span class="emoji">🔍</span> <strong>Root cause:</strong> High-level BLE APIs auto-add AD headers.<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Spec described raw bytes → API double-wrapped them.</p>
+    <p><span class="emoji">🔧</span> <strong>Spec fix:</strong> Added implementation note: "Most platform APIs<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;handle AD headers automatically. Pass payload only."</p>
+  </div>
+  <br>
+  <p style="font-size:0.65em; color:#90a4ae;">
+    Discovery silently failed. No error message. Just... nothing happened.
+  </p>
+  <aside class="notes">
+    Real example from my Reality2 project. The R2-BEACON spec describes a BLE advertising format. 
+    The spec gave the complete 31-byte structure including the AD header bytes. Problem: most 
+    BLE platform APIs add those headers automatically. So when you pass the full structure, 
+    you get double-wrapping — the header appears twice on the air. Scanners see the wrong byte 
+    at offset zero and silently ignore the beacon. No error, just nothing works.
+    
+    The spec was falsified. Not the code — the code did exactly what the spec said. 
+    The spec was wrong because it didn't account for platform API behaviour. 
+    We added an implementation note warning about this. Now the spec has survived that test.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 15: DUAL MODEL AUDIT ============ -->
+<section>
+  <h2>Dual-Model Audit</h2>
+  <p class="subtitle">Two AIs, zero coordination, complementary findings</p>
+  <br>
+  <div class="two-col" style="font-size:0.7em;">
+    <div style="border:1px solid #4fc3f7; border-radius:12px; padding:1em;">
+      <h3 style="margin-top:0;">Claude Opus</h3>
+      <p>7 critical · 12 significant · 9 minor</p>
+      <p style="font-size:0.85em;">Found: wire-level byte conflicts, hash algorithm inconsistencies, missing specs</p>
+      <p style="font-size:0.8em; color:#90a4ae;">Strength: intra-spec cross-referencing</p>
+    </div>
+    <div style="border:1px solid #ff7043; border-radius:12px; padding:1em;">
+      <h3 style="margin-top:0; color:#ff7043;">GPT-5.1 Codex</h3>
+      <p>13 findings across 7 categories</p>
+      <p style="font-size:0.85em;">Found: planning-vs-spec contradictions, stale docs, permission semantics gaps</p>
+      <p style="font-size:0.8em; color:#90a4ae;">Strength: architectural consistency</p>
+    </div>
+  </div>
+  <br>
+  <p style="font-size:0.7em;">Neither saw the other's output. <span class="highlight">4 issues found by both</span> = high confidence.</p>
+  <aside class="notes">
+    Here's where it gets really powerful. I gave the entire spec suite to two different AIs — 
+    Claude Opus and GPT-5.1 Codex — independently. Neither saw the other's output. 
+    Claude was better at finding byte-level cross-reference bugs. GPT was better at finding 
+    architectural contradictions between planning docs and normative specs. 
+    Four issues were found by BOTH — those are almost certainly real. 
+    The complementary strengths are the point — it's like having two reviewers with 
+    different expertise.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 16: WHAT THEY AGREED ON ============ -->
+<section>
+  <h2>What Both AIs Agreed On</h2>
+  <br>
+  <div style="font-size:0.7em; text-align:left; max-width:750px; margin:0 auto;">
+    <p><span class="warn">1.</span> Entanglement protocol is under-specified<br>
+    <small style="color:#90a4ae;">Claude: negotiation missing · GPT: permission bits undefined · Both right</small></p>
+    <br>
+    <p><span class="warn">2.</span> SipHash key provenance undefined<br>
+    <small style="color:#90a4ae;">Key appears in beacon spec — no lifecycle, no rotation story</small></p>
+    <br>
+    <p><span class="warn">3.</span> Planning docs contradict normative specs<br>
+    <small style="color:#90a4ae;">Planning says "sensors are NOT R2 nodes" — spec says everything is a node</small></p>
+    <br>
+    <p><span class="warn">4.</span> No "superseded" hygiene for old documents<br>
+    <small style="color:#90a4ae;">Stale docs persist without warnings, mislead readers</small></p>
+  </div>
+  <aside class="notes">
+    The four agreed issues. When two independent AI models with different architectures 
+    and training data both flag the same problem, you can be pretty confident it's real. 
+    Each found a slightly different facet — Claude caught the negotiation protocol gap, 
+    GPT caught the permission semantics gap — but they converged on the same underlying issue. 
+    That's the power of independent refutation.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 17: CONFIDENCE DASHBOARD ============ -->
+<section>
+  <h2>Refutation Dashboard</h2>
+  <p class="subtitle">Track which specs have survived which tests</p>
+  <br>
+  <div style="font-size:0.65em; text-align:left; max-width:700px; margin:0 auto;">
+    <p><strong>R2-WIRE</strong> — Wire protocol</p>
+    <div class="confidence-bar"><div class="confidence-fill green-fill" style="width:72%;"></div></div>
+    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Tests ✅ · Implementation ✅ · 1 open issue</p>
+
+    <p style="margin-top:0.8em;"><strong>R2-BEACON</strong> — BLE discovery</p>
+    <div class="confidence-bar"><div class="confidence-fill yellow-fill" style="width:48%;"></div></div>
+    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Field tested ✅ · Double-wrap fix applied · 2 open issues</p>
+
+    <p style="margin-top:0.8em;"><strong>R2-TRUST</strong> — Trust groups</p>
+    <div class="confidence-bar"><div class="confidence-fill red-fill" style="width:22%;"></div></div>
+    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ⚠️ · Entanglement gap · No implementation yet</p>
+
+    <p style="margin-top:0.8em;"><strong>VF-TERRAIN</strong> — Forest terrain</p>
+    <div class="confidence-bar"><div class="confidence-fill green-fill" style="width:85%;"></div></div>
+    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Implemented ✅ · Field tested ✅ · No open issues</p>
+  </div>
+  <aside class="notes">
+    We track this with a confidence dashboard. Every spec starts at low confidence and earns 
+    points through reviews, testing, implementation, and field validation. Issues reduce confidence. 
+    R2-TRUST is red because it's been falsified — the entanglement gap is real and unresolved. 
+    VF-TERRAIN is green because it's been through multiple implementations and field testing. 
+    This is Popperian thinking made visible — you can see at a glance which specs have survived 
+    serious testing and which haven't.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 18: CONFIDENCE MODEL ============ -->
+<section>
+  <h2>Confidence Scoring</h2>
+  <br>
+  <div class="two-col" style="font-size:0.65em;">
+    <div>
+      <h3 style="color:#66bb6a;">Evidence <small>(builds confidence)</small></h3>
+      <table>
+        <tr><td>Spec exists with version</td><td>+0.10</td></tr>
+        <tr><td>First reviewer approved</td><td>+0.15</td></tr>
+        <tr><td>Second reviewer approved</td><td>+0.10</td></tr>
+        <tr><td>Test vectors written</td><td>+0.15</td></tr>
+        <tr><td>Automated tests passing</td><td>+0.15</td></tr>
+        <tr><td>Implementation complete</td><td>+0.10</td></tr>
+        <tr><td>Integration tests</td><td>+0.10</td></tr>
+        <tr><td>Field validation</td><td>+0.05</td></tr>
+        <tr><td>No open issues</td><td>+0.10</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3 style="color:#ff7043;">Decay <small>(reduces confidence)</small></h3>
+      <table>
+        <tr><td>Dependency changed</td><td>−0.15</td></tr>
+        <tr><td>Each open issue</td><td>−0.03</td></tr>
+        <tr><td>Version bump</td><td>→ 0.15</td></tr>
+      </table>
+      <br>
+      <h3>Colour bands</h3>
+      <table>
+        <tr><td>🔴 Red</td><td>&lt; 0.30</td></tr>
+        <tr><td>🟡 Yellow</td><td>0.30 – 0.59</td></tr>
+        <tr><td>🟢 Green</td><td>0.60 – 0.84</td></tr>
+        <tr><td>✅ Full</td><td>≥ 0.85</td></tr>
+      </table>
+    </div>
+  </div>
+  <aside class="notes">
+    The confidence model is simple. Evidence increases confidence, issues decrease it. 
+    A major version bump resets you to 0.15 because the spec has essentially changed — 
+    it needs to survive testing again. The colour bands give you a quick visual. 
+    The key insight: confidence is earned, not declared. You can't just say "this spec is done" — 
+    it has to survive actual refutation attempts.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 19: WHY THIS MATTERS ============ -->
+<section>
+  <h2>Why This Matters for AR/VR</h2>
+  <br>
+  <div style="font-size:0.75em;">
+    <p><span class="emoji">🔄</span> <strong>Platform churn is real</strong><br>
+    <span style="color:#90a4ae;">Quest today, Apple tomorrow, who knows next year</span></p>
+    <br>
+    <p><span class="emoji">📝</span> <strong>Specs survive platform death</strong><br>
+    <span style="color:#90a4ae;">Your spec works with any engine, any AI, any era</span></p>
+    <br>
+    <p><span class="emoji">🤖</span> <strong>AI is getting better fast</strong><br>
+    <span style="color:#90a4ae;">Next year's AI + your spec = better code, zero effort</span></p>
+    <br>
+    <p><span class="emoji">👥</span> <strong>Specs are reviewable</strong><br>
+    <span style="color:#90a4ae;">Two AIs can audit a spec. Try getting two AIs to audit 12,000 lines of shader code.</span></p>
+  </div>
+  <aside class="notes">
+    Why should AR/VR developers care? Because platform churn is our reality. 
+    We've all rewritten things for new SDKs, new headsets, new engines. 
+    A good spec survives all of that. And as AI improves, you can just re-generate 
+    better implementations from the same spec. The spec is your durable investment.
+    Plus — two AIs can meaningfully audit a spec. Good luck getting them to audit 
+    12,000 lines of hand-optimised shader code.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 20: TAKEAWAYS ============ -->
+<section>
+  <h2>Three Things to Take Home</h2>
+  <br>
+  <div style="font-size:0.85em;">
+    <p><span class="stat" style="font-size:1.2em;">1</span> &nbsp;
+    <strong>Write the spec, not the code</strong><br>
+    <span style="font-size:0.7em; color:#90a4ae;">Your spec is your durable asset. Code is ephemeral.</span></p>
+    <br>
+    <p><span class="stat" style="font-size:1.2em;">2</span> &nbsp;
+    <strong>Try to break your own specs</strong><br>
+    <span style="font-size:0.7em; color:#90a4ae;">Implementation is a refutation test. Embrace the failures.</span></p>
+    <br>
+    <p><span class="stat" style="font-size:1.2em;">3</span> &nbsp;
+    <strong>Use multiple AI reviewers</strong><br>
+    <span style="font-size:0.7em; color:#90a4ae;">Different models find different bugs. Independence is the key.</span></p>
+  </div>
+  <aside class="notes">
+    Three takeaways. One: invest in specs, not code. Two: actively try to break your specs — 
+    that's how they get good. Three: use multiple AI models for review — they have different 
+    strengths and the combination is more powerful than either alone.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 21: LINKS & QUESTIONS ============ -->
+<section>
+  <h2>Links &amp; Questions</h2>
+  <br>
+  <div style="font-size:0.7em; text-align:left; max-width:700px; margin:0 auto;">
+    <p>🌲 <strong>VR Forest demo:</strong><br>
+    <a href="https://reality2-roycdavies.github.io/vr-forest/" style="color:#4fc3f7;">reality2-roycdavies.github.io/vr-forest</a></p>
+    <br>
+    <p>📄 <strong>VR Forest repo</strong> (specs + code + transcripts):<br>
+    <a href="https://github.com/reality2-roycdavies/vr-forest" style="color:#4fc3f7;">github.com/reality2-roycdavies/vr-forest</a></p>
+    <br>
+    <p>📐 <strong>Reality2 specifications:</strong><br>
+    <a href="https://github.com/reality2-roycdavies/r2-specifications" style="color:#4fc3f7;">github.com/reality2-roycdavies/r2-specifications</a></p>
+  </div>
+  <br>
+  <p style="font-size:1.2em; margin-top:0.5em;">Questions? 🤔</p>
+  <p style="font-size:0.5em; color:#90a4ae; margin-top:2em;">
+    Dr Roy C. Davies &nbsp;·&nbsp; Auckland AR/VR Meetup &nbsp;·&nbsp; 25 February 2026
+  </p>
+  <aside class="notes">
+    Here are the links. The VR Forest is live — try it on your headsets. 
+    The repo has the full specs, all the code, and the complete conversation transcripts 
+    if you want to see exactly how a human-AI development conversation works. 
+    The Reality2 specs repo has the BEACON spec, the dual-model audit comparison, 
+    and the confidence dashboard. Questions?
+  </aside>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script>
+Reveal.initialize({
+  hash: true,
+  slideNumber: 'c/t',
+  transition: 'slide',
+  transitionSpeed: 'default',
+  showNotes: false,
+  width: 1280,
+  height: 720,
+  margin: 0.08,
+  center: true,
+  controlsTutorial: false
+});
+</script>
+</body>
+</html>
