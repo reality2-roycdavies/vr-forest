@@ -95,9 +95,13 @@ export class AmbientAudio {
     if (!this.started || !this.ctx) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
 
-    // Weather: duck wind during rain
-    const rainDuck = weather ? 1 - weather.rainIntensity * 0.3 : 1;
-    this._weatherWindDuck = rainDuck;
+    // Weather-driven wind volume: gentle breeze in clear, strong in storms
+    const windWeatherScale = weather
+      ? 0.3 + 0.7 * Math.min(1, (weather.windMultiplier - 1) / 1.5)
+      : 0.5;
+    // Duck slightly during heavy rain so rain patter comes through
+    const rainDuck = weather ? 1 - weather.rainIntensity * 0.2 : 1;
+    this._weatherWindDuck = windWeatherScale * rainDuck;
 
     // Bird chirps — daytime only, suppressed by rain, silent above snowline
     const playerY = playerPos ? playerPos.y : 0;
