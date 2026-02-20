@@ -196,6 +196,7 @@ export class DayNightSystem {
         phase: { value: 0.0 },
         sunDirOnDisc: { value: new THREE.Vector2(1.0, 0.0) },
         opacity: { value: 1.0 },
+        skyBrightness: { value: 0.0 },
       },
       vertexShader: `
         varying vec2 vUv;
@@ -209,6 +210,7 @@ export class DayNightSystem {
         uniform float phase;
         uniform vec2 sunDirOnDisc;
         uniform float opacity;
+        uniform float skyBrightness;
         varying vec2 vUv;
         void main() {
           vec2 uv = vUv;
@@ -227,9 +229,12 @@ export class DayNightSystem {
           // Mix lit surface with dark earthshine
           vec3 earthshine = vec3(0.04, 0.04, 0.06);
           vec3 color = mix(earthshine, texColor.rgb, illumination);
+          // Shadow side fades to transparent against bright sky
+          float shadowAlpha = 1.0 - skyBrightness * 0.95;
+          float pixelAlpha = mix(shadowAlpha, 1.0, illumination);
           // Soft disc edge
           float edge = smoothstep(1.0, 0.9, dist2);
-          gl_FragColor = vec4(color, edge * opacity);
+          gl_FragColor = vec4(color, edge * opacity * pixelAlpha);
         }
       `,
       transparent: true,
@@ -1034,6 +1039,8 @@ export class DayNightSystem {
     }
     this.moonMat.uniforms.opacity.value = moonOpacity;
     this.moonMat.uniforms.phase.value = moon.phase;
+    // Sky brightness: shadow side goes transparent against bright sky
+    this.moonMat.uniforms.skyBrightness.value = Math.max(0, Math.min(1, (elevation + 0.05) / 0.15));
     // Compute sun direction on the moon disc (lit side faces scene sun).
     // Project onto moon mesh's own local axes (not camera), so the
     // phase shadow stays fixed regardless of camera rotation.
