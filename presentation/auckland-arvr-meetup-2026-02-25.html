@@ -73,10 +73,11 @@
   <div class="two-col">
     <div>
       <ul>
-        <li>VR/XR researcher &amp; builder</li>
-        <li>40+ years: Dragon 32 → mesh networking</li>
-        <li>Assistive tech &amp; accessibility</li>
-        <li>Reality2 platform — transient device mesh</li>
+        <li>VR/XR researcher &amp; builder — 30+ years</li>
+        <li>Assistive tech lecturer (Auckland Uni)</li>
+        <li>VR supervisor (AcademyEX)</li>
+        <li>Started on a Dragon 32 in the '80s 🐉</li>
+        <li>Built location-based AR before Pokémon Go</li>
       </ul>
     </div>
     <div style="text-align:center;">
@@ -88,9 +89,37 @@
     </div>
   </div>
   <aside class="notes">
-    Quick background. I've been doing this a while — started on a Dragon 32 in the 80s, 
-    did VR research, now I build assistive tech and the Reality2 platform. 
-    The big number here is the zero — I'll explain that.
+    Quick background. Started building hardware in the 80s — modular robotics for wheelchairs 
+    on a Dragon 32. Did a PhD in Sweden. Built location-based AR games on the first iPhone 
+    (LookHere, then Imersia). Now I teach assistive tech at Auckland Uni and supervise VR students 
+    at AcademyEX. The big number here is the zero — I'll explain that.
+  </aside>
+</section>
+
+<!-- ============ SLIDE 2b: WHAT IS REALITY2 ============ -->
+<section>
+  <h2>My Other Project: Reality2</h2>
+  <p style="font-size:0.75em;">A quick detour — I'll come back to this in Part 2</p>
+  <br>
+  <div style="font-size:0.75em; text-align:left; max-width:750px; margin:0 auto;">
+    <p><span class="emoji">📡</span> <strong>The problem:</strong> Connecting devices is still painful.<br>
+    <span style="color:#90a4ae;">Pairing, apps, accounts, WiFi passwords, Bluetooth menus…</span></p>
+    <br>
+    <p><span class="emoji">🐝</span> <strong>Reality2:</strong> Devices that just work when you're near them.<br>
+    <span style="color:#90a4ae;">No apps. No pairing. Walk up, and things happen.</span></p>
+    <br>
+    <p><span class="emoji">🌊</span> <strong>First use case:</strong> Flood monitoring for communities.<br>
+    <span style="color:#90a4ae;">Sensors in rivers → mesh network → community alerts.</span></p>
+  </div>
+  <br>
+  <p style="font-size:0.6em; color:#90a4ae;">46 technical specifications. Built using the process I'm about to show you.</p>
+  <aside class="notes">
+    Quick context for Part 2. I'm also building Reality2 — a platform for devices that 
+    connect automatically based on proximity. Think: no more Bluetooth pairing, no apps, 
+    no accounts. The first real-world use is flood monitoring for NZ communities — sensors 
+    in rivers that mesh together and alert people. It's a big project — 46 specifications — 
+    and I'm using the same development process I'm about to describe. That's where 
+    the real-world examples in Part 2 come from.
   </aside>
 </section>
 
@@ -388,194 +417,155 @@
 
 <!-- ============ SLIDE 14: REAL EXAMPLE - BEACON ============ -->
 <section>
-  <h2>Real Example: R2-BEACON</h2>
+  <h2>Real Example: Bluetooth Discovery</h2>
   <p class="subtitle">A spec was falsified by real hardware</p>
   <br>
-  <div style="font-size:0.7em; text-align:left; max-width:750px; margin:0 auto;">
-    <p><span class="emoji">📝</span> <strong>Spec said:</strong> "Here's the 31-byte BLE advertising structure"</p>
-    <p><span class="emoji">🏗️</span> <strong>Implementation:</strong> Pass structure to nRF SoftDevice API</p>
-    <p><span class="emoji">💥</span> <strong>Falsified:</strong> Scanner sees <code>0x1E</code> where it expects <code>0xB2</code></p>
-    <p><span class="emoji">🔍</span> <strong>Root cause:</strong> High-level BLE APIs auto-add AD headers.<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Spec described raw bytes → API double-wrapped them.</p>
-    <p><span class="emoji">🔧</span> <strong>Spec fix:</strong> Added implementation note: "Most platform APIs<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;handle AD headers automatically. Pass payload only."</p>
+  <div style="font-size:0.75em; text-align:left; max-width:750px; margin:0 auto;">
+    <p><span class="emoji">📝</span> <strong>The spec said:</strong><br>
+    "Here's exactly how a device should advertise itself over Bluetooth"</p>
+    <br>
+    <p><span class="emoji">🏗️</span> <strong>We built it:</strong><br>
+    Two devices, following the spec to the letter</p>
+    <br>
+    <p><span class="emoji">💥</span> <strong>What happened:</strong><br>
+    Nothing. They couldn't see each other. No error. Just… silence.</p>
+    <br>
+    <p><span class="emoji">🔍</span> <strong>The discovery:</strong><br>
+    The spec described the <em>complete</em> message. But the Bluetooth library 
+    automatically adds a wrapper. So the devices were double-wrapping — 
+    like putting a letter in two envelopes.</p>
+    <br>
+    <p><span class="emoji">🔧</span> <strong>The fix:</strong><br>
+    Updated the <em>spec</em>, not just the code. Added a warning for future implementers.</p>
   </div>
-  <br>
-  <p style="font-size:0.65em; color:#90a4ae;">
-    Discovery silently failed. No error message. Just... nothing happened.
-  </p>
   <aside class="notes">
-    Real example from my Reality2 project. The R2-BEACON spec describes a BLE advertising format. 
-    The spec gave the complete 31-byte structure including the AD header bytes. Problem: most 
-    BLE platform APIs add those headers automatically. So when you pass the full structure, 
-    you get double-wrapping — the header appears twice on the air. Scanners see the wrong byte 
-    at offset zero and silently ignore the beacon. No error, just nothing works.
-    
-    The spec was falsified. Not the code — the code did exactly what the spec said. 
-    The spec was wrong because it didn't account for platform API behaviour. 
-    We added an implementation note warning about this. Now the spec has survived that test.
+    Real example from Reality2. We wrote a spec for how devices discover each other over 
+    Bluetooth. Two devices, same code, following the spec exactly. And... nothing. They 
+    couldn't see each other. No error message — just silence. Turned out the spec described 
+    the complete raw message, but the Bluetooth library automatically adds a wrapper around it. 
+    So the message was double-wrapped — like putting a letter in two envelopes. The address 
+    was hidden inside the outer envelope. The important thing: the CODE was correct — it did 
+    exactly what the spec said. The SPEC was wrong. So we fixed the spec and added a warning 
+    for anyone implementing it in the future. That's refutation in action.
   </aside>
 </section>
 
 <!-- ============ SLIDE 15: DUAL MODEL AUDIT ============ -->
 <section>
-  <h2>Dual-Model Audit</h2>
-  <p class="subtitle">Two AIs, zero coordination, complementary findings</p>
+  <h2>Two AIs, Same Specs, Different Eyes</h2>
+  <p class="subtitle">Independent review finds complementary problems</p>
   <br>
-  <div class="two-col" style="font-size:0.7em;">
+  <div class="two-col" style="font-size:0.75em;">
     <div style="border:1px solid #4fc3f7; border-radius:12px; padding:1em;">
-      <h3 style="margin-top:0;">Claude Opus</h3>
-      <p>7 critical · 12 significant · 9 minor</p>
-      <p style="font-size:0.85em;">Found: wire-level byte conflicts, hash algorithm inconsistencies, missing specs</p>
-      <p style="font-size:0.8em; color:#90a4ae;">Strength: intra-spec cross-referencing</p>
+      <h3 style="margin-top:0;">AI Reviewer #1</h3>
+      <p style="font-size:1.2em; font-weight:bold;">28 issues found</p>
+      <p>Good at spotting internal contradictions<br>
+      <span style="color:#90a4ae;">"Section 3 says X but Section 7 says Y"</span></p>
     </div>
     <div style="border:1px solid #ff7043; border-radius:12px; padding:1em;">
-      <h3 style="margin-top:0; color:#ff7043;">GPT-5.1 Codex</h3>
-      <p>13 findings across 7 categories</p>
-      <p style="font-size:0.85em;">Found: planning-vs-spec contradictions, stale docs, permission semantics gaps</p>
-      <p style="font-size:0.8em; color:#90a4ae;">Strength: architectural consistency</p>
+      <h3 style="margin-top:0; color:#ff7043;">AI Reviewer #2</h3>
+      <p style="font-size:1.2em; font-weight:bold;">13 issues found</p>
+      <p>Good at spotting big-picture gaps<br>
+      <span style="color:#90a4ae;">"Your old plan contradicts your new spec"</span></p>
     </div>
   </div>
   <br>
-  <p style="font-size:0.7em;">Neither saw the other's output. <span class="highlight">4 issues found by both</span> = high confidence.</p>
+  <p style="font-size:0.8em;"><span class="highlight">4 issues found by both</span> — when two independent reviewers<br>agree something's wrong, it's almost certainly wrong.</p>
   <aside class="notes">
-    Here's where it gets really powerful. I gave the entire spec suite to two different AIs — 
-    Claude Opus and GPT-5.1 Codex — independently. Neither saw the other's output. 
-    Claude was better at finding byte-level cross-reference bugs. GPT was better at finding 
-    architectural contradictions between planning docs and normative specs. 
-    Four issues were found by BOTH — those are almost certainly real. 
-    The complementary strengths are the point — it's like having two reviewers with 
-    different expertise.
+    I gave all 46 specs to two different AI models — independently. Neither saw the other's 
+    output. One was better at finding detailed contradictions within specs. The other was 
+    better at finding big-picture inconsistencies between documents. Four issues were flagged 
+    by BOTH — those are almost certainly real problems. It's like having two proofreaders 
+    with different strengths. The combination is more powerful than either alone.
   </aside>
 </section>
 
-<!-- ============ SLIDE 16: WHAT THEY AGREED ON ============ -->
+<!-- ============ SLIDE 16: WHAT THEY FOUND ============ -->
 <section>
-  <h2>What Both AIs Agreed On</h2>
+  <h2>What They Found</h2>
   <br>
-  <div style="font-size:0.7em; text-align:left; max-width:750px; margin:0 auto;">
-    <p><span class="warn">1.</span> Entanglement protocol is under-specified<br>
-    <small style="color:#90a4ae;">Claude: negotiation missing · GPT: permission bits undefined · Both right</small></p>
+  <div style="font-size:0.75em; text-align:left; max-width:750px; margin:0 auto;">
+    <p><span class="warn">1.</span> <strong>Two specs described the same thing differently</strong><br>
+    <small style="color:#90a4ae;">Like two architects drawing the same door in different sizes</small></p>
     <br>
-    <p><span class="warn">2.</span> SipHash key provenance undefined<br>
-    <small style="color:#90a4ae;">Key appears in beacon spec — no lifecycle, no rotation story</small></p>
+    <p><span class="warn">2.</span> <strong>A security feature had no lifecycle story</strong><br>
+    <small style="color:#90a4ae;">"Here's a key" — but when does it expire? Who rotates it?</small></p>
     <br>
-    <p><span class="warn">3.</span> Planning docs contradict normative specs<br>
-    <small style="color:#90a4ae;">Planning says "sensors are NOT R2 nodes" — spec says everything is a node</small></p>
+    <p><span class="warn">3.</span> <strong>Old planning docs contradicted current specs</strong><br>
+    <small style="color:#90a4ae;">Old plan: "sensors aren't nodes" — New spec: "everything is a node"</small></p>
     <br>
-    <p><span class="warn">4.</span> No "superseded" hygiene for old documents<br>
-    <small style="color:#90a4ae;">Stale docs persist without warnings, mislead readers</small></p>
+    <p><span class="warn">4.</span> <strong>No "superseded" labels on outdated documents</strong><br>
+    <small style="color:#90a4ae;">People reading old docs would get the wrong picture</small></p>
   </div>
+  <br>
+  <p style="font-size:0.7em; color:#90a4ae;">All four fixed within 24 hours. The specs are now stronger.</p>
   <aside class="notes">
-    The four agreed issues. When two independent AI models with different architectures 
-    and training data both flag the same problem, you can be pretty confident it's real. 
-    Each found a slightly different facet — Claude caught the negotiation protocol gap, 
-    GPT caught the permission semantics gap — but they converged on the same underlying issue. 
-    That's the power of independent refutation.
+    Here's what they found — explained without the jargon. Two specs described the same 
+    feature differently — that's a contradiction. A security key had no rotation story — 
+    it would just sit there forever. Old planning docs hadn't been labelled as outdated. 
+    None of these would have been caught by testing the code — the code would work fine. 
+    The SPECS had the problems. And now they're fixed. That's the refutative process working.
   </aside>
 </section>
 
 <!-- ============ SLIDE 17: CONFIDENCE DASHBOARD ============ -->
 <section>
-  <h2>Refutation Dashboard</h2>
-  <p class="subtitle">Track which specs have survived which tests</p>
+  <h2>Tracking Confidence</h2>
+  <p class="subtitle">How do you know which specs you can trust?</p>
   <br>
-  <div style="font-size:0.65em; text-align:left; max-width:700px; margin:0 auto;">
-    <p><strong>R2-WIRE</strong> — Wire protocol</p>
-    <div class="confidence-bar"><div class="confidence-fill green-fill" style="width:72%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Tests ✅ · Implementation ✅ · 1 open issue</p>
-
-    <p style="margin-top:0.8em;"><strong>R2-BEACON</strong> — BLE discovery</p>
+  <div style="font-size:0.7em; text-align:left; max-width:700px; margin:0 auto;">
+    <p><strong>Bluetooth Discovery</strong> — how devices find each other</p>
     <div class="confidence-bar"><div class="confidence-fill yellow-fill" style="width:48%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Field tested ✅ · Double-wrap fix applied · 2 open issues</p>
+    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Built &amp; tested on real hardware ✅ · Bug found &amp; fixed ✅</p>
 
-    <p style="margin-top:0.8em;"><strong>R2-TRUST</strong> — Trust groups</p>
-    <div class="confidence-bar"><div class="confidence-fill red-fill" style="width:22%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ⚠️ · Entanglement gap · No implementation yet</p>
-
-    <p style="margin-top:0.8em;"><strong>VF-TERRAIN</strong> — Forest terrain</p>
+    <p style="margin-top:0.8em;"><strong>VR Forest Terrain</strong> — the infinite landscape</p>
     <div class="confidence-bar"><div class="confidence-fill green-fill" style="width:85%;"></div></div>
-    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Implemented ✅ · Field tested ✅ · No open issues</p>
-  </div>
-  <aside class="notes">
-    We track this with a confidence dashboard. Every spec starts at low confidence and earns 
-    points through reviews, testing, implementation, and field validation. Issues reduce confidence. 
-    R2-TRUST is red because it's been falsified — the entanglement gap is real and unresolved. 
-    VF-TERRAIN is green because it's been through multiple implementations and field testing. 
-    This is Popperian thinking made visible — you can see at a glance which specs have survived 
-    serious testing and which haven't.
-  </aside>
-</section>
+    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ✅ · Built ✅ · You just walked around in it ✅</p>
 
-<!-- ============ SLIDE 18: CONFIDENCE MODEL ============ -->
-<section>
-  <h2>Confidence Scoring</h2>
-  <br>
-  <div class="two-col" style="font-size:0.65em;">
-    <div>
-      <h3 style="color:#66bb6a;">Evidence <small>(builds confidence)</small></h3>
-      <table>
-        <tr><td>Spec exists with version</td><td>+0.10</td></tr>
-        <tr><td>First reviewer approved</td><td>+0.15</td></tr>
-        <tr><td>Second reviewer approved</td><td>+0.10</td></tr>
-        <tr><td>Test vectors written</td><td>+0.15</td></tr>
-        <tr><td>Automated tests passing</td><td>+0.15</td></tr>
-        <tr><td>Implementation complete</td><td>+0.10</td></tr>
-        <tr><td>Integration tests</td><td>+0.10</td></tr>
-        <tr><td>Field validation</td><td>+0.05</td></tr>
-        <tr><td>No open issues</td><td>+0.10</td></tr>
-      </table>
-    </div>
-    <div>
-      <h3 style="color:#ff7043;">Decay <small>(reduces confidence)</small></h3>
-      <table>
-        <tr><td>Dependency changed</td><td>−0.15</td></tr>
-        <tr><td>Each open issue</td><td>−0.03</td></tr>
-        <tr><td>Version bump</td><td>→ 0.15</td></tr>
-      </table>
-      <br>
-      <h3>Colour bands</h3>
-      <table>
-        <tr><td>🔴 Red</td><td>&lt; 0.30</td></tr>
-        <tr><td>🟡 Yellow</td><td>0.30 – 0.59</td></tr>
-        <tr><td>🟢 Green</td><td>0.60 – 0.84</td></tr>
-        <tr><td>✅ Full</td><td>≥ 0.85</td></tr>
-      </table>
-    </div>
+    <p style="margin-top:0.8em;"><strong>Trust &amp; Security</strong> — how devices prove identity</p>
+    <div class="confidence-bar"><div class="confidence-fill red-fill" style="width:22%;"></div></div>
+    <p style="color:#90a4ae; font-size:0.85em;">Reviewed ⚠️ · Known gaps · Not yet built</p>
   </div>
+  <br>
+  <p style="font-size:0.7em;">
+    <span class="good">Green</span> = survived serious testing &nbsp;&nbsp;
+    <span style="color:#f9a825;">Yellow</span> = some testing, known issues &nbsp;&nbsp;
+    <span class="warn">Red</span> = not yet tested
+  </p>
   <aside class="notes">
-    The confidence model is simple. Evidence increases confidence, issues decrease it. 
-    A major version bump resets you to 0.15 because the spec has essentially changed — 
-    it needs to survive testing again. The colour bands give you a quick visual. 
-    The key insight: confidence is earned, not declared. You can't just say "this spec is done" — 
-    it has to survive actual refutation attempts.
+    We track all this in a dashboard. Each spec earns confidence by surviving tests — 
+    reviews, implementations, real-world deployments. Red means it hasn't been tested much yet. 
+    Green means it's survived multiple rounds of refutation. The VR Forest terrain spec is 
+    green — you just experienced it on your headsets. The trust and security spec is red — 
+    it's been reviewed but never implemented. We know it has gaps. That's honest. 
+    Most software projects don't tell you which parts they're confident about and which they're not.
   </aside>
 </section>
 
 <!-- ============ SLIDE 19: WHY THIS MATTERS ============ -->
 <section>
-  <h2>Why This Matters for AR/VR</h2>
+  <h2>Why This Matters</h2>
   <br>
   <div style="font-size:0.75em;">
-    <p><span class="emoji">🔄</span> <strong>Platform churn is real</strong><br>
-    <span style="color:#90a4ae;">Quest today, Apple tomorrow, who knows next year</span></p>
+    <p><span class="emoji">🔄</span> <strong>Platforms come and go</strong><br>
+    <span style="color:#90a4ae;">Quest today, Apple tomorrow, who knows next year. Specs survive all of them.</span></p>
     <br>
-    <p><span class="emoji">📝</span> <strong>Specs survive platform death</strong><br>
-    <span style="color:#90a4ae;">Your spec works with any engine, any AI, any era</span></p>
+    <p><span class="emoji">🤖</span> <strong>AI keeps getting better</strong><br>
+    <span style="color:#90a4ae;">Same spec + better AI next year = better result, no extra work.</span></p>
     <br>
-    <p><span class="emoji">🤖</span> <strong>AI is getting better fast</strong><br>
-    <span style="color:#90a4ae;">Next year's AI + your spec = better code, zero effort</span></p>
+    <p><span class="emoji">🧠</span> <strong>Knowledge doesn't walk out the door</strong><br>
+    <span style="color:#90a4ae;">When the developer leaves, the code becomes a mystery. The spec stays readable.</span></p>
     <br>
-    <p><span class="emoji">👥</span> <strong>Specs are reviewable</strong><br>
-    <span style="color:#90a4ae;">Two AIs can audit a spec. Try getting two AIs to audit 12,000 lines of shader code.</span></p>
+    <p><span class="emoji">✅</span> <strong>You can check the spec without running the code</strong><br>
+    <span style="color:#90a4ae;">Non-developers can review specs. Try reviewing 12,000 lines of shader code.</span></p>
   </div>
   <aside class="notes">
-    Why should AR/VR developers care? Because platform churn is our reality. 
-    We've all rewritten things for new SDKs, new headsets, new engines. 
-    A good spec survives all of that. And as AI improves, you can just re-generate 
-    better implementations from the same spec. The spec is your durable investment.
-    Plus — two AIs can meaningfully audit a spec. Good luck getting them to audit 
-    12,000 lines of hand-optimised shader code.
+    Why care? Whether you're a developer or not. Platforms change constantly — 
+    we've all been burned by rewriting for new SDKs or new headsets. A spec survives 
+    platform death. As AI improves, your same spec produces better implementations for free. 
+    And — crucially — non-technical people can read and review a spec. You can't review code 
+    unless you're a developer. You CAN review a document that says "the forest should have 
+    three tree species with these proportions." That makes the whole team part of quality control.
   </aside>
 </section>
 
@@ -614,8 +604,8 @@
     <p>📄 <strong>VR Forest repo</strong> (specs + code + transcripts):<br>
     <a href="https://github.com/reality2-roycdavies/vr-forest" style="color:#4fc3f7;">github.com/reality2-roycdavies/vr-forest</a></p>
     <br>
-    <p>📐 <strong>Reality2 specifications:</strong><br>
-    <a href="https://github.com/reality2-roycdavies/r2-specifications" style="color:#4fc3f7;">github.com/reality2-roycdavies/r2-specifications</a></p>
+    <p>📐 <strong>Reality2 project:</strong><br>
+    <span style="color:#4fc3f7;">reality2.ai</span> <span style="color:#90a4ae;">(coming soon)</span></p>
   </div>
   <br>
   <p style="font-size:1.2em; margin-top:0.5em;">Questions? 🤔</p>
