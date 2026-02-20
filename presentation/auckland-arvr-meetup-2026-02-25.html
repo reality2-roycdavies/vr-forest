@@ -13,7 +13,7 @@
     --r-heading-color: #ffffff;
     --r-link-color: #4fc3f7;
   }
-  .reveal { font-size: 32px; }
+  .reveal { font-size: clamp(18px, 2.5vw, 36px); }
   .reveal h1 { font-size: 2.2em; font-weight: 700; text-shadow: 0 0 30px rgba(79,195,247,0.3); }
   .reveal h2 { font-size: 1.6em; font-weight: 600; color: #4fc3f7; }
   .reveal h3 { font-size: 1.2em; color: #81d4fa; }
@@ -40,11 +40,18 @@
   .reveal .green-fill { background: linear-gradient(90deg, #2e7d32, #66bb6a); }
   .reveal .section-title { font-size: 0.5em; text-transform: uppercase; letter-spacing: 0.2em; color: #4fc3f7; margin-bottom: -0.5em; }
   .slide-number { font-size: 14px !important; }
-  /* Ensure slide content never overflows */
+  /* Adaptive slide content */
   .reveal .slides section {
     box-sizing: border-box;
     max-height: 100%;
     overflow: hidden;
+    padding: 1em;
+  }
+  .reveal .two-col { flex-wrap: wrap; }
+  @media (max-width: 600px) {
+    .reveal .two-col { flex-direction: column; gap: 0.5em; }
+    .reveal .pipeline { flex-direction: column; }
+    .reveal .pipeline .arrow { transform: rotate(90deg); }
   }
 </style>
 </head>
@@ -416,9 +423,11 @@ Reveal.initialize({
   transition: 'slide',
   transitionSpeed: 'default',
   showNotes: false,
-  width: 1280,
-  height: 720,
+  width: '100%',
+  height: '100%',
   margin: 0.04,
+  minScale: 0.2,
+  maxScale: 2.0,
   center: true,
   controlsTutorial: false
 });
