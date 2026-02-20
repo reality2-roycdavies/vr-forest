@@ -40,6 +40,12 @@
   .reveal .green-fill { background: linear-gradient(90deg, #2e7d32, #66bb6a); }
   .reveal .section-title { font-size: 0.5em; text-transform: uppercase; letter-spacing: 0.2em; color: #4fc3f7; margin-bottom: -0.5em; }
   .slide-number { font-size: 14px !important; }
+  /* Ensure slide content never overflows */
+  .reveal .slides section {
+    box-sizing: border-box;
+    max-height: 100%;
+    overflow: hidden;
+  }
 </style>
 </head>
 <body>
@@ -398,7 +404,7 @@ Reveal.initialize({
   showNotes: false,
   width: 1280,
   height: 720,
-  margin: 0.08,
+  margin: 0.04,
   center: true,
   controlsTutorial: false
 });
