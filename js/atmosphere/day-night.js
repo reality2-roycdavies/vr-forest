@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { getStarCatalog } from './star-catalog.js';
+import { windUniforms } from './wind.js';
 
 const _color = new THREE.Color();
 const _starEuler = new THREE.Euler(0, 0, 0, 'ZYX');
@@ -13,6 +14,8 @@ const _camRight = new THREE.Vector3();
 const _camUp = new THREE.Vector3();
 const _camFwd = new THREE.Vector3();
 const _moonPos = new THREE.Vector3();
+const _puffWorldPos = new THREE.Vector3();
+const _sunGlowColor = new THREE.Color();
 const _cloudNightColor = new THREE.Color(0x222233);
 const _cloudTwilightColor = new THREE.Color(0xe8a070);
 const _cloudStormGrey = new THREE.Color(0x505058);    // dark: for cloud tinting
@@ -389,13 +392,13 @@ export class DayNightSystem {
     // Cloud archetypes with weighted random selection
     const archetypes = [
       { type: 'cumulus',    weight: 0.35, puffs: [5, 8],  heightMin: 60,  heightMax: 90,
-        opacityMin: 0.25, opacityMax: 0.45, textures: [0, 2], driftBase: 0.015, horizontal: false },
+        opacityMin: 0.25, opacityMax: 0.45, textures: [0, 1, 2, 3], driftBase: 0.015, horizontal: false },
       { type: 'wispy',     weight: 0.25, puffs: [3, 6],  heightMin: 85,  heightMax: 110,
-        opacityMin: 0.1, opacityMax: 0.2,  textures: [1],    driftBase: 0.035, horizontal: true },
+        opacityMin: 0.1, opacityMax: 0.2,  textures: [4, 5],        driftBase: 0.035, horizontal: true },
       { type: 'flat',      weight: 0.20, puffs: [6, 10], heightMin: 70,  heightMax: 100,
-        opacityMin: 0.12, opacityMax: 0.22, textures: [3, 0], driftBase: 0.008, horizontal: true },
+        opacityMin: 0.12, opacityMax: 0.22, textures: [2, 3, 6],    driftBase: 0.008, horizontal: true },
       { type: 'smallPuffy', weight: 0.20, puffs: [2, 3], heightMin: 50,  heightMax: 75,
-        opacityMin: 0.3,  opacityMax: 0.5,  textures: [0],    driftBase: 0.025, horizontal: false },
+        opacityMin: 0.3,  opacityMax: 0.5,  textures: [0, 1],       driftBase: 0.025, horizontal: false },
     ];
 
     const pickArchetype = () => {
@@ -500,6 +503,9 @@ export class DayNightSystem {
         puffObj.userData.baseScaleY = scaleY;
         puffObj.userData.phase = Math.random() * Math.PI * 2;
         puffObj.userData.horizontal = arch.horizontal;
+        puffObj.userData.dissipatePhase = Math.random() * Math.PI * 2;
+        puffObj.userData.dissipateSpeed = 0.008 + Math.random() * 0.008;
+        puffObj.userData.driftPhase = Math.random() * Math.PI * 2;
         cloud.add(puffObj);
       }
 
@@ -513,6 +519,7 @@ export class DayNightSystem {
       cloud.userData.baseHeight = height;
       cloud.userData.drift = arch.driftBase + Math.random() * arch.driftBase * 0.5;
       cloud.userData.type = arch.type;
+      cloud.userData.windPhase = Math.random() * Math.PI * 2;
       this.cloudGroup.add(cloud);
     }
   }
@@ -535,46 +542,37 @@ export class DayNightSystem {
     return new THREE.CanvasTexture(canvas);
   }
 
+  // --- Cloud texture noise (one-time init, no runtime cost) ---
+  _cloudNoise(x, y) {
+    const hash = (a, b) => {
+      const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+      return h - Math.floor(h);
+    };
+    const ix = Math.floor(x), iy = Math.floor(y);
+    const fx = x - ix, fy = y - iy;
+    const sx = fx * fx * (3 - 2 * fx);
+    const sy = fy * fy * (3 - 2 * fy);
+    const a = hash(ix, iy), b = hash(ix + 1, iy);
+    const c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
+    return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+  }
+
+  _cloudFbm(x, y, octaves = 3, seed = 0) {
+    let value = 0, amp = 0.5, freq = 1;
+    for (let i = 0; i < octaves; i++) {
+      value += this._cloudNoise(x * freq + seed, y * freq + seed * 0.7) * amp;
+      amp *= 0.5;
+      freq *= 2;
+    }
+    return value;
+  }
+
   _createCloudTextures() {
     const textures = [];
+    const size = 128;
 
-    // 0: Soft round — classic cumulus puff
-    {
-      const size = 64;
-      const canvas = document.createElement('canvas');
-      canvas.width = size; canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      const half = size / 2;
-      const g = ctx.createRadialGradient(half, half, 0, half, half, half);
-      g.addColorStop(0, 'rgba(255,255,255,1)');
-      g.addColorStop(0.3, 'rgba(255,255,255,0.7)');
-      g.addColorStop(0.6, 'rgba(255,255,255,0.25)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, size, size);
-      textures.push(new THREE.CanvasTexture(canvas));
-    }
-
-    // 1: Wispy — very soft round wash, wispy shape comes from puff arrangement
-    {
-      const size = 64;
-      const canvas = document.createElement('canvas');
-      canvas.width = size; canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      const half = size / 2;
-      const g = ctx.createRadialGradient(half, half, 0, half, half, half);
-      g.addColorStop(0, 'rgba(255,255,255,0.5)');
-      g.addColorStop(0.25, 'rgba(255,255,255,0.35)');
-      g.addColorStop(0.5, 'rgba(255,255,255,0.15)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, size, size);
-      textures.push(new THREE.CanvasTexture(canvas));
-    }
-
-    // 2: Flat-bottomed — sharp lower edge, soft top for fair-weather cumulus
-    {
-      const size = 64;
+    // Helper: create per-pixel texture via imageData
+    const makeTexture = (pixelFn) => {
       const canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
       const ctx = canvas.getContext('2d');
@@ -586,35 +584,64 @@ export class DayNightSystem {
           const i = (y * size + x) * 4;
           const dx = (x - half) / half;
           const dy = (y - half) / half;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          // Asymmetric falloff: soft on top, flatter on bottom
-          const verticalBias = dy > 0
-            ? dx * dx + dy * dy * 2.5  // steeper below center
-            : dx * dx + dy * dy * 0.6; // softer above center
-          let alpha = Math.max(0, 1 - Math.sqrt(verticalBias) * 1.1);
+          const alpha = pixelFn(dx, dy, x, y, half);
           data[i] = 255; data[i + 1] = 255; data[i + 2] = 255;
-          data[i + 3] = Math.floor(Math.max(0, alpha) * 255);
+          data[i + 3] = Math.floor(Math.max(0, Math.min(1, alpha)) * 255);
         }
       }
       ctx.putImageData(imageData, 0, 0);
-      textures.push(new THREE.CanvasTexture(canvas));
+      return new THREE.CanvasTexture(canvas);
+    };
+
+    // 0-1: Cumulus puffs — radial gradient with noise-perturbed edges
+    for (let s = 0; s < 2; s++) {
+      const seed = s * 37.7;
+      textures.push(makeTexture((dx, dy, x, y, half) => {
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const noise = this._cloudFbm(x * 0.06, y * 0.06, 3, seed);
+        const perturbed = dist + (noise - 0.5) * 0.35;
+        const a = Math.max(0, 1 - perturbed * 1.3);
+        return a * a;
+      }));
     }
 
-    // 3: Thin haze — very diffuse, low contrast for high-altitude patches
-    {
-      const size = 64;
-      const canvas = document.createElement('canvas');
-      canvas.width = size; canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      const half = size / 2;
-      const g = ctx.createRadialGradient(half, half, 0, half, half, half);
-      g.addColorStop(0, 'rgba(255,255,255,0.4)');
-      g.addColorStop(0.3, 'rgba(255,255,255,0.25)');
-      g.addColorStop(0.6, 'rgba(255,255,255,0.1)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, size, size);
-      textures.push(new THREE.CanvasTexture(canvas));
+    // 2-3: Flat-bottomed — asymmetric falloff + noise edges
+    for (let s = 0; s < 2; s++) {
+      const seed = 100 + s * 53.1;
+      textures.push(makeTexture((dx, dy, x, y, half) => {
+        const verticalBias = dy > 0
+          ? dx * dx + dy * dy * 2.5
+          : dx * dx + dy * dy * 0.6;
+        const baseDist = Math.sqrt(verticalBias);
+        const noise = this._cloudFbm(x * 0.05, y * 0.05, 3, seed);
+        const perturbed = baseDist + (noise - 0.5) * 0.3;
+        return Math.max(0, 1 - perturbed * 1.1);
+      }));
+    }
+
+    // 4-5: Wispy/streaked — x-stretched noise, low opacity
+    for (let s = 0; s < 2; s++) {
+      const seed = 200 + s * 71.3;
+      textures.push(makeTexture((dx, dy, x, y, half) => {
+        const dist = Math.sqrt(dx * dx * 0.3 + dy * dy); // stretched horizontally
+        const noise = this._cloudFbm(x * 0.04, y * 0.08, 3, seed); // stretched noise
+        const streak = this._cloudNoise(x * 0.03 + seed, y * 0.12) * 0.3;
+        const perturbed = dist + (noise - 0.5) * 0.4 + streak;
+        const a = Math.max(0, 1 - perturbed * 1.2);
+        return a * 0.45; // low peak opacity
+      }));
+    }
+
+    // 6-7: Thin haze — very soft radial + subtle noise
+    for (let s = 0; s < 2; s++) {
+      const seed = 300 + s * 43.9;
+      textures.push(makeTexture((dx, dy, x, y, half) => {
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const noise = this._cloudFbm(x * 0.05, y * 0.05, 2, seed);
+        const perturbed = dist + (noise - 0.5) * 0.2;
+        const a = Math.max(0, 1 - perturbed * 1.4);
+        return a * a * 0.35; // very low peak opacity
+      }));
     }
 
     return textures;
@@ -1251,51 +1278,124 @@ export class DayNightSystem {
     const needColorUpdate = bandChanged || (band === 1) || weatherActive;
     this._lastCloudBand = band;
 
+    // Wind direction for cloud drift
+    const windX = windUniforms.uWindDirection.value.x;
+    const windZ = windUniforms.uWindDirection.value.y;
+    const windMul = weather ? weather.windMultiplier : 1;
+
     for (const cloud of this.cloudGroup.children) {
-      // Drift with slight radial wobble and vertical bob
-      cloud.userData.angle += cloud.userData.drift * 0.003;
+      // Altitude-varying orbit speed — higher clouds move faster
+      const altFactor = 0.7 + (cloud.userData.baseHeight - 50) / 120;
+      cloud.userData.angle += cloud.userData.drift * 0.003 * altFactor * windMul;
       const a = cloud.userData.angle;
       const r = cloud.userData.radius;
-      const radialWobble = Math.sin(t * 0.03 + a * 3) * 3;
-      const verticalBob = Math.sin(t * 0.04 + a * 2) * 0.8;
-      cloud.position.x = Math.cos(a) * (r + radialWobble);
-      cloud.position.z = Math.sin(a) * (r + radialWobble);
+      const wp = cloud.userData.windPhase;
+
+      // Multi-frequency radial wobble + wind push
+      const radialWobble = Math.sin(t * 0.03 + a * 3 + wp) * 3
+                         + Math.sin(t * 0.017 + wp * 1.7) * 2;
+      const windPushX = windX * windMul * 0.5 * Math.sin(t * 0.01 + wp);
+      const windPushZ = windZ * windMul * 0.5 * Math.sin(t * 0.01 + wp * 0.8);
+      const verticalBob = Math.sin(t * 0.04 + a * 2) * 0.8
+                        + Math.sin(t * 0.023 + wp) * 0.5;
+
+      cloud.position.x = Math.cos(a) * (r + radialWobble) + windPushX;
+      cloud.position.z = Math.sin(a) * (r + radialWobble) + windPushZ;
       cloud.position.y = cloud.userData.baseHeight + verticalBob;
 
       // Animate + tint each sprite puff
       for (const puff of cloud.children) {
-        // Billowing: position drift and scale breathing (subtle for horizontal clouds)
         const ph = puff.userData.phase;
+        const dph = puff.userData.driftPhase;
         const moveScale = puff.userData.horizontal ? 0.15 : 1.0;
-        puff.position.x = puff.userData.baseX + Math.sin(t * 0.08 + ph) * 0.8 * moveScale;
-        puff.position.y = puff.userData.baseY + Math.sin(t * 0.06 + ph * 1.3) * 0.4 * moveScale;
-        puff.position.z = puff.userData.baseZ + Math.cos(t * 0.07 + ph * 0.7) * 0.6 * moveScale;
 
+        // Billowing + slow drift (puffs spread apart then coalesce)
+        const driftScale = 1.5 * moveScale;
+        puff.position.x = puff.userData.baseX
+          + Math.sin(t * 0.08 + ph) * 0.8 * moveScale
+          + Math.sin(t * 0.012 + dph) * driftScale;
+        puff.position.y = puff.userData.baseY
+          + Math.sin(t * 0.06 + ph * 1.3) * 0.4 * moveScale
+          + Math.sin(t * 0.009 + dph * 1.5) * driftScale * 0.3;
+        puff.position.z = puff.userData.baseZ
+          + Math.cos(t * 0.07 + ph * 0.7) * 0.6 * moveScale
+          + Math.cos(t * 0.011 + dph * 0.8) * driftScale;
+
+        // Breathing + dissipation lifecycle (puffs grow/shrink ~80s cycle)
+        const lifecycle = 0.8 + 0.2 * Math.sin(t * puff.userData.dissipateSpeed + puff.userData.dissipatePhase);
         const breatheX = 1 + Math.sin(t * 0.05 + ph * 2.0) * 0.06 * moveScale;
         const breatheY = 1 + Math.sin(t * 0.04 + ph * 1.5) * 0.04 * moveScale;
-        puff.scale.x = puff.userData.baseScaleX * breatheX;
-        puff.scale.y = puff.userData.baseScaleY * breatheY;
+        let scaleX = puff.userData.baseScaleX * breatheX * lifecycle;
+        let scaleY = puff.userData.baseScaleY * breatheY * lifecycle;
 
-        // Color tinting — only when band changes or weather is active
+        // Storm growth: puffs expand during storms
+        if (weatherActive) {
+          const growFactor = 1 + weather.cloudDensity * 0.3;
+          scaleX *= growFactor;
+          scaleY *= growFactor;
+        }
+        puff.scale.x = scaleX;
+        puff.scale.y = scaleY;
+
+        // --- Sun-aware color tinting ---
         if (needColorUpdate) {
           const basePuffOpacity = puff.material.userData?.baseOpacity ?? puff.material.opacity;
           if (!puff.material.userData) puff.material.userData = {};
           puff.material.userData.baseOpacity = basePuffOpacity;
 
+          // Puff direction from player (no allocation — inline math)
+          const px = cloud.position.x + puff.position.x;
+          const py = cloud.position.y + puff.position.y;
+          const pz = cloud.position.z + puff.position.z;
+          const len = Math.sqrt(px * px + py * py + pz * pz) || 1;
+          const sunDot = (px * _sunDir.x + py * _sunDir.y + pz * _sunDir.z) / len;
+          const sunFacing = sunDot * 0.5 + 0.5; // remap -1..1 → 0..1
+          const vertOff = puff.userData.baseY;
+
           if (band === 0) {
+            // Night: dark blue, reduced opacity
             puff.material.color.setHex(0x222233);
             puff.material.opacity = basePuffOpacity * 0.5;
           } else if (band === 1) {
-            const tw = (elevation + 0.05) / 0.15;
-            puff.material.color.lerpColors(
-              _cloudNightColor,
-              _cloudTwilightColor,
-              tw
-            );
+            // Twilight: sun-aware golden hour tinting
+            const tw = Math.max(0, Math.min(1, (elevation + 0.05) / 0.15));
+            puff.material.color.lerpColors(_cloudNightColor, _cloudTwilightColor, tw);
+
+            // Clouds near sun glow warm orange
+            const sunProximity = Math.max(0, sunDot * 0.5 + 0.5);
+            const glowStrength = sunProximity * sunProximity * tw * 0.6;
+            _sunGlowColor.setRGB(1.0, 0.65, 0.35);
+            puff.material.color.lerp(_sunGlowColor, glowStrength);
+
+            // Underlighting: bottom puffs get orange wash when sun is very low
+            if (vertOff < 0 && elevation > -0.02) {
+              const underlight = Math.max(0, (0.05 - elevation) / 0.07) * 0.3;
+              _sunGlowColor.setRGB(1.0, 0.55, 0.30);
+              puff.material.color.lerp(_sunGlowColor, underlight);
+            }
+
             puff.material.opacity = basePuffOpacity * (0.5 + tw * 0.5);
           } else {
-            puff.material.color.setHex(0xffffff);
-            puff.material.opacity = basePuffOpacity;
+            // Day: lit tops, shadowed bottoms, silver lining
+            const vertShade = vertOff > 0
+              ? 1.0
+              : Math.max(0.65, 0.70 + vertOff * 0.15);
+            const shadowStrength = (1 - sunFacing) * 0.15;
+            const brightness = Math.max(0.6, vertShade - shadowStrength);
+            puff.material.color.setRGB(brightness, brightness, brightness + 0.02);
+
+            // Silver lining: opacity boost near sun
+            const silverLining = Math.pow(Math.max(0, sunDot), 4) * 0.12;
+            puff.material.opacity = basePuffOpacity + silverLining;
+
+            // Golden hour (low daytime sun): warm tint on sun-facing puffs
+            if (elevation < 0.1) {
+              const goldenT = Math.max(0, 1 - (elevation - 0.02) / 0.08);
+              const warmth = sunFacing * goldenT * 0.25;
+              puff.material.color.r = Math.min(1, puff.material.color.r + warmth * 0.15);
+              puff.material.color.g = Math.min(1, puff.material.color.g + warmth * 0.05);
+              puff.material.color.b = Math.max(0, puff.material.color.b - warmth * 0.08);
+            }
           }
 
           // Weather: boost opacity + darken toward storm grey
