@@ -22,9 +22,8 @@ export function getGroundMaterial() {
     const sandTex = createSandTexture();
     const dirtTex = createDirtTexture();
     const rockTex = createRockTexture();
-    groundMaterial = new THREE.MeshPhongMaterial({
+    groundMaterial = new THREE.MeshLambertMaterial({
       map: createGroundTexture(),
-      shininess: 0,
     });
     groundMaterial.userData.timeUniform = groundTimeUniform;
     groundMaterial.userData.wetnessUniform = groundWetnessUniform;
@@ -242,12 +241,12 @@ export function getGroundMaterial() {
          float slopeFlat = smoothstep(0.5, 0.9, vWorldNormal.y);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
-         // Steep slopes → bare rock (grey stone replaces grass/dirt on slopes)
-         float steepNoise = _vnoise(vWorldPos.xz * 0.2) * 0.08
-                          + _vnoise(vWorldPos.xz * 0.6 + 90.0) * 0.04;
-         float steepFactor = 1.0 - smoothstep(0.82, 0.98, vWorldNormal.y + steepNoise);
-         // Suppress on sand/shore (rock blending looks wrong on beaches)
-         steepFactor *= grassBlend;
+         // Steep slopes → bare rock (grey stone on any noticeable slope)
+         // Lowland terrain normalY is ~0.95-1.0, so threshold must be narrow
+         float steepNoise = _vnoise(vWorldPos.xz * 0.3) * 0.015;
+         float steepFactor = 1.0 - smoothstep(0.93, 0.99, vWorldNormal.y + steepNoise);
+         // Reduce on sand/shore but don't fully suppress (stream banks show rock)
+         steepFactor *= mix(0.3, 1.0, grassBlend);
          // Suppress where snow already covers (snow takes priority on high steep areas)
          steepFactor *= (1.0 - snowBlend * 0.7);
          if (steepFactor > 0.01) {
