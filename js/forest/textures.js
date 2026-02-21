@@ -144,6 +144,28 @@ export function createCanopyTexture(baseHex = 0x2d5a1e, size = 128, style = 'bro
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
     }
+  } else if (style === 'scale') {
+    // Alpine: dense overlapping scale-like marks for tough compact foliage
+    for (let i = 0; i < 200; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const rx = 2 + Math.random() * 4;
+      const ry = rx * (0.4 + Math.random() * 0.3);
+      const rot = Math.random() * Math.PI * 0.5 - Math.PI * 0.25;
+      const bright = Math.random() > 0.5;
+      const shift = bright ? 10 + Math.random() * 20 : -(10 + Math.random() * 20);
+      ctx.fillStyle = `rgba(${clamp(base.r + shift)}, ${clamp(base.g + shift * 1.1)}, ${clamp(base.b + shift * 0.6)}, ${0.4 + Math.random() * 0.4})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Dark gaps between scales
+    for (let i = 0; i < 50; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      ctx.fillStyle = `rgba(${clamp(base.r - 40)}, ${clamp(base.g - 35)}, ${clamp(base.b - 20)}, ${0.3 + Math.random() * 0.3})`;
+      ctx.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    }
   } else {
     // Birch: small round leaves, lighter, with yellow-green tint
     for (let i = 0; i < 120; i++) {

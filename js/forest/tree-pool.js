@@ -1,4 +1,4 @@
-// InstancedMesh rendering for all trees (3 types x 2 parts = 6 draw calls)
+// InstancedMesh rendering for all trees (4 types x 2 parts = 8 draw calls)
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import {
@@ -12,6 +12,15 @@ const _matrix = new THREE.Matrix4();
 const _position = new THREE.Vector3();
 const _quaternion = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
+const _color = new THREE.Color();
+
+// Base HSL values for per-instance canopy color variation
+const CANOPY_BASE_HSL = [
+  { h: 0.35, s: 0.55, l: 0.28 },  // Pine: dark cool green
+  { h: 0.30, s: 0.50, l: 0.35 },  // Oak: warm rich green
+  { h: 0.27, s: 0.45, l: 0.42 },  // Birch: bright yellow-green
+  { h: 0.42, s: 0.45, l: 0.24 },  // Alpine: dark blue-green
+];
 
 export class TreePool {
   constructor(scene) {
@@ -66,7 +75,7 @@ export class TreePool {
     chunks.sort((a, b) => a._sortDist - b._sortDist);
 
     const counts = new Array(CONFIG.TREE_TYPES).fill(0);
-    const allTrees = [[], [], []]; // per-type arrays
+    const allTrees = Array.from({ length: CONFIG.TREE_TYPES }, () => []);
 
     for (const chunk of chunks) {
       for (const tree of chunk.treePositions) {
@@ -86,6 +95,8 @@ export class TreePool {
       trunkMesh.count = trees.length;
       canopyMesh.count = trees.length;
 
+      const baseHSL = CANOPY_BASE_HSL[type] || CANOPY_BASE_HSL[0];
+
       for (let i = 0; i < trees.length; i++) {
         const t = trees[i];
         _position.set(t.x, t.y, t.z);
@@ -98,11 +109,23 @@ export class TreePool {
 
         trunkMesh.setMatrixAt(i, _matrix);
         canopyMesh.setMatrixAt(i, _matrix);
+
+        // Per-instance canopy color variation
+        const hueShift = ((t.x * 73.13 + t.z * 37.17) % 1.0) * 0.12 - 0.06;
+        const satShift = ((t.x * 17.31 + t.z * 91.73) % 1.0) * 0.08 - 0.04;
+        const lumShift = ((t.x * 41.57 + t.z * 63.29) % 1.0) * 0.06 - 0.03;
+        _color.setHSL(
+          baseHSL.h + hueShift,
+          Math.max(0, Math.min(1, baseHSL.s + satShift)),
+          Math.max(0, Math.min(1, baseHSL.l + lumShift))
+        );
+        canopyMesh.setColorAt(i, _color);
       }
 
       if (trees.length > 0) {
         trunkMesh.instanceMatrix.needsUpdate = true;
         canopyMesh.instanceMatrix.needsUpdate = true;
+        if (canopyMesh.instanceColor) canopyMesh.instanceColor.needsUpdate = true;
       }
     }
   }

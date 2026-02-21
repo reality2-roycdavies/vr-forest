@@ -39,7 +39,7 @@ const treeWindChunk = /* glsl */ `
   }
 `;
 
-// Wind for canopy: more movement than trunk
+// Wind for canopy: more movement than trunk + hemisphere normal override
 const canopyWindChunk = /* glsl */ `
   {
     vec4 wpos = instanceMatrix * vec4(transformed, 1.0);
@@ -58,6 +58,11 @@ const canopyWindChunk = /* glsl */ `
     transformed.z += disp * uWindDirection.y;
     // Slight Y wobble
     transformed.y += sin(uWindTime * 2.5 + phase * 2.0) * 0.004 * uWindStrength * hFactor;
+
+    // Hemisphere normal override: smooth lighting over entire canopy mass
+    // instead of revealing individual cone/sphere lobe facets
+    vec3 canopyCenter = vec3(0.0, 1.4, 0.0);
+    vNormal = normalize(normalMatrix * normalize(transformed - canopyCenter));
   }
 `;
 
@@ -128,6 +133,30 @@ export function addWindToMaterial(material, type) {
           'float faceDirection = gl_FrontFacing ? 1.0 : - 1.0;',
           'float faceDirection = 1.0;'
         );
+    }
+
+    // Canopy SSS: subsurface scattering / translucency approximation
+    // Leaves glow warmly when backlit by the sun
+    if (type === 'canopy') {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        /* glsl */ `
+        #if NUM_DIR_LIGHTS > 0
+        {
+          vec3 sssViewDir = normalize(vViewPosition);
+          float sssVdotL = max(0.0, dot(-sssViewDir, directionalLights[0].direction));
+          float sssFactor = pow(sssVdotL, 4.0) * 0.5;
+          #if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
+            // Use vertex color brightness as thickness proxy
+            float sssThickness = 1.0 - dot(vColor, vec3(0.3, 0.5, 0.2));
+            sssFactor *= sssThickness;
+          #endif
+          gl_FragColor.rgb += vec3(0.35, 0.55, 0.08) * sssFactor * directionalLights[0].color;
+        }
+        #endif
+        #include <dithering_fragment>
+        `
+      );
     }
   };
 

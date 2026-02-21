@@ -323,22 +323,52 @@ export function getGroundMaterial() {
          vec3 waterTint = vec3(0.05, 0.15, 0.28);
 
          // At and below waterline: terrain matches rendered water appearance
-         // Use lighter tint than base water color to account for specular/ambient
+         // Wide blending zone so terrain gradually becomes water-colored,
+         // overlapping with water plane's shore alpha fade for seamless transition
          // uWaterDarken scales these toward black at night/storms
          vec3 shallowWater = vec3(0.14, 0.25, 0.36) * uWaterDarken;
-         float waterMatch = 1.0 - smoothstep(-0.1, 0.35, distAbove);
+         // Noisy boundary to break up geometric triangle edges
+         float wlNoise = (_vnoise(vWorldPos.xz * 3.0 + vec2(uTime * 0.05, uTime * 0.03)) - 0.5) * 0.3
+                       + (_vnoise(vWorldPos.xz * 8.0 + vec2(-uTime * 0.04, uTime * 0.06) + 40.0) - 0.5) * 0.15;
+         float waterMatch = 1.0 - smoothstep(-0.3, 0.25 + wlNoise, distAbove);
          terrainColor = mix(terrainColor, shallowWater, waterMatch);
 
-         // Foam band: fades from water edge up onto sand
-         float fn1 = _vnoise(vWorldPos.xz * 4.0 + vec2(uTime * 0.12, uTime * 0.07));
-         float fn2 = _vnoise(vWorldPos.xz * 7.0 + vec2(-uTime * 0.1, uTime * 0.14) + 50.0);
-         float foamNoise = fn1 * 0.6 + fn2 * 0.4;
-         float foamBand = smoothstep(-0.05, 0.1, distAbove) * (1.0 - smoothstep(0.1, 0.8, distAbove));
-         vec3 foamColor = vec3(0.55, 0.58, 0.55) * uWaterDarken;
-         terrainColor = mix(terrainColor, foamColor, foamBand * foamNoise * 0.8);
+         // --- Wave lapping at the shoreline ---
+         // Curved lapping wave fronts (domain-warped position for organic shapes)
+         vec2 lapP = vWorldPos.xz + vec2(
+           sin(vWorldPos.z * 0.18 + uTime * 0.07) * 3.5,
+           cos(vWorldPos.x * 0.15 - uTime * 0.05) * 3.5
+         );
+         // Multiple overlapping lapping waves at different speeds
+         float lap1 = sin(dot(lapP, vec2(0.10, 0.05)) + uTime * 0.80) * 0.5 + 0.5;
+         float lap2 = sin(dot(lapP, vec2(-0.06, 0.09)) + uTime * 0.60 + 1.8) * 0.5 + 0.5;
+         float lap3 = sin(dot(lapP, vec2(0.04, -0.11)) + uTime * 0.45 + 3.7) * 0.5 + 0.5;
+         float lap4 = sin(dot(lapP, vec2(0.13, 0.02)) + uTime * 1.0 + 0.9) * 0.5 + 0.5;
+         // Noise-modulated reach — varies along the coastline
+         float lapAmpNoise = _vnoise(vWorldPos.xz * 0.4 + vec2(uTime * 0.02, 0.0));
+         float lapReach = (lap1 * 0.35 + lap2 * 0.25 + lap3 * 0.25 + lap4 * 0.15)
+                        * mix(0.35, 0.75, lapAmpNoise);
+         float lapDist = distAbove - lapReach;
 
-         // Wet sand above foam — darken and cool-shift
-         float wetZone = smoothstep(2.5, 0.8, distAbove);
+         // Water tongue — area covered by the lapping wave looks like shallow water
+         float waterTongue = smoothstep(0.05, -0.05, lapDist);
+         terrainColor = mix(terrainColor, shallowWater, waterTongue * 0.7);
+
+         // Bright foam froth at the advancing wave front
+         float fn1 = _vnoise(vWorldPos.xz * 8.0 + vec2(uTime * 0.2, uTime * 0.12));
+         float fn2 = _vnoise(vWorldPos.xz * 16.0 + vec2(-uTime * 0.15, uTime * 0.22) + 50.0);
+         float foamNoise = fn1 * 0.5 + fn2 * 0.5;
+         float frothLine = smoothstep(0.08, -0.02, lapDist) * smoothstep(-0.20, -0.03, lapDist);
+         frothLine *= 0.5 + 0.5 * foamNoise;
+         vec3 foamColor = vec3(0.70, 0.74, 0.70) * uWaterDarken;
+         terrainColor = mix(terrainColor, foamColor, frothLine);
+
+         // Wet sand behind the receding wave — darker and shinier looking
+         float wetTrail = smoothstep(0.6, 0.0, lapDist) * (1.0 - waterTongue);
+         terrainColor = mix(terrainColor, terrainColor * vec3(0.65, 0.70, 0.75), wetTrail * 0.6);
+
+         // Wider wet sand zone — darken and cool-shift (always-wet area near water)
+         float wetZone = smoothstep(3.5, 0.5, distAbove);
          terrainColor = mix(terrainColor, terrainColor * vec3(0.7, 0.74, 0.78), wetZone * 0.5);
 
          // Deep water visibility falloff

@@ -23,7 +23,7 @@ export const CONFIG = {
   TREE_JITTER: 1.2,             // random offset from grid
   TREE_MIN_HEIGHT: 2.5,
   TREE_MAX_HEIGHT: 6,
-  TREE_TYPES: 3,
+  TREE_TYPES: 4,
   TREE_COLLISION_RADIUS: 0.4,  // trunk collision radius in meters
 
   // Vegetation

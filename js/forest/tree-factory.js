@@ -1,4 +1,4 @@
-// 3 procedural tree geometries built from merged primitives with vertex colors
+// 4 procedural tree geometries built from merged primitives with vertex colors
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { createBarkTexture, createBirchBarkTexture, createCanopyTexture } from './textures.js';
@@ -20,6 +20,7 @@ export function initTreeGeometries() {
     createCanopyTexture(0x18401a, 128, 'needle'),  // Pine: dark cool green needles
     createCanopyTexture(0x386020, 128, 'broad'),    // Oak: warm rich green broad leaves
     createCanopyTexture(0x5a9035, 128, 'small'),    // Birch: bright yellow-green small leaves
+    createCanopyTexture(0x1a3828, 128, 'scale'),    // Alpine: dense dark blue-green scales
   ];
 
   const trunkMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: barkTex });
@@ -30,9 +31,11 @@ export function initTreeGeometries() {
   // --- Type 0: Pine ---
   {
     const trunk = buildTrunk(0.06, 0.13, 1.1, 8, 4, [
-      { height: 0.4, angle: 0.5, length: 0.25 },
-      { height: 0.6, angle: -0.7, length: 0.22 },
-      { height: 0.85, angle: 1.9, length: 0.18 },
+      { height: 0.4, angle: 0.5, length: 0.28 },
+      { height: 0.55, angle: -0.7, length: 0.25 },
+      { height: 0.7, angle: 1.9, length: 0.22 },
+      { height: 0.78, angle: -1.4, length: 0.18 },
+      { height: 0.88, angle: 0.9, length: 0.15 },
     ]);
     addCylindricalUVs(trunk, 1.1);
     trunkGeometries.push(trunk);
@@ -56,10 +59,11 @@ export function initTreeGeometries() {
   // --- Type 1: Oak ---
   {
     const trunk = buildTrunk(0.09, 0.17, 0.95, 8, 4, [
-      { height: 0.4, angle: 0.8, length: 0.35 },
-      { height: 0.5, angle: -0.6, length: 0.3 },
-      { height: 0.65, angle: 1.8, length: 0.25 },
-      { height: 0.8, angle: -1.2, length: 0.18 },
+      { height: 0.35, angle: 0.8, length: 0.48 },
+      { height: 0.45, angle: -0.6, length: 0.42 },
+      { height: 0.58, angle: 1.8, length: 0.35 },
+      { height: 0.7, angle: -1.2, length: 0.28 },
+      { height: 0.82, angle: 0.4, length: 0.22 },
     ]);
     addCylindricalUVs(trunk, 0.95);
     trunkGeometries.push(trunk);
@@ -84,10 +88,11 @@ export function initTreeGeometries() {
   // --- Type 2: Birch ---
   {
     const trunk = buildTrunk(0.04, 0.07, 1.3, 6, 5, [
-      { height: 0.6, angle: 0.6, length: 0.22 },
-      { height: 0.85, angle: -0.9, length: 0.2 },
-      { height: 1.0, angle: 1.5, length: 0.18 },
-      { height: 1.15, angle: -0.3, length: 0.12 },
+      { height: 0.55, angle: 0.6, length: 0.28 },
+      { height: 0.72, angle: -0.9, length: 0.26 },
+      { height: 0.88, angle: 1.5, length: 0.23 },
+      { height: 1.02, angle: -0.3, length: 0.18 },
+      { height: 1.15, angle: 1.1, length: 0.14 },
     ]);
     tintTrunkBirch(trunk);
     addCylindricalUVs(trunk, 1.3);
@@ -106,6 +111,45 @@ export function initTreeGeometries() {
     const birchCanopyMat = new THREE.MeshPhongMaterial({ vertexColors: true, map: canopyTexes[2], side: THREE.DoubleSide, specular: 0x000000, shininess: 0 });
     addWindToMaterial(birchCanopyMat, 'canopy');
     canopyMaterials.push(birchCanopyMat);
+  }
+
+  // --- Type 3: Alpine (hardy, windswept) ---
+  {
+    const trunk = buildTrunk(0.08, 0.15, 0.7, 8, 5, [
+      { height: 0.2, angle: 0.4, length: 0.45 },
+      { height: 0.32, angle: -0.8, length: 0.40 },
+      { height: 0.42, angle: 1.6, length: 0.35 },
+      { height: 0.52, angle: -0.2, length: 0.30 },
+      { height: 0.62, angle: 1.0, length: 0.25 },
+    ]);
+    // Stronger S-curve for gnarled feel
+    const trunkPos = trunk.getAttribute('position');
+    for (let i = 0; i < trunkPos.count; i++) {
+      const y = trunkPos.getY(i);
+      const t = y / 0.7;
+      const extraBend = Math.sin(t * Math.PI) * 0.04 + Math.sin(t * Math.PI * 3.0) * 0.02;
+      trunkPos.setX(i, trunkPos.getX(i) + extraBend);
+    }
+    trunkPos.needsUpdate = true;
+    trunk.computeVertexNormals();
+    addCylindricalUVs(trunk, 0.7);
+    trunkGeometries.push(trunk);
+
+    const parts = [];
+    // Asymmetric canopy offset to +X for windswept look
+    parts.push(makeCanopySphere(0.2, 0.75, 0, 0.45, 2));
+    parts.push(makeCanopySphere(0.35, 0.85, 0.15, 0.38, 2));
+    parts.push(makeCanopySphere(-0.05, 0.9, -0.18, 0.40, 2));
+    parts.push(makeCanopySphere(0.15, 1.05, 0.05, 0.32, 2));
+    parts.push(makeCanopySphere(0.30, 0.7, -0.20, 0.30, 2));
+    const canopy = mergeAll(parts);
+    tintCanopyVertexColors(canopy, 0x1a3828, 0.35);
+    canopyGeometries.push(canopy);
+
+    trunkMaterials.push(trunkMat);
+    const alpineMat = new THREE.MeshPhongMaterial({ vertexColors: true, map: canopyTexes[3], side: THREE.DoubleSide, specular: 0x000000, shininess: 0 });
+    addWindToMaterial(alpineMat, 'canopy');
+    canopyMaterials.push(alpineMat);
   }
 }
 
@@ -203,10 +247,13 @@ function jitterVertices(geometry, amount) {
   const pos = geometry.getAttribute('position');
   for (let i = 0; i < pos.count; i++) {
     _v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
-    // Use vertex position itself as a deterministic seed
-    const hash = Math.sin(_v.x * 127.1 + _v.y * 311.7 + _v.z * 74.7) * 43758.5453;
-    const frac = hash - Math.floor(hash);
-    const displacement = (frac - 0.5) * 2 * amount;
+    // Low-frequency large displacement
+    const hash1 = Math.sin(_v.x * 127.1 + _v.y * 311.7 + _v.z * 74.7) * 43758.5453;
+    const f1 = (hash1 - Math.floor(hash1) - 0.5) * 2 * amount;
+    // High-frequency small displacement for organic detail
+    const hash2 = Math.sin(_v.x * 63.7 + _v.y * 157.3 + _v.z * 213.1) * 28461.7231;
+    const f2 = (hash2 - Math.floor(hash2) - 0.5) * 2 * amount * 0.35;
+    const displacement = f1 + f2;
     _v.normalize().multiplyScalar(displacement);
     pos.setXYZ(i, pos.getX(i) + _v.x, pos.getY(i) + _v.y, pos.getZ(i) + _v.z);
   }
@@ -269,6 +316,20 @@ function tintCanopyVertexColors(geometry, baseColorHex, variationAmount) {
 
     const t = ht * 0.6 + dt * 0.4;
     _color.copy(darker).lerp(lighter, t);
+
+    // Baked ambient occlusion: subtle darkening of interior/bottom vertices
+    const trunkDist = Math.sqrt(x * x + z * z);
+    const aoFactor = Math.min(1.0, trunkDist * 3.0) * (0.5 + ht * 0.5);
+    _color.r *= 0.65 + aoFactor * 0.35;
+    _color.g *= 0.65 + aoFactor * 0.35;
+    _color.b *= 0.65 + aoFactor * 0.35;
+
+    // Warm/cool gradient: sunlit tops vs shadowed undersides
+    const warmShift = ht * 0.03;
+    const coolShift = (1 - ht) * 0.015;
+    _color.r += warmShift;
+    _color.g += warmShift * 0.5;
+    _color.b += coolShift;
 
     // Add pseudo-random per-vertex variation
     const hash = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;

@@ -102,6 +102,9 @@ function _tickHeightmap() {
   if (_hmapNextRow >= HMAP_RES) {
     _hmapPending = false;
     hmapTex.needsUpdate = true;
+    // Update shader uniform only when data is complete — avoids flash
+    // from mismatched center/data during the staggered rebuild
+    hmapCenterUniform.value.set(_hmapTargetX, _hmapTargetZ);
   }
 }
 
@@ -126,33 +129,46 @@ waterMat.onBeforeCompile = (shader) => {
     varying vec3 vWorldPos;
     varying vec3 vLocalPos;
     varying float vWaveH;
-    // Wave displacement — many cross-directional waves to avoid bands
+    varying vec3 vWaveNormal;
+    // Mobile-safe hash (multiply/fract, no sin on large values)
+    float _mhash(float p) {
+      p = fract(p * 0.1031);
+      p *= p + 33.33;
+      p *= p + p;
+      return fract(p);
+    }
+    float _mhash2(vec2 p) {
+      vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+      p3 += vec3(dot(p3, p3.yzx + vec3(33.33)));
+      return fract((p3.x + p3.y) * p3.z);
+    }
+    // Wave displacement — curved wave fronts via per-band domain warping
     float waveHeight(vec2 p, float t) {
       float h = 0.0;
-      // Each wave uses a unique angle to avoid aligned bands
-      // Gentle swells at varied angles
-      h += sin(dot(p, vec2( 0.38,  0.12)) + t * 0.35) * 0.045;
-      h += sin(dot(p, vec2(-0.15,  0.35)) + t * 0.28) * 0.040;
-      h += sin(dot(p, vec2( 0.27, -0.22)) + t * 0.42) * 0.030;
-      // Medium chop — more angled directions
-      h += sin(dot(p, vec2( 0.45, -0.55)) + t * 0.55) * 0.020;
-      h += sin(dot(p, vec2(-0.50,  0.30)) + t * 0.48) * 0.018;
-      h += sin(dot(p, vec2( 0.60,  0.40)) + t * 0.65) * 0.015;
-      h += sin(dot(p, vec2(-0.35, -0.60)) + t * 0.58) * 0.012;
-      // Fine ripples — scattered directions
-      h += sin(dot(p, vec2( 1.70,  1.10)) + t * 1.00) * 0.007;
-      h += sin(dot(p, vec2(-1.30,  1.80)) + t * 0.90) * 0.006;
-      h += sin(dot(p, vec2( 2.10, -0.90)) + t * 1.20) * 0.005;
-      h += sin(dot(p, vec2(-0.80, -2.20)) + t * 1.10) * 0.004;
-      h += sin(dot(p, vec2( 2.80,  1.50)) + t * 1.40) * 0.003;
-      h += sin(dot(p, vec2(-1.70,  2.80)) + t * 1.30) * 0.002;
-      // Storm chop — lower spatial frequencies to avoid aliasing on 128x128 mesh
-      h += sin(dot(p, vec2( 1.60, -0.90)) + t * 2.80) * 0.015 * uRainIntensity;
-      h += sin(dot(p, vec2(-1.25,  1.55)) + t * 3.20) * 0.012 * uRainIntensity;
-      h += sin(dot(p, vec2( 2.00,  1.15)) + t * 2.50) * 0.010 * uRainIntensity;
-      h += sin(dot(p, vec2(-0.95, -2.20)) + t * 3.60) * 0.008 * uRainIntensity;
-      h += sin(dot(p, vec2( 2.40,  0.40)) + t * 4.10) * 0.006 * uRainIntensity;
-      h += sin(dot(p, vec2(-1.85,  2.30)) + t * 3.80) * 0.005 * uRainIntensity;
+      // Gentle swells — curved by slow warp matching swell wavelengths
+      vec2 ps = p + vec2(
+        sin(p.y * 0.13 + t * 0.08) * 5.0 + sin(p.x * 0.08 + p.y * 0.05) * 3.0,
+        cos(p.x * 0.11 - t * 0.06) * 5.0 + cos(p.y * 0.07 - p.x * 0.04) * 3.0
+      );
+      h += sin(dot(ps, vec2( 0.38,  0.12)) + t * 0.35) * 0.045;
+      h += sin(dot(ps, vec2(-0.15,  0.35)) + t * 0.28) * 0.040;
+      h += sin(dot(ps, vec2( 0.27, -0.22)) + t * 0.42) * 0.030;
+      // Medium chop — tighter warp so fronts curve at chop scale
+      vec2 pc = p + vec2(
+        sin(p.y * 0.25 + t * 0.14) * 2.8 + cos(p.x * 0.19 - p.y * 0.11 + t * 0.09) * 1.8,
+        cos(p.x * 0.22 - t * 0.12) * 2.8 + sin(p.y * 0.17 + p.x * 0.13 - t * 0.07) * 1.8
+      );
+      h += sin(dot(pc, vec2( 0.45, -0.55)) + t * 0.55) * 0.020;
+      h += sin(dot(pc, vec2(-0.50,  0.30)) + t * 0.48) * 0.018;
+      h += sin(dot(pc, vec2( 0.60,  0.40)) + t * 0.65) * 0.015;
+      h += sin(dot(pc, vec2(-0.35, -0.60)) + t * 0.58) * 0.012;
+      // Storm chop — uses chop warp (pc) for curved fronts
+      h += sin(dot(pc, vec2( 1.60, -0.90)) + t * 2.80) * 0.015 * uRainIntensity;
+      h += sin(dot(pc, vec2(-1.25,  1.55)) + t * 3.20) * 0.012 * uRainIntensity;
+      h += sin(dot(pc, vec2( 2.00,  1.15)) + t * 2.50) * 0.010 * uRainIntensity;
+      h += sin(dot(pc, vec2(-0.95, -2.20)) + t * 3.60) * 0.008 * uRainIntensity;
+      h += sin(dot(pc, vec2( 2.40,  0.40)) + t * 4.10) * 0.006 * uRainIntensity;
+      h += sin(dot(pc, vec2(-1.85,  2.30)) + t * 3.80) * 0.005 * uRainIntensity;
       return h;
     }
     // Surface pattern for flecks — multiple sine layers, no grid
@@ -199,6 +215,7 @@ waterMat.onBeforeCompile = (shader) => {
     float dzN = dzB * 0.7 + dzF * 0.3;
     // Moderate tilt so lighting reveals wave shape without harsh angular reflections
     vec3 objectNormal = normalize(vec3(dxN * 2.5, 1.0, dzN * 2.5));
+    vWaveNormal = objectNormal;
     #ifdef USE_TANGENT
       vec3 objectTangent = vec3(1.0, 0.0, 0.0);
     #endif`
@@ -253,24 +270,23 @@ waterMat.onBeforeCompile = (shader) => {
     gl_FragColor.rgb *= 1.0 - stormDarken;
     vec3 stormWater = vec3(0.12, 0.14, 0.18) * effectScale;
     gl_FragColor.rgb = mix(gl_FragColor.rgb, stormWater, uRainIntensity * 0.3);
-    // Rain ripple rings on water surface
-    // highp required — sin-hash breaks at mediump on Quest with large world coords
+    // Rain ripple rings on water surface (mobile-safe hash, no sin on large values)
     if (uRainIntensity > 0.01) {
       float rippleSum = 0.0;
       highp vec2 hpWPos = wPos;
       for (int i = 0; i < 10; i++) {
         float fi = float(i);
-        float phase = fract(sin(fi * 127.1) * 311.7);
-        float speed = 0.7 + fract(sin(fi * 53.7) * 197.3) * 0.5;
+        float phase = _mhash(fi * 127.1);
+        float speed = 0.7 + _mhash(fi * 53.7) * 0.5;
         highp vec2 cellCoord = floor(hpWPos / 4.0 + fi * 0.37);
-        highp float cellPhase = fract(sin(dot(cellCoord, vec2(41.7, 89.3)) + fi * 13.0) * 2531.73);
+        highp float cellPhase = _mhash2(cellCoord + vec2(fi * 13.0));
         float cycleTime = uTime * speed + phase + float(cellPhase);
         float life = fract(cycleTime);
         highp float cycle = floor(cycleTime);
         highp float seed = cycle * 17.0 + fi * 31.0;
         highp vec2 center = cellCoord * 4.0 + vec2(
-          fract(sin(dot(cellCoord, vec2(12.9898 + seed, 78.233))) * 43758.5453) * 4.0,
-          fract(sin(dot(cellCoord, vec2(39.346 + seed, 11.135))) * 23421.631) * 4.0
+          _mhash2(cellCoord + vec2(seed, 78.233)) * 4.0,
+          _mhash2(cellCoord + vec2(seed + 39.346, 11.135)) * 4.0
         );
         float radius = life * 0.45;
         float d = length(hpWPos - center);
@@ -281,11 +297,42 @@ waterMat.onBeforeCompile = (shader) => {
       rippleSum = min(rippleSum, 1.0);
       gl_FragColor.rgb += rippleSum * uRainIntensity * 0.15 * effectScale;
     }
-    // Shore fade — very tight to soften waterline without revealing chunk seams
+    // --- Heightmap fetch (moved earlier for depth-based effects) ---
     vec2 hmUV = (vWorldPos.xz - uHmapCenter) / uHmapSize + 0.5;
     float terrainH = texture2D(uHeightmap, hmUV).r;
+    // --- Depth-based color and opacity ---
+    float waterDepth = max(0.0, uWaterLevel - terrainH + vWaveH);
+    float depthFactor = 1.0 - exp(-waterDepth * 0.8);
+    vec3 shallowTint = vec3(0.08, 0.22, 0.25) * effectScale;
+    gl_FragColor.rgb = mix(shallowTint, gl_FragColor.rgb, depthFactor);
+    gl_FragColor.a *= mix(0.6, 1.0, depthFactor);
+    // --- Subsurface scattering approximation ---
+    // Wave crests (thin water) transmit light with green-cyan glow
+    float sssStrength = smoothstep(0.02, 0.10, vWaveH);
+    vec3 sssTint = vec3(0.05, 0.18, 0.15);
+    gl_FragColor.rgb += sssTint * sssStrength * effectScale * 0.5;
+    // --- Fresnel sky reflection ---
+    // Fine ripple perturbation (beyond 128x128 vertex resolution)
+    vec3 fragNormal = normalize(vWaveNormal);
+    float rpX = sin(wPos.x * 3.0 + wPos.y * 1.5 + uTime * 0.4) * 0.02
+              + sin(wPos.x * 5.5 - wPos.y * 2.8 + uTime * 0.7) * 0.01;
+    float rpZ = cos(wPos.x * 2.2 + wPos.y * 4.0 + uTime * 0.5) * 0.02
+              + cos(wPos.x * 4.7 - wPos.y * 1.9 + uTime * 0.6) * 0.01;
+    fragNormal = normalize(fragNormal + vec3(rpX, 0.0, rpZ));
+    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+    float fresnel = pow(1.0 - max(dot(viewDir, fragNormal), 0.0), 5.0);
+    fresnel = 0.02 + 0.98 * fresnel; // F0=0.02 for water (Schlick)
+    // Sky color: fog already blends for day/night/weather
+    vec3 skyReflect = fogColor * 1.15;
+    gl_FragColor.rgb = mix(gl_FragColor.rgb, skyReflect, fresnel * effectScale);
+    // More opaque at grazing angles (reflected surface looks solid)
+    gl_FragColor.a = mix(gl_FragColor.a, min(gl_FragColor.a + 0.06, 1.0), fresnel);
+    // --- Shore fade (reuses heightmap data from above) ---
+    // Water becomes fully transparent before reaching the terrain surface.
+    // Terrain shader handles the visual waterline with its own color blending,
+    // so no seam is ever visible regardless of heightmap resolution.
     float shoreProx = terrainH - uWaterLevel;
-    float shoreFade = 1.0 - smoothstep(-0.2, 0.15, shoreProx);
+    float shoreFade = 1.0 - smoothstep(-2.0, -0.1, shoreProx);
     gl_FragColor.a *= shoreFade;
     // Fade out at edges so water plane boundary is invisible
     float edgeDist = max(abs(vLocalPos.x), abs(vLocalPos.z));
@@ -746,11 +793,10 @@ function onFrame() {
   const hmDx = pos.x - hmapCenter.x, hmDz = pos.z - hmapCenter.z;
   if (hmDx * hmDx + hmDz * hmDz > 25) { // >5m moved
     updateHeightmap(pos.x, pos.z);
-    hmapCenterUniform.value.set(pos.x, pos.z);
   }
   _tickHeightmap();
   updateGroundTime(waterTimeUniform.value);
-  vegPool.updateFoamTime(waterTimeUniform.value);
+  // vegPool.updateFoamTime(waterTimeUniform.value); // foam strip disabled
 
   // Wind animation
   updateWind(delta);
@@ -784,11 +830,14 @@ function onFrame() {
     const weatherFog = weather.cloudDarkness * 0.5; // 0 sunny, ~0.33 cloudy, ~0.45 rainy
     const totalFogBlend = Math.min(1, fogBlend + weatherFog);
     waterMat.color.copy(baseWaterColor).lerp(scene.fog.color, totalFogBlend);
-    // Dim specular in dark/storms — prevents bright reflections at night
-    const specDim = Math.max(0.02, sceneBright);
-    waterMat.specular.setScalar(0.18 * specDim);
+    // Specular for sun/moon reflection on water
+    // Night: keep moderate specular for moonlight path (0.15 base)
+    // Storms reduce specular (clouds block sun/moon)
+    const clearSky = 1 - weather.cloudDarkness; // 1 = clear, ~0.1 = stormy
+    const specDim = Math.max(0.15, sceneBright) * (0.3 + 0.7 * clearSky);
+    waterMat.specular.setScalar(0.22 * specDim);
     // Foam strips (MeshBasicMaterial — ignores scene lighting, needs manual tint)
-    vegPool.updateFoamAtmosphere(scene.fog.color, totalFogBlend);
+    // vegPool.updateFoamAtmosphere(scene.fog.color, totalFogBlend); // foam strip disabled
   }
 
   // Weather input: 1/2/3 on desktop, left trigger in VR

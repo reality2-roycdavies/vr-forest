@@ -436,6 +436,7 @@ export class VegetationPool {
     this.foamMesh = new THREE.Mesh(geom, mat);
     this.foamMesh.frustumCulled = false;
     this.foamMesh.renderOrder = 1;
+    this.foamMesh.visible = false; // disabled — wave lapping done in terrain shader
     this.scene.add(this.foamMesh);
   }
 
@@ -858,11 +859,12 @@ export class VegetationPool {
         }
       }
 
-      if (chunk.foamSegments) {
-        for (const seg of chunk.foamSegments) {
-          allFoamSegments.push(seg);
-        }
-      }
+      // Foam strip disabled — wave lapping done in terrain shader
+      // if (chunk.foamSegments) {
+      //   for (const seg of chunk.foamSegments) {
+      //     allFoamSegments.push(seg);
+      //   }
+      // }
     }
 
     // Rebuild grass (slot 0 only, slot 1 null, slot 2 null — ferns use fernVariants)
@@ -1049,7 +1051,7 @@ export class VegetationPool {
       if (allStumps.length > 0) this.stumpMesh.instanceMatrix.needsUpdate = true;
     }
 
-    // Rebuild foam strip along waterline contour
-    this._rebuildFoamStrip(allFoamSegments);
+    // Foam strip disabled — wave lapping done in terrain shader
+    // this._rebuildFoamStrip(allFoamSegments);
   }
 }

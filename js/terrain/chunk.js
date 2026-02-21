@@ -107,8 +107,9 @@ export class Chunk {
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL) continue;
 
-          // Mountain treeline: exclude above treeline, shrink in subalpine
-          if (y > CONFIG.TREELINE_START + 2) continue;
+          // Mountain treeline: alpine trees survive higher
+          const treelineLimit = CONFIG.TREELINE_START + 2;
+          const alpineLimit = CONFIG.TREELINE_START + 4;
 
           // Cottage clearing: suppress trees near cottages
           if (this._isNearAnyCottage(jx, jz)) continue;
@@ -121,11 +122,13 @@ export class Chunk {
 
           let altitudeScale = 1.0;
           if (y > CONFIG.SUBALPINE_START) {
+            // Alpine trees survive higher than other types
+            if (y > alpineLimit) continue;
             altitudeScale = 1 - (y - CONFIG.SUBALPINE_START) /
-              (CONFIG.TREELINE_START + 2 - CONFIG.SUBALPINE_START);
+              (alpineLimit - CONFIG.SUBALPINE_START);
             altitudeScale = Math.max(CONFIG.TREELINE_SCALE_MIN, altitudeScale);
-            // Above subalpine: pines only (type 0)
-            type = 0;
+            // Above subalpine: alpine trees only (type 3)
+            type = 3;
           }
           scale *= altitudeScale;
 
