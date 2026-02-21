@@ -922,14 +922,30 @@ export class VegetationPool {
 
       for (let i = 0; i < rocks.length; i++) {
         const r = rocks[i];
-        _position.set(r.x, r.y, r.z);
 
-        // Each rock gets a unique 3-axis rotation for variety
+        // Compute slope to sink rocks into terrain on hillsides
+        const eps = 0.5;
+        const hL = getTerrainHeight(r.x - eps, r.z);
+        const hR = getTerrainHeight(r.x + eps, r.z);
+        const hD = getTerrainHeight(r.x, r.z - eps);
+        const hU = getTerrainHeight(r.x, r.z + eps);
+        const sx = (hR - hL) / (2 * eps);
+        const sz = (hU - hD) / (2 * eps);
+        const slopeMag = Math.sqrt(sx * sx + sz * sz);
+        // Sink proportional to slope and rock size (larger rocks sink more)
+        const sinkAmounts = [0.06, 0.12, 0.25];
+        const sink = slopeMag * (sinkAmounts[si] + 0.15);
+
+        _position.set(r.x, r.y - sink, r.z);
+
+        // Tilt rock to match terrain slope + random variation
         const seed = r.rotSeed;
+        const slopeAngleX = Math.atan2(sz, 1);
+        const slopeAngleZ = Math.atan2(-sx, 1);
         _euler.set(
-          (Math.sin(seed * 1.1) * 0.3),
+          slopeAngleX + Math.sin(seed * 1.1) * 0.2,
           (seed * 73.13) % (Math.PI * 2),
-          (Math.sin(seed * 2.7) * 0.25)
+          slopeAngleZ + Math.sin(seed * 2.7) * 0.15
         );
         _quaternion.setFromEuler(_euler);
 
