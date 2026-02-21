@@ -364,7 +364,7 @@ export function setGroundAnisotropy(maxAnisotropy) {
  * Procedural grass/dirt ground texture.
  * Short grass blades and soil detail painted onto a canvas.
  */
-function createGroundTexture(size = 256) {
+function createGroundTexture(size = 512) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -461,7 +461,7 @@ function drawWrappedHelper(ctx, size, drawFn, x, y, margin) {
 /**
  * Procedural sand texture — fine grain, small pebbles, shell fragments.
  */
-function createSandTexture(size = 256) {
+function createSandTexture(size = 512) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -542,7 +542,7 @@ function createSandTexture(size = 256) {
 /**
  * Procedural dirt texture — soil clumps, small stones, root traces.
  */
-function createDirtTexture(size = 256) {
+function createDirtTexture(size = 512) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -623,7 +623,7 @@ function createDirtTexture(size = 256) {
 /**
  * Procedural bare rock texture — grey stone with cracks, lichen patches, mineral veins.
  */
-function createRockTexture(size = 256) {
+function createRockTexture(size = 512) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;

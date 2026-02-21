@@ -41,6 +41,8 @@ const audio = new AmbientAudio();
 const weather = new WeatherSystem(scene);
 
 // --- Ground texture anisotropy (reduces texture edge artifacts in VR) ---
+// Force material creation first (it's lazy-init), then set anisotropy
+getGroundMaterial();
 setGroundAnisotropy(vr.renderer.capabilities.getMaxAnisotropy());
 
 // --- Terrain ---
