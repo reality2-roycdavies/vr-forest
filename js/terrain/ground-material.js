@@ -293,14 +293,26 @@ export function getGroundMaterial() {
 
          // --- Per-surface-type textures as detail overlays ---
          #ifdef USE_MAP
-           vec2 wUV = vWorldPos.xz * 0.5;
-           vec2 wUV2 = wUV * 0.41 + vec2(wUV.y * 0.15, -wUV.x * 0.15);
+           // Three UV layers at irrational scale ratios to break repeat patterns
+           vec2 wUV  = vWorldPos.xz * 0.3;
+           vec2 wUV2 = vWorldPos.xz * 0.137 + vec2(vWorldPos.z * 0.11, -vWorldPos.x * 0.09);
+           vec2 wUV3 = vWorldPos.xz * 0.071 + vec2(17.3, -23.7);
+           // Mipmap bias: prefer sharper level on mobile (-0.5)
+           float mBias = -0.5;
 
-           // Sample each texture, anti-tiled — different scales per type
-           vec3 grassSamp = mix(texture2D(map, wUV).rgb, texture2D(map, wUV2).rgb, 0.35);
-           vec3 sandSamp = mix(texture2D(sandMap, wUV * 0.7).rgb, texture2D(sandMap, wUV2 * 0.8).rgb, 0.35);
-           vec3 dirtSamp = mix(texture2D(dirtMap, wUV * 0.85).rgb, texture2D(dirtMap, wUV2 * 0.9).rgb, 0.35);
-           vec3 rockSamp = mix(texture2D(rockMap, wUV * 0.6).rgb, texture2D(rockMap, wUV2 * 0.7).rgb, 0.35);
+           // Sample each texture with 3-layer anti-tiling blend
+           vec3 grassSamp = texture2D(map, wUV, mBias).rgb * 0.4
+                          + texture2D(map, wUV2, mBias).rgb * 0.35
+                          + texture2D(map, wUV3, mBias).rgb * 0.25;
+           vec3 sandSamp = texture2D(sandMap, wUV * 0.8, mBias).rgb * 0.4
+                         + texture2D(sandMap, wUV2 * 0.9, mBias).rgb * 0.35
+                         + texture2D(sandMap, wUV3 * 1.1, mBias).rgb * 0.25;
+           vec3 dirtSamp = texture2D(dirtMap, wUV * 0.9, mBias).rgb * 0.4
+                         + texture2D(dirtMap, wUV2 * 1.0, mBias).rgb * 0.35
+                         + texture2D(dirtMap, wUV3 * 0.85, mBias).rgb * 0.25;
+           vec3 rockSamp = texture2D(rockMap, wUV * 0.7, mBias).rgb * 0.4
+                         + texture2D(rockMap, wUV2 * 0.8, mBias).rgb * 0.35
+                         + texture2D(rockMap, wUV3 * 0.95, mBias).rgb * 0.25;
 
            // Convert to detail: per-channel centering to preserve color character
            vec3 grassTexDetail = grassSamp - vec3(0.53, 0.54, 0.49);
@@ -345,7 +357,7 @@ export function getGroundMaterial() {
  */
 export function setGroundAnisotropy(maxAnisotropy) {
   if (!groundMaterial) return;
-  const level = Math.min(maxAnisotropy, 8); // cap to avoid perf hit on mobile
+  const level = maxAnisotropy; // use full GPU capability
   const textures = [
     groundMaterial.map,
     groundMaterial.userData.sandTex,
