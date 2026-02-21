@@ -55,18 +55,42 @@ export class CollectibleSystem {
     this.glowMesh.count = 0;
     scene.add(this.glowMesh);
 
-    // Ground glow — soft radial gradient beneath each orb, visible at night
-    const groundGlowGeom = new THREE.PlaneGeometry(2.4, 2.4);
+    // Ground glow — shader-based radial gradient beneath each orb, visible at night
+    // depthTest off so it never clips against sloped terrain
+    const groundGlowGeom = new THREE.PlaneGeometry(2.8, 2.8);
     groundGlowGeom.rotateX(-Math.PI / 2); // lay flat on ground
-    const groundGlowMat = new THREE.MeshBasicMaterial({
-      map: this._createGlowTexture(),
+    const groundGlowMat = new THREE.ShaderMaterial({
       transparent: true,
-      opacity: 0,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -4,
+      depthTest: false,
+      uniforms: {
+        uOpacity: { value: 0 },
+      },
+      vertexShader: `
+        attribute vec3 instanceColor;
+        varying vec2 vUv;
+        varying vec3 vColor;
+        void main() {
+          vUv = uv;
+          vColor = instanceColor;
+          gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying vec2 vUv;
+        varying vec3 vColor;
+        void main() {
+          // Radial distance from center (0 at center, 1 at edge)
+          vec2 centered = vUv - 0.5;
+          float dist = length(centered) * 2.0;
+          // Soft cubic falloff — bright center, gentle fade
+          float alpha = 1.0 - smoothstep(0.0, 1.0, dist);
+          alpha *= alpha; // extra softness
+          gl_FragColor = vec4(vColor, alpha * uOpacity);
+        }
+      `,
     });
     this.groundGlowMesh = new THREE.InstancedMesh(groundGlowGeom, groundGlowMat, MAX);
     this.groundGlowMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
@@ -76,28 +100,6 @@ export class CollectibleSystem {
 
     this._time = 0;
     this._groundGlowOpacity = 0;
-  }
-
-  /**
-   * Create a soft radial gradient texture for ground glow.
-   */
-  _createGlowTexture() {
-    const size = 64;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    const cx = size / 2, cy = size / 2;
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cx);
-    grad.addColorStop(0, 'rgba(255,255,255,1.0)');
-    grad.addColorStop(0.3, 'rgba(255,255,255,0.5)');
-    grad.addColorStop(0.7, 'rgba(255,255,255,0.1)');
-    grad.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.needsUpdate = true;
-    return tex;
   }
 
   /**
@@ -245,7 +247,7 @@ export class CollectibleSystem {
                         : sunElevation < 0.08 ? 0.22 * (1 - (sunElevation + 0.05) / 0.13)
                         : 0;
     this._groundGlowOpacity += (targetOpacity - this._groundGlowOpacity) * Math.min(1, delta * 2);
-    this.groundGlowMesh.material.opacity = this._groundGlowOpacity;
+    this.groundGlowMesh.material.uniforms.uOpacity.value = this._groundGlowOpacity;
     this.groundGlowMesh.visible = this._groundGlowOpacity > 0.005;
 
     // Check collection (XZ distance only)
