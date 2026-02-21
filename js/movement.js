@@ -89,9 +89,14 @@ export class MovementSystem {
         _move.multiplyScalar(moveSpeed * delta);
 
         if (this.isOnSnow) {
-          // On snow: input drives ski velocity — enough to climb
-          this.skiVelX += _move.x * 5.0;
-          this.skiVelZ += _move.z * 5.0;
+          // On snow: split input into forward/sideways relative to facing
+          // Forward component drives ski velocity fully; sideways is heavily damped (like real skis)
+          const fwdDot = _move.x * _forward.x + _move.z * _forward.z;
+          const sideDot = _move.x * _right.x + _move.z * _right.z;
+          const fwdScale = 5.0;
+          const sideScale = 0.8; // skis resist sideways motion
+          this.skiVelX += (_forward.x * fwdDot * fwdScale + _right.x * sideDot * sideScale);
+          this.skiVelZ += (_forward.z * fwdDot * fwdScale + _right.z * sideDot * sideScale);
         } else {
           const newX = dolly.position.x + _move.x;
           const newZ = dolly.position.z + _move.z;
@@ -129,11 +134,25 @@ export class MovementSystem {
       this.skiVelX += slopeX * skiGravity * delta;
       this.skiVelZ += slopeZ * skiGravity * delta;
 
-      // Friction — less when coasting (no input), more when actively braking
-      const hasInput = Math.abs(left.x) > 0 || Math.abs(left.y) > 0;
-      const friction = hasInput ? 0.97 : 0.995;
-      this.skiVelX *= friction;
-      this.skiVelZ *= friction;
+      // Directional friction: skis slide freely along travel direction but resist sideways
+      const skiSpeed0 = Math.sqrt(this.skiVelX * this.skiVelX + this.skiVelZ * this.skiVelZ);
+      if (skiSpeed0 > 0.05) {
+        // Decompose velocity into forward (along travel) and lateral (across travel)
+        const travelDirX = this.skiVelX / skiSpeed0;
+        const travelDirZ = this.skiVelZ / skiSpeed0;
+        const fwdVel = this.skiVelX * travelDirX + this.skiVelZ * travelDirZ;
+        const latVelX = this.skiVelX - travelDirX * fwdVel;
+        const latVelZ = this.skiVelZ - travelDirZ * fwdVel;
+        // Lateral bleeds ~10x faster than forward
+        const hasInput = Math.abs(left.x) > 0 || Math.abs(left.y) > 0;
+        const fwdFriction = hasInput ? 0.97 : 0.995;
+        const latFriction = 0.88;
+        this.skiVelX = travelDirX * fwdVel * fwdFriction + latVelX * latFriction;
+        this.skiVelZ = travelDirZ * fwdVel * fwdFriction + latVelZ * latFriction;
+      } else {
+        this.skiVelX *= 0.95;
+        this.skiVelZ *= 0.95;
+      }
 
       // Speed cap
       const skiSpeed = Math.sqrt(this.skiVelX * this.skiVelX + this.skiVelZ * this.skiVelZ);
