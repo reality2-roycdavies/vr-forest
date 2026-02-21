@@ -278,18 +278,22 @@ export class Chunk {
         const wz = worldOffZ + lz;
         const density = getRockDensity(wx, wz);
 
-        // More rocks at altitude (alpine zone)
+        // More rocks at altitude (alpine/mountain zone)
         let threshold = CONFIG.ROCK_DENSITY_THRESHOLD;
         const jitterR = getJitter(wx + 300, wz + 300);
         const jxR = wx + jitterR.x * 1.5;
         const jzR = wz + jitterR.z * 1.5;
         const yR = getTerrainHeight(jxR, jzR);
-        if (yR > CONFIG.SNOWLINE_START) {
-          continue; // no rocks in snow zone
+        if (yR > CONFIG.SNOWLINE_START + 3) {
+          continue; // no rocks deep into snow zone
+        } else if (yR > CONFIG.SNOWLINE_START) {
+          threshold -= 0.35; // dense rocks just below snowline
         } else if (yR > CONFIG.ALPINE_START) {
-          threshold -= 0.2;
+          threshold -= 0.35; // rocky alpine scree fields
         } else if (yR > CONFIG.TREELINE_START) {
-          threshold -= 0.1;
+          threshold -= 0.2;  // scattered rocks above treeline
+        } else if (yR > CONFIG.SUBALPINE_START) {
+          threshold -= 0.1;  // occasional rocks in subalpine
         }
 
         if (density > threshold) {
@@ -307,6 +311,26 @@ export class Chunk {
 
           const rotSeed = jx * 17.3 + jz * 11.7;
 
+          this.rockPositions.push({ x: jx, y, z: jz, sizeIdx, rotSeed });
+        }
+      }
+    }
+
+    // Extra dense pass for alpine/sub-snowline zone (half-grid offset)
+    const alpineSpacing = spacing * 0.5;
+    for (let lz = alpineSpacing * 0.7; lz < size; lz += alpineSpacing) {
+      for (let lx = alpineSpacing * 0.7; lx < size; lx += alpineSpacing) {
+        const wx = worldOffX + lx;
+        const wz = worldOffZ + lz;
+        const jitter = getJitter(wx + 500, wz + 500);
+        const jx = wx + jitter.x * 1.0;
+        const jz = wz + jitter.z * 1.0;
+        const y = getTerrainHeight(jx, jz);
+        if (y < CONFIG.ALPINE_START || y > CONFIG.SNOWLINE_START + 2) continue;
+        const density = getRockDensity(wx + 50, wz + 50); // offset to avoid overlapping main pass
+        if (density > 0.15) { // very low threshold = dense scree
+          const sizeIdx = density > 0.6 ? 1 : 0; // mostly small rocks
+          const rotSeed = jx * 13.1 + jz * 19.3;
           this.rockPositions.push({ x: jx, y, z: jz, sizeIdx, rotSeed });
         }
       }
