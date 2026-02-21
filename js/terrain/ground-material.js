@@ -241,10 +241,9 @@ export function getGroundMaterial() {
          float slopeFlat = smoothstep(0.5, 0.9, vWorldNormal.y);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
-         // Steep slopes → bare rock (grey stone on any noticeable slope)
-         // Lowland terrain normalY is ~0.95-1.0, so threshold must be narrow
-         float steepNoise = _vnoise(vWorldPos.xz * 0.3) * 0.015;
-         float steepFactor = 1.0 - smoothstep(0.93, 0.99, vWorldNormal.y + steepNoise);
+         // Steep slopes → bare rock (grey stone on moderate-to-steep slopes)
+         float steepNoise = _vnoise(vWorldPos.xz * 0.3) * 0.02;
+         float steepFactor = 1.0 - smoothstep(0.88, 0.96, vWorldNormal.y + steepNoise);
          // Reduce on sand/shore but don't fully suppress (stream banks show rock)
          steepFactor *= mix(0.3, 1.0, grassBlend);
          // Suppress where snow already covers (snow takes priority on high steep areas)
