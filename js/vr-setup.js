@@ -23,6 +23,7 @@ export class VRSetup {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.xr.enabled = true;
+    this.renderer.xr.setFramebufferScaleFactor(1.1);
     this.renderer.xr.setReferenceSpaceType('local-floor');
     document.body.appendChild(this.renderer.domElement);
 
@@ -59,7 +60,7 @@ export class VRSetup {
         const ext = gl.getExtension('OVR_multiview2');
         // Quest 3 foveation
         if (this.renderer.xr.getFoveation) {
-          try { this.renderer.xr.setFoveation(1); } catch(e) {}
+          try { this.renderer.xr.setFoveation(0.5); } catch(e) {}
         }
       }
       if (this.onSessionStart) this.onSessionStart();

@@ -22,8 +22,10 @@ export function getGroundMaterial() {
     const sandTex = createSandTexture();
     const dirtTex = createDirtTexture();
     const rockTex = createRockTexture();
-    groundMaterial = new THREE.MeshLambertMaterial({
+    groundMaterial = new THREE.MeshPhongMaterial({
       map: createGroundTexture(),
+      specular: 0x000000,
+      shininess: 0,
     });
     groundMaterial.userData.timeUniform = groundTimeUniform;
     groundMaterial.userData.wetnessUniform = groundWetnessUniform;
@@ -134,6 +136,19 @@ export function getGroundMaterial() {
            float d = _hash(i + vec2(1.0, 1.0));
            return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
          }
+         // Anti-tile sampling (Quilez technique 3): noise-driven UV offset interpolation
+         vec3 _antiTileSample(sampler2D tex, vec2 uv) {
+           float k = _vnoise(uv * 0.005);
+           float l = k * 8.0;
+           float i = floor(l);
+           float f = l - i;
+           f = f * f * (3.0 - 2.0 * f);
+           vec2 ofA = vec2(_hash(vec2(i, 0.0)), _hash(vec2(i, 1.0)));
+           vec2 ofB = vec2(_hash(vec2(i + 1.0, 0.0)), _hash(vec2(i + 1.0, 1.0)));
+           vec3 colA = texture2D(tex, uv + ofA).rgb;
+           vec3 colB = texture2D(tex, uv + ofB).rgb;
+           return mix(colA, colB, f);
+         }
          // Simplified wave height (matches water vertex shader, dominant swells only)
          float _waveH(vec2 p, float t) {
            float h = 0.0;
@@ -179,9 +194,14 @@ export function getGroundMaterial() {
          // Dirt under trees — tree density from custom attribute (exact match)
          // Trees placed where original noise > 0.15 → treeDensity > ~0.575
          float treeDens = vTreeDensity;
-         // Add fine per-pixel noise for organic edges
-         float dirtDetail = _vnoise(vWorldPos.xz * 0.15) * 0.15;
-         float dirtFactor = smoothstep(0.5, 0.7, treeDens + dirtDetail);
+         // Multi-octave per-pixel noise to break triangle-edge aligned boundaries
+         float dirtDetail = _vnoise(vWorldPos.xz * 0.15) * 0.12
+                          + _vnoise(vWorldPos.xz * 0.6 + 20.0) * 0.08
+                          + _vnoise(vWorldPos.xz * 1.7 + 55.0) * 0.05
+                          + _vnoise(vWorldPos.xz * 4.5 + 90.0) * 0.10
+                          + _vnoise(vWorldPos.xz * 11.0 + 140.0) * 0.06;
+         // Wide smoothstep so transition doesn't follow polygon edges
+         float dirtFactor = smoothstep(0.25, 0.85, treeDens + dirtDetail);
          // Suppress dirt on sand — use grassBlend (already wide smoothstep)
          dirtFactor *= grassBlend;
 
@@ -198,7 +218,9 @@ export function getGroundMaterial() {
          float snowlineH = snowlineStart + zoneOffset;
 
          // Tussock blend (used to suppress dirt above treeline)
-         float tussockBlend = smoothstep(treelineH - 3.0, treelineH + 4.0, h);
+         float tussockNoise = _vnoise(vWorldPos.xz * 1.8 + 105.0) * 0.08
+                            + _vnoise(vWorldPos.xz * 6.0 + 145.0) * 0.05;
+         float tussockBlend = smoothstep(treelineH - 3.0, treelineH + 4.0, h + tussockNoise * 8.0);
 
          // Suppress dirt above treeline
          dirtFactor *= (1.0 - tussockBlend);
@@ -213,7 +235,9 @@ export function getGroundMaterial() {
          // Garden ground near cottages — warm earthy tones with noisy edges
          if (vCottageDensity > 0.01) {
            float gardenNoise = _vnoise(vWorldPos.xz * 0.3) * 0.25 + _vnoise(vWorldPos.xz * 0.8 + 70.0) * 0.15
-                             + _vnoise(vWorldPos.xz * 2.0 + 130.0) * 0.08;
+                             + _vnoise(vWorldPos.xz * 2.0 + 130.0) * 0.08
+                             + _vnoise(vWorldPos.xz * 5.0 + 95.0) * 0.10
+                             + _vnoise(vWorldPos.xz * 12.0 + 160.0) * 0.06;
            float gardenFactor = smoothstep(0.01, 0.35, vCottageDensity + gardenNoise);
            // Richer green near edges, warm soil near center
            vec3 gardenGreen = mix(grassColor, gardenColor, smoothstep(0.3, 0.8, vCottageDensity));
@@ -225,32 +249,50 @@ export function getGroundMaterial() {
            dirtFactor *= (1.0 - gardenFactor);
          }
 
-         // Subalpine: darker green (wide transition)
-         float subalpineBlend = smoothstep(subalpineH - 3.0, subalpineH + 4.0, h);
+         // Subalpine: darker green (wide transition with noise)
+         float subalpineBlend = smoothstep(subalpineH - 5.0, subalpineH + 6.0, h);
+         float subNoise = _vnoise(vWorldPos.xz * 1.2 + 80.0) * 0.12
+                        + _vnoise(vWorldPos.xz * 4.0 + 135.0) * 0.06
+                        + _vnoise(vWorldPos.xz * 10.0 + 190.0) * 0.04;
+         subalpineBlend = clamp(subalpineBlend + subNoise * (1.0 - abs(subalpineBlend * 2.0 - 1.0)), 0.0, 1.0);
          terrainColor = mix(terrainColor, subalpineColor, subalpineBlend * grassBlend);
 
          // Treeline: tussock
          terrainColor = mix(terrainColor, tussockColor, tussockBlend);
 
-         // Alpine: exposed rock (wide transition)
-         float alpineBlend = smoothstep(alpineH - 3.0, alpineH + 4.0, h);
+         // Alpine: exposed rock (wide transition with noise)
+         float alpineBlend = smoothstep(alpineH - 5.0, alpineH + 6.0, h);
+         float alpNoise = _vnoise(vWorldPos.xz * 1.0 + 160.0) * 0.15
+                        + _vnoise(vWorldPos.xz * 3.5 + 200.0) * 0.08
+                        + _vnoise(vWorldPos.xz * 9.0 + 250.0) * 0.05;
+         alpineBlend = clamp(alpineBlend + alpNoise * (1.0 - abs(alpineBlend * 2.0 - 1.0)), 0.0, 1.0);
          terrainColor = mix(terrainColor, alpineRockColor, alpineBlend);
 
-         // Per-pixel slope from screen-space derivatives (avoids vertex normal zigzag artifacts)
-         vec3 dPdx = dFdx(vWorldPos);
-         vec3 dPdy = dFdy(vWorldPos);
-         vec3 pixelNormal = normalize(cross(dPdx, dPdy));
-         // Add noise to soften per-triangle edges
-         float slopeNoise = _vnoise(vWorldPos.xz * 0.5) * 0.1;
+         // Smooth slope from vertex-interpolated world normal + noise
+         // (dFdx/dFdy gives flat per-triangle normals → visible triangle edges on rock/snow)
+         vec3 slopeNorm = normalize(vWorldNormal);
+         float slopeNoise = _vnoise(vWorldPos.xz * 0.5) * 0.10
+                          + _vnoise(vWorldPos.xz * 1.3 + 30.0) * 0.06
+                          + _vnoise(vWorldPos.xz * 3.5 + 70.0) * 0.03
+                          + _vnoise(vWorldPos.xz * 8.0 + 110.0) * 0.04;
 
          // Snow: slope-aware (flat = snow, steep = rock), wide transition
-         float snowBlend = smoothstep(snowlineH - 3.0, snowlineH + 4.0, h);
-         float slopeFlat = smoothstep(0.5, 0.9, pixelNormal.y + slopeNoise);
+         float snowBlend = smoothstep(snowlineH - 6.0, snowlineH + 8.0, h);
+         // Per-pixel noise in the transition zone to break up banding
+         float snowNoise = _vnoise(vWorldPos.xz * 0.6 + 40.0) * 0.10
+                         + _vnoise(vWorldPos.xz * 1.5) * 0.18
+                         + _vnoise(vWorldPos.xz * 4.0 + 180.0) * 0.10
+                         + _vnoise(vWorldPos.xz * 9.0 + 220.0) * 0.06;
+         snowBlend = clamp(snowBlend + snowNoise * (1.0 - abs(snowBlend * 2.0 - 1.0)), 0.0, 1.0);
+         float slopeFlat = smoothstep(0.5, 0.9, slopeNorm.y + slopeNoise);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
          // Steep slopes → bare rock (grey stone on moderate-to-steep slopes)
-         float steepNoise = _vnoise(vWorldPos.xz * 0.3) * 0.02;
-         float steepFactor = 1.0 - smoothstep(0.6, 0.82, pixelNormal.y + steepNoise);
+         float steepNoise = _vnoise(vWorldPos.xz * 0.3) * 0.04
+                          + _vnoise(vWorldPos.xz * 1.5 + 45.0) * 0.03
+                          + _vnoise(vWorldPos.xz * 5.0 + 100.0) * 0.04
+                          + _vnoise(vWorldPos.xz * 12.0 + 170.0) * 0.03;
+         float steepFactor = 1.0 - smoothstep(0.55, 0.88, slopeNorm.y + steepNoise);
          // Reduce on sand/shore but don't fully suppress (stream banks show rock)
          steepFactor *= mix(0.3, 1.0, grassBlend);
          // Snow takes full precedence at high altitude
@@ -299,24 +341,22 @@ export function getGroundMaterial() {
 
          // --- Per-surface-type textures as detail overlays ---
          #ifdef USE_MAP
-           // Two UV layers at same scale but rotated ~30deg — eliminates beat
-           // frequency moiré while still breaking up repeat patterns
+           // Two UV bases with anti-tiled sampling (Quilez technique 3)
+           // Noise-driven offset interpolation eliminates visible repeat grid
            vec2 wUV = vWorldPos.xz * 0.25;
-           // Rotated copy: cos(30)=0.866, sin(30)=0.5
+           // Layer 2: rotated 30deg, scale 0.21 (period 4.76m vs 4.0m)
            vec2 wUV2 = vec2(
              vWorldPos.x * 0.866 - vWorldPos.z * 0.5,
              vWorldPos.x * 0.5   + vWorldPos.z * 0.866
-           ) * 0.25 + vec2(17.3, -23.7);
+           ) * 0.21 + vec2(17.3, -23.7);
 
-           // Sample each texture with 2-layer rotated blend (no mipmap bias)
-           vec3 grassSamp = texture2D(map, wUV).rgb * 0.5
-                          + texture2D(map, wUV2).rgb * 0.5;
-           vec3 sandSamp = texture2D(sandMap, wUV * 0.8).rgb * 0.5
-                         + texture2D(sandMap, wUV2 * 0.85).rgb * 0.5;
-           vec3 dirtSamp = texture2D(dirtMap, wUV * 0.9).rgb * 0.5
-                         + texture2D(dirtMap, wUV2 * 0.95).rgb * 0.5;
-           vec3 rockSamp = texture2D(rockMap, wUV * 0.7).rgb * 0.5
-                         + texture2D(rockMap, wUV2 * 0.75).rgb * 0.5;
+           // Sample each texture with anti-tiled 2-layer blend
+           vec3 grassSamp = _antiTileSample(map, wUV) * 0.55
+                          + _antiTileSample(map, wUV2) * 0.45;
+           vec3 sandSamp  = _antiTileSample(sandMap, wUV * 0.8);
+           vec3 dirtSamp  = _antiTileSample(dirtMap, wUV * 0.9) * 0.55
+                          + _antiTileSample(dirtMap, wUV2 * 0.95) * 0.45;
+           vec3 rockSamp  = _antiTileSample(rockMap, wUV * 0.7);
 
            // Convert to detail: per-channel centering to preserve color character
            vec3 grassTexDetail = grassSamp - vec3(0.53, 0.54, 0.49);
@@ -335,10 +375,38 @@ export function getGroundMaterial() {
              detail = mix(detail, dirtTexDetail, gfFactor);
            }
 
-           // Apply as moderate additive detail — suppress near waterline and fade at altitude
+           // Apply as moderate additive detail — suppress near waterline, fade at altitude
+           // but keep some rock texture in snow zone for surface variation
            float detailSuppress = smoothstep(dynWater - 0.2, dynWater + 0.5, h);
-           detailSuppress *= (1.0 - smoothstep(0.0, 1.0, tussockBlend));
+           float altFade = 1.0 - smoothstep(0.0, 1.0, tussockBlend);
+           // Let rock texture show through faintly in snow (breaks up flat white)
+           float snowDetail = snowBlend * slopeFlat * 0.3;
+           detailSuppress *= max(altFade, snowDetail);
            diffuseColor.rgb += detail * 1.5 * detailSuppress;
+         #endif`
+      );
+
+      // Override normal_fragment_begin: add per-pixel noise to mask Mach band artifacts
+      // Vertex-interpolated normals give C0 but not C1 continuity across triangle edges,
+      // causing perceived brightness bands (Mach band illusion). Adding per-pixel noise
+      // breaks up the gradient discontinuities so the eye can't track them.
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <normal_fragment_begin>',
+        `// Smooth vertex-interpolated world normal + per-pixel noise to mask Mach bands
+         vec3 wN = normalize(vWorldNormal);
+         // Four octaves with irrational frequencies (can't align with triangle grid)
+         float nX = (_vnoise(vWorldPos.xz * 3.73) - 0.5) * 0.14
+                  + (_vnoise(vWorldPos.xz * 8.41 + 40.0) - 0.5) * 0.08
+                  + (_vnoise(vWorldPos.xz * 19.7 + 80.0) - 0.5) * 0.04
+                  + (_vnoise(vWorldPos.xz * 43.3 + 150.0) - 0.5) * 0.02;
+         float nZ = (_vnoise(vWorldPos.xz * 3.73 + vec2(100.0, 50.0)) - 0.5) * 0.14
+                  + (_vnoise(vWorldPos.xz * 8.41 + vec2(60.0, 90.0)) - 0.5) * 0.08
+                  + (_vnoise(vWorldPos.xz * 19.7 + vec2(140.0, 30.0)) - 0.5) * 0.04
+                  + (_vnoise(vWorldPos.xz * 43.3 + vec2(200.0, 70.0)) - 0.5) * 0.02;
+         wN = normalize(wN + vec3(nX, 0.0, nZ));
+         vec3 normal = normalize(mat3(viewMatrix) * wN);
+         #ifdef DOUBLE_SIDED
+           normal *= faceDirection;
          #endif`
       );
 

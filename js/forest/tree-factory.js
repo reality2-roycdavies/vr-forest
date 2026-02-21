@@ -38,18 +38,17 @@ export function initTreeGeometries() {
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopyLobe(0, 0.85, 0, 0.8, 1.1, 14));
-    parts.push(makeCanopyLobe(0.1, 1.2, -0.08, 0.65, 0.9, 14));
-    parts.push(makeCanopyLobe(-0.08, 1.5, 0.06, 0.5, 0.75, 12));
-    parts.push(makeCanopyLobe(0.05, 1.8, -0.03, 0.38, 0.6, 10));
+    parts.push(makeCanopyLobe(0, 0.85, 0, 0.8, 1.1, 12));
+    parts.push(makeCanopyLobe(0.1, 1.2, -0.08, 0.65, 0.9, 12));
+    parts.push(makeCanopyLobe(-0.08, 1.5, 0.06, 0.5, 0.75, 10));
+    parts.push(makeCanopyLobe(0.05, 1.8, -0.03, 0.38, 0.6, 8));
     parts.push(makeCanopyLobe(-0.04, 2.05, 0.02, 0.25, 0.4, 8));
     const canopy = mergeAll(parts);
     tintCanopyVertexColors(canopy, 0x18401a, 0.28);
-    addSphericalUVs(canopy);
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(trunkMat);
-    const pineMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[0], side: THREE.DoubleSide });
+    const pineMat = new THREE.MeshPhongMaterial({ vertexColors: true, map: canopyTexes[0], side: THREE.DoubleSide, specular: 0x000000, shininess: 0 });
     addWindToMaterial(pineMat, 'canopy');
     canopyMaterials.push(pineMat);
   }
@@ -74,11 +73,10 @@ export function initTreeGeometries() {
     parts.push(makeCanopySphere(0.2, 1.5, -0.3, 0.35, 2));
     const canopy = mergeAll(parts);
     tintCanopyVertexColors(canopy, 0x386020, 0.25);
-    addSphericalUVs(canopy);
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(trunkMat);
-    const oakMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[1], side: THREE.DoubleSide });
+    const oakMat = new THREE.MeshPhongMaterial({ vertexColors: true, map: canopyTexes[1], side: THREE.DoubleSide, specular: 0x000000, shininess: 0 });
     addWindToMaterial(oakMat, 'canopy');
     canopyMaterials.push(oakMat);
   }
@@ -96,17 +94,16 @@ export function initTreeGeometries() {
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopyLobe(0.18, 1.2, 0.12, 0.48, 0.7, 12));
-    parts.push(makeCanopyLobe(-0.22, 1.4, -0.12, 0.4, 0.6, 12));
-    parts.push(makeCanopyLobe(0.0, 1.65, 0.0, 0.33, 0.5, 10));
+    parts.push(makeCanopyLobe(0.18, 1.2, 0.12, 0.48, 0.7, 10));
+    parts.push(makeCanopyLobe(-0.22, 1.4, -0.12, 0.4, 0.6, 10));
+    parts.push(makeCanopyLobe(0.0, 1.65, 0.0, 0.33, 0.5, 8));
     parts.push(makeCanopyLobe(0.1, 1.85, -0.08, 0.22, 0.35, 8));
     const canopy = mergeAll(parts);
     tintCanopyVertexColors(canopy, 0x5a9035, 0.3);
-    addSphericalUVs(canopy);
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(birchMat);
-    const birchCanopyMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: canopyTexes[2], side: THREE.DoubleSide });
+    const birchCanopyMat = new THREE.MeshPhongMaterial({ vertexColors: true, map: canopyTexes[2], side: THREE.DoubleSide, specular: 0x000000, shininess: 0 });
     addWindToMaterial(birchCanopyMat, 'canopy');
     canopyMaterials.push(birchCanopyMat);
   }
@@ -295,16 +292,19 @@ function mergeAll(geometries) {
   let totalVerts = 0;
   let totalIdx = 0;
   let hasColors = false;
+  let hasUVs = false;
 
   for (const g of geometries) {
     totalVerts += g.getAttribute('position').count;
     totalIdx += g.getIndex() ? g.getIndex().count : 0;
     if (g.getAttribute('color')) hasColors = true;
+    if (g.getAttribute('uv')) hasUVs = true;
   }
 
   const positions = new Float32Array(totalVerts * 3);
   const normals = new Float32Array(totalVerts * 3);
   const colors = hasColors ? new Float32Array(totalVerts * 3) : null;
+  const uvs = hasUVs ? new Float32Array(totalVerts * 2) : null;
   const indices = totalIdx > 0 ? new Uint16Array(totalIdx) : null;
 
   let vOffset = 0;
@@ -314,6 +314,7 @@ function mergeAll(geometries) {
     const pos = g.getAttribute('position');
     const norm = g.getAttribute('normal');
     const col = g.getAttribute('color');
+    const uv = g.getAttribute('uv');
     const count = pos.count;
 
     for (let i = 0; i < count; i++) {
@@ -336,14 +337,19 @@ function mergeAll(geometries) {
           colors[(vOffset + i) * 3 + 2] = 0.5;
         }
       }
+
+      if (uvs) {
+        if (uv) {
+          uvs[(vOffset + i) * 2] = uv.getX(i);
+          uvs[(vOffset + i) * 2 + 1] = uv.getY(i);
+        }
+      }
     }
 
     const idx = g.getIndex();
     if (idx && indices) {
       for (let i = 0; i < idx.count; i++) {
-        indices[iOffset + i] = idx.getY !== undefined
-          ? idx.array[i] + vOffset
-          : idx.array[i] + vOffset;
+        indices[iOffset + i] = idx.array[i] + vOffset;
       }
       iOffset += idx.count;
     }
@@ -355,6 +361,7 @@ function mergeAll(geometries) {
   merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   merged.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   if (colors) merged.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  if (uvs) merged.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   if (indices) merged.setIndex(new THREE.BufferAttribute(indices, 1));
 
   return merged;
@@ -375,36 +382,6 @@ function addCylindricalUVs(geometry, height) {
     const z = pos.getZ(i);
     const u = (Math.atan2(z, x) / (Math.PI * 2)) + 0.5;
     const v = y / (height || 1);
-    uvs[i * 2] = u;
-    uvs[i * 2 + 1] = v;
-  }
-
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-}
-
-/**
- * Generate spherical UVs for canopy geometry.
- */
-function addSphericalUVs(geometry) {
-  const pos = geometry.getAttribute('position');
-  const count = pos.count;
-  const uvs = new Float32Array(count * 2);
-
-  // Find center Y of canopy for normalization
-  let minY = Infinity, maxY = -Infinity;
-  for (let i = 0; i < count; i++) {
-    const y = pos.getY(i);
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  const rangeY = maxY - minY || 1;
-
-  for (let i = 0; i < count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const u = (Math.atan2(z, x) / (Math.PI * 2)) + 0.5;
-    const v = (y - minY) / rangeY;
     uvs[i * 2] = u;
     uvs[i * 2 + 1] = v;
   }

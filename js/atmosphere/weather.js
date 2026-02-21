@@ -85,7 +85,8 @@ export class WeatherSystem {
     this._spatialBus = null;
 
     // --- Canopy shelter ---
-    this._shelterFactor = 0; // 0 = open sky, 1 = fully sheltered
+    this._shelterFactor = 0; // 0 = open sky, 1 = fully sheltered (smoothed)
+    this._shelterTarget = 0; // raw target from grid sampling
 
     // Initial derived params
     this._updateDerivedParams();
@@ -283,7 +284,7 @@ export class WeatherSystem {
     const terrainY = this._playerTerrainY || 0;
     if (terrainY > CONFIG.TREELINE_START) {
       _shelterGrid.fill(0);
-      this._shelterFactor = 0;
+      this._shelterTarget = 0;
       return;
     }
 
@@ -297,9 +298,17 @@ export class WeatherSystem {
       }
     }
 
-    // Player shelter factor: sample center cell
+    // Player shelter factor: average 3x3 cells around center for spatial smoothing
     const mid = SHELTER_RES >> 1;
-    this._shelterFactor = _shelterGrid[mid * SHELTER_RES + mid];
+    let shelterSum = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cy = Math.min(SHELTER_RES - 1, Math.max(0, mid + dy));
+        const cx = Math.min(SHELTER_RES - 1, Math.max(0, mid + dx));
+        shelterSum += _shelterGrid[cy * SHELTER_RES + cx];
+      }
+    }
+    this._shelterTarget = shelterSum / 9;
   }
 
   _updateRainParticles(delta, playerPos, windDir) {
@@ -319,6 +328,8 @@ export class WeatherSystem {
     if (!shouldShow) return;
 
     this._updateShelterGrid(playerPos.x, playerPos.z);
+    // Smooth shelter factor over ~1 second for gradual rain audio transitions
+    this._shelterFactor += (this._shelterTarget - this._shelterFactor) * Math.min(1, 1.5 * delta);
 
     const count = CONFIG.RAIN_PARTICLE_COUNT;
     // More particles in snow zone — blizzard at altitude during storms
@@ -638,8 +649,8 @@ export class WeatherSystem {
     const snowStart = CONFIG.SNOWLINE_START;
     const altFade = 1 - clamp01((terrainY - treelineY) / (snowStart - treelineY));
 
-    // Slight dampen under canopy (shelter 1.0 → 0.65 volume)
-    const canopyDampen = 1 - this._shelterFactor * 0.35;
+    // Dampen under canopy (shelter 1.0 → 0.4 volume, smoothed over time)
+    const canopyDampen = 1 - this._shelterFactor * 0.6;
 
     // Patter: linear scale
     if (this._patterGain) {
