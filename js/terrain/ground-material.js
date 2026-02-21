@@ -347,7 +347,7 @@ export function getGroundMaterial() {
          // Noise-modulated reach — varies along the coastline
          float lapAmpNoise = _vnoise(vWorldPos.xz * 0.4 + vec2(uTime * 0.02, 0.0));
          float lapReach = (lap1 * 0.35 + lap2 * 0.25 + lap3 * 0.25 + lap4 * 0.15)
-                        * mix(0.35, 0.75, lapAmpNoise);
+                        * mix(0.15, 0.40, lapAmpNoise);
          float lapDist = distAbove - lapReach;
 
          // Water tongue — area covered by the lapping wave looks like shallow water
