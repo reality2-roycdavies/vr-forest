@@ -246,8 +246,8 @@ export function getGroundMaterial() {
          float steepFactor = 1.0 - smoothstep(0.75, 0.90, vWorldNormal.y + steepNoise);
          // Reduce on sand/shore but don't fully suppress (stream banks show rock)
          steepFactor *= mix(0.3, 1.0, grassBlend);
-         // Suppress where snow already covers (snow takes priority on high steep areas)
-         steepFactor *= (1.0 - snowBlend * 0.7);
+         // Snow takes full precedence at high altitude
+         steepFactor *= (1.0 - snowBlend);
          if (steepFactor > 0.01) {
            terrainColor = mix(terrainColor, steepRockColor, steepFactor);
          }
