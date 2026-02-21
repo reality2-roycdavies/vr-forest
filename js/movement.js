@@ -125,15 +125,18 @@ export class MovementSystem {
           const newX = dolly.position.x + _move.x;
           const newZ = dolly.position.z + _move.z;
 
-          if (this.isSwimming || !this._collidesWithTree(newX, newZ)) {
+          const tooSteep = !this.isSwimming && this._isTooSteep(newX, newZ);
+          if (this.isSwimming || (!tooSteep && !this._collidesWithTree(newX, newZ))) {
             dolly.position.x = newX;
             dolly.position.z = newZ;
             isMoving = true;
           } else {
-            if (!this._collidesWithTree(newX, dolly.position.z)) {
+            const steepX = !this.isSwimming && this._isTooSteep(newX, dolly.position.z);
+            const steepZ = !this.isSwimming && this._isTooSteep(dolly.position.x, newZ);
+            if (!steepX && !this._collidesWithTree(newX, dolly.position.z)) {
               dolly.position.x = newX;
               isMoving = true;
-            } else if (!this._collidesWithTree(dolly.position.x, newZ)) {
+            } else if (!steepZ && !this._collidesWithTree(dolly.position.x, newZ)) {
               dolly.position.z = newZ;
               isMoving = true;
             }
@@ -187,15 +190,21 @@ export class MovementSystem {
         this.skiVelZ *= scale;
       }
 
-      // Apply ski velocity
+      // Apply ski velocity (blocked by steep rock)
       this.skiSpeed = skiSpeed;
       if (skiSpeed > 0.01) {
         const newX = dolly.position.x + this.skiVelX * delta;
         const newZ = dolly.position.z + this.skiVelZ * delta;
-        dolly.position.x = newX;
-        dolly.position.z = newZ;
-        // Only report "moving" at meaningful speed — prevents footstep sounds when nearly stopped
-        if (skiSpeed > 0.3) isMoving = true;
+        if (this._isTooSteep(newX, newZ)) {
+          // Bounce off cliff — kill velocity
+          this.skiVelX = 0;
+          this.skiVelZ = 0;
+        } else {
+          dolly.position.x = newX;
+          dolly.position.z = newZ;
+          // Only report "moving" at meaningful speed — prevents footstep sounds when nearly stopped
+          if (skiSpeed > 0.3) isMoving = true;
+        }
       }
     } else {
       this.skiSpeed = 0;
@@ -403,6 +412,23 @@ export class MovementSystem {
       }
     }
     return maxY;
+  }
+
+  /**
+   * Check if a position is too steep to walk on (bare rock cliff).
+   * Matches the shader's steep rock threshold (normalY < ~0.7).
+   */
+  _isTooSteep(px, pz) {
+    const eps = 0.5;
+    const hL = getTerrainHeight(px - eps, pz);
+    const hR = getTerrainHeight(px + eps, pz);
+    const hD = getTerrainHeight(px, pz - eps);
+    const hU = getTerrainHeight(px, pz + eps);
+    const sx = (hR - hL) / (2 * eps);
+    const sz = (hU - hD) / (2 * eps);
+    // Normal Y = 1 / sqrt(sx² + 1 + sz²)
+    const normalY = 1 / Math.sqrt(sx * sx + 1 + sz * sz);
+    return normalY < 0.7;
   }
 
   getPlayerPosition() {
