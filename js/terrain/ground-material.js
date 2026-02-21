@@ -318,6 +318,26 @@ export function getGroundMaterial() {
 }
 
 /**
+ * Set anisotropic filtering on all ground textures.
+ * Call after renderer is available (needs max anisotropy from GPU caps).
+ */
+export function setGroundAnisotropy(maxAnisotropy) {
+  if (!groundMaterial) return;
+  const level = Math.min(maxAnisotropy, 8); // cap to avoid perf hit on mobile
+  const textures = [
+    groundMaterial.map,
+    groundMaterial.userData.sandTex,
+    groundMaterial.userData.dirtTex,
+  ];
+  for (const tex of textures) {
+    if (tex) {
+      tex.anisotropy = level;
+      tex.needsUpdate = true;
+    }
+  }
+}
+
+/**
  * Procedural grass/dirt ground texture.
  * Short grass blades and soil detail painted onto a canvas.
  */

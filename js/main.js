@@ -18,7 +18,7 @@ import { BirdFlockSystem } from './forest/birds.js';
 import { CollectibleSystem } from './forest/collectibles.js';
 import { CottageSystem } from './forest/cottage-system.js';
 import { getTerrainHeight } from './terrain/noise.js';
-import { updateGroundTime, getGroundMaterial } from './terrain/ground-material.js';
+import { updateGroundTime, getGroundMaterial, setGroundAnisotropy } from './terrain/ground-material.js';
 
 // --- Scene ---
 const scene = new THREE.Scene();
@@ -39,6 +39,9 @@ const dayNight = new DayNightSystem(scene);
 const fireflies = new FireflySystem(scene);
 const audio = new AmbientAudio();
 const weather = new WeatherSystem(scene);
+
+// --- Ground texture anisotropy (reduces texture edge artifacts in VR) ---
+setGroundAnisotropy(vr.renderer.capabilities.getMaxAnisotropy());
 
 // --- Terrain ---
 const chunkManager = new ChunkManager(scene);

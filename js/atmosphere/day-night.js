@@ -1168,8 +1168,8 @@ export class DayNightSystem {
     }
     // Fog distance: consistent day/night (dark night colors already reduce
     // perceived visibility; weather system handles storm reduction separately)
-    let fogNear = 120;
-    let fogFar = 250;
+    let fogNear = 200;
+    let fogFar = 500;
     // Weather: reduce fog distance (closer fog = lower visibility)
     if (weather) {
       fogNear *= weather.fogMultiplier;

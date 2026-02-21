@@ -39,6 +39,10 @@ export class MovementSystem {
     this.skiVelX = 0;
     this.skiVelZ = 0;
     this.isOnSnow = false;
+
+    // Smoothed thumbstick input (removes jerkiness in VR)
+    this._smoothLX = 0;
+    this._smoothLY = 0;
   }
 
   update(delta) {
@@ -70,10 +74,30 @@ export class MovementSystem {
     this.isOnSnow = !this.isSwimming && terrainY > CONFIG.SNOWLINE_START && rockY <= terrainY + 0.01;
 
     // --- Continuous locomotion (left stick) ---
+    const inVR = this.vr.isInVR();
     const canSprint = this.input.sprintPressed && this.collectibles && this.collectibles.score > 0 && !this.isSwimming;
-    const moveSpeed = this.isSwimming ? CONFIG.SWIM_SPEED : (canSprint ? CONFIG.SPRINT_SPEED : CONFIG.MOVE_SPEED);
+    const baseSpeed = inVR ? CONFIG.MOVE_SPEED * 1.35 : CONFIG.MOVE_SPEED;
+    const moveSpeed = this.isSwimming ? CONFIG.SWIM_SPEED : (canSprint ? CONFIG.SPRINT_SPEED : baseSpeed);
     let isMoving = false;
-    if (Math.abs(left.x) > 0 || Math.abs(left.y) > 0) {
+
+    // Remap thumbstick past deadzone to smooth 0→1 range (removes jerk at deadzone edge)
+    const dz = CONFIG.THUMBSTICK_DEADZONE;
+    const remapAxis = (v) => {
+      const abs = Math.abs(v);
+      if (abs < 0.001) return 0;
+      return Math.sign(v) * Math.min(1, (abs - dz) / (1 - dz));
+    };
+    const rawLX = remapAxis(left.x);
+    const rawLY = remapAxis(left.y);
+
+    // Smooth thumbstick input (lerp toward target — removes frame-to-frame jitter in VR)
+    const smoothRate = inVR ? 12 : 20; // VR: gentler ramp; desktop: snappier
+    this._smoothLX += (rawLX - this._smoothLX) * Math.min(1, delta * smoothRate);
+    this._smoothLY += (rawLY - this._smoothLY) * Math.min(1, delta * smoothRate);
+    const lx = this._smoothLX;
+    const ly = this._smoothLY;
+
+    if (Math.abs(lx) > 0.01 || Math.abs(ly) > 0.01) {
       camera.getWorldDirection(_forward);
       _forward.y = 0;
       _forward.normalize();
@@ -81,8 +105,8 @@ export class MovementSystem {
       _right.crossVectors(_forward, THREE.Object3D.DEFAULT_UP).normalize();
 
       _move.set(0, 0, 0);
-      _move.addScaledVector(_forward, -left.y);
-      _move.addScaledVector(_right, left.x);
+      _move.addScaledVector(_forward, -ly);
+      _move.addScaledVector(_right, lx);
 
       if (_move.lengthSq() > 0) {
         _move.normalize();
@@ -144,7 +168,7 @@ export class MovementSystem {
         const latVelX = this.skiVelX - travelDirX * fwdVel;
         const latVelZ = this.skiVelZ - travelDirZ * fwdVel;
         // Lateral bleeds ~10x faster than forward
-        const hasInput = Math.abs(left.x) > 0 || Math.abs(left.y) > 0;
+        const hasInput = Math.abs(lx) > 0.01 || Math.abs(ly) > 0.01;
         const fwdFriction = hasInput ? 0.97 : 0.995;
         const latFriction = 0.88;
         this.skiVelX = travelDirX * fwdVel * fwdFriction + latVelX * latFriction;
@@ -227,9 +251,10 @@ export class MovementSystem {
         }
       }
     } else {
-      // Smoothly follow ground surface
+      // Smoothly follow ground surface (faster lerp in VR for smoother feel)
+      const followRate = inVR ? 18 : 12;
       const targetY = this.currentGroundY;
-      dolly.position.y += (targetY - dolly.position.y) * Math.min(1, delta * 12);
+      dolly.position.y += (targetY - dolly.position.y) * Math.min(1, delta * followRate);
     }
 
     // --- Sprint state (set before bob so footstep rate matches) ---
