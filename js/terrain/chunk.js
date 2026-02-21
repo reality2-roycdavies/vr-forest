@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { generateTerrainData } from './terrain-generator.js';
-import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity, getMountainFactor, getLogDensity } from './noise.js';
+import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity, getMountainFactor, getLogDensity, getCottageDensity, getTerrainSlope } from './noise.js';
 import { getGroundMaterial } from './ground-material.js';
 
 export class Chunk {
@@ -16,6 +16,7 @@ export class Chunk {
     this.rockPositions = [];   // { x, y, z, sizeIdx, rotSeed }
     this.collectiblePositions = []; // { x, y, z }
     this.logPositions = [];    // { x, y, z, type, scale, rotSeed }  type: 0=log, 1=stump
+    this.cottagePositions = []; // { x, y, z, seed, chimneyWorld }
     this.foamSegments = [];         // { x1, z1, x2, z2, nx, nz }
     this.active = false;
   }
@@ -40,6 +41,7 @@ export class Chunk {
     );
     this.mesh.visible = true;
 
+    this._generateCottages(chunkX, chunkZ);
     this._generateTrees(chunkX, chunkZ);
     this._generateVegetation(chunkX, chunkZ);
     this._generateFlowers(chunkX, chunkZ);
@@ -104,6 +106,9 @@ export class Chunk {
           // Mountain treeline: exclude above treeline, shrink in subalpine
           if (y > CONFIG.TREELINE_START + 2) continue;
 
+          // Cottage clearing: suppress trees near cottages
+          if (this._isNearAnyCottage(jx, jz)) continue;
+
           let type = Math.abs(Math.floor(density * 30)) % CONFIG.TREE_TYPES;
           let scale = CONFIG.TREE_MIN_HEIGHT +
             (density - CONFIG.TREE_DENSITY_THRESHOLD) /
@@ -148,6 +153,9 @@ export class Chunk {
 
           // Above treeline: no ferns/grass
           if (y > CONFIG.TREELINE_START + 2) continue;
+
+          // Cottage clearing: suppress vegetation near cottages
+          if (this._isNearAnyCottage(jx, jz)) continue;
 
           // Type: 0=grass, 2=fern
           // Skip grass on dirt areas (high tree density)
@@ -214,7 +222,11 @@ export class Chunk {
         const wz = worldOffZ + lz;
         const density = getVegDensity(wx + 200, wz + 200);
 
-        if (density > CONFIG.FLOWER_DENSITY_THRESHOLD) {
+        // Lower threshold near cottages for garden effect
+        const nearCottage = this._isNearAnyCottage(wx, wz);
+        const threshold = nearCottage ? -0.5 : CONFIG.FLOWER_DENSITY_THRESHOLD;
+
+        if (density > threshold) {
           const jitter = getJitter(wx + 150, wz + 150);
           const jx = wx + jitter.x * 0.8;
           const jz = wz + jitter.z * 0.8;
@@ -224,16 +236,21 @@ export class Chunk {
 
           // Same color for whole cluster
           const colorIdx = Math.abs(Math.floor((jx * 7.7 + jz * 3.3) * 100)) % numColors;
-          const scale = CONFIG.FLOWER_SCALE + density * 0.3;
+          const scale = nearCottage
+            ? CONFIG.FLOWER_SCALE + 0.3  // bigger garden flowers
+            : CONFIG.FLOWER_SCALE + density * 0.3;
 
           this.flowerPositions.push({ x: jx, y, z: jz, colorIdx, scale });
 
-          // Cluster: add 3-5 more flowers nearby in same color
-          const clusterCount = 3 + Math.floor(density * 4);
+          // Cluster: more flowers near cottages (garden beds), fewer elsewhere
+          const clusterCount = nearCottage
+            ? 5 + Math.floor(Math.abs(density) * 6)
+            : 3 + Math.floor(density * 4);
+          const spread = nearCottage ? 0.3 : 0.4;
           for (let c = 0; c < clusterCount; c++) {
             const cj = getJitter(wx + c * 41 + 200, wz + c * 67 + 200);
-            const cx = jx + cj.x * 0.4;
-            const cz = jz + cj.z * 0.4;
+            const cx = jx + cj.x * spread;
+            const cz = jz + cj.z * spread;
             const cy = getTerrainHeight(cx, cz);
             if (cy < CONFIG.SHORE_LEVEL) continue;
             const cs = scale * (0.6 + Math.abs(cj.x + cj.z) * 0.5);
@@ -357,6 +374,9 @@ export class Chunk {
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL) continue;
 
+          // No collectibles inside cottage clearings
+          if (this._isNearAnyCottage(jx, jz)) continue;
+
           this.collectiblePositions.push({ x: jx, y: y + 0.8, z: jz });
         }
       }
@@ -425,6 +445,68 @@ export class Chunk {
     }
   }
 
+  _generateCottages(chunkX, chunkZ) {
+    this.cottagePositions.length = 0;
+    const spacing = CONFIG.COTTAGE_GRID_SPACING;
+    const size = CONFIG.CHUNK_SIZE;
+    const worldOffX = chunkX * size;
+    const worldOffZ = chunkZ * size;
+
+    for (let lz = spacing * 0.5; lz < size; lz += spacing) {
+      for (let lx = spacing * 0.5; lx < size; lx += spacing) {
+        const wx = worldOffX + lx;
+        const wz = worldOffZ + lz;
+        const density = getCottageDensity(wx, wz);
+
+        if (density > CONFIG.COTTAGE_DENSITY_THRESHOLD) {
+          const jitter = getJitter(wx + 700, wz + 700);
+          const jx = wx + jitter.x * 3.0;
+          const jz = wz + jitter.z * 3.0;
+          const y = getTerrainHeight(jx, jz);
+
+          // Must be in forest zone: above shore, below treeline
+          if (y < CONFIG.SHORE_LEVEL + 1) continue;
+          if (y > CONFIG.SUBALPINE_START) continue;
+          if (y < CONFIG.WATER_LEVEL + 0.5) continue;
+          if (getTreeDensity(jx, jz) < CONFIG.COTTAGE_MIN_TREE_DENSITY) continue;
+
+          // Check slope across footprint — reject if any point too steep
+          const slopeMax = CONFIG.COTTAGE_MAX_SLOPE;
+          const checkR = 2.5; // meters from center to check
+          let tooSteep = false;
+          let minY = y, maxY = y;
+          for (let dz = -checkR; dz <= checkR; dz += checkR) {
+            for (let dx = -checkR; dx <= checkR; dx += checkR) {
+              if (getTerrainSlope(jx + dx, jz + dz) > slopeMax) { tooSteep = true; break; }
+              const hh = getTerrainHeight(jx + dx, jz + dz);
+              if (hh < minY) minY = hh;
+              if (hh > maxY) maxY = hh;
+            }
+            if (tooSteep) break;
+          }
+          if (tooSteep) continue;
+          if (maxY - minY > 0.6) continue; // reject if >60cm height variation
+
+          // Sink into slope: use lowest footprint point so cottage doesn't float
+          const cottageY = minY;
+          const seed = Math.abs(Math.floor(jx * 127.1 + jz * 311.7));
+          this.cottagePositions.push({ x: jx, y: cottageY, z: jz, seed, chimneyWorld: null });
+        }
+      }
+    }
+  }
+
+  _isNearAnyCottage(worldX, worldZ) {
+    const r = CONFIG.COTTAGE_CLEARING_RADIUS;
+    const r2 = r * r;
+    for (const cp of this.cottagePositions) {
+      const dx = worldX - cp.x;
+      const dz = worldZ - cp.z;
+      if (dx * dx + dz * dz < r2) return true;
+    }
+    return false;
+  }
+
   deactivate() {
     this.active = false;
     if (this.mesh) this.mesh.visible = false;
@@ -434,6 +516,7 @@ export class Chunk {
     this.rockPositions.length = 0;
     this.collectiblePositions.length = 0;
     this.logPositions.length = 0;
+    this.cottagePositions.length = 0;
     this.foamSegments.length = 0;
   }
 
@@ -448,6 +531,7 @@ export class Chunk {
     this.rockPositions.length = 0;
     this.collectiblePositions.length = 0;
     this.logPositions.length = 0;
+    this.cottagePositions.length = 0;
     this.foamSegments.length = 0;
     this.active = false;
   }

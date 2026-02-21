@@ -16,6 +16,7 @@ import { updateWind, windUniforms } from './atmosphere/wind.js';
 import { WeatherSystem } from './atmosphere/weather.js';
 import { BirdFlockSystem } from './forest/birds.js';
 import { CollectibleSystem } from './forest/collectibles.js';
+import { CottageSystem } from './forest/cottage-system.js';
 import { getTerrainHeight } from './terrain/noise.js';
 import { updateGroundTime, getGroundMaterial } from './terrain/ground-material.js';
 
@@ -305,6 +306,9 @@ wildlife.audio = audio;
 // --- Birds ---
 const birds = new BirdFlockSystem(scene);
 
+// --- Cottages ---
+const cottages = new CottageSystem(scene);
+
 // --- Collectibles ---
 const collectibles = new CollectibleSystem(scene);
 movement.collectibles = collectibles;
@@ -315,6 +319,7 @@ chunkManager.onChunksChanged = () => {
   const px = vr.dolly.position.x, pz = vr.dolly.position.z;
   treePool.rebuild(chunkManager.getActiveChunks(), px, pz);
   vegPool.rebuild(chunkManager.getActiveChunks(), px, pz);
+  cottages.rebuild(chunkManager.getActiveChunks());
   collectibles.rebuild(chunkManager.getActiveChunks());
 };
 
@@ -601,7 +606,7 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
   }
 
   // Uncollected orbs as teal dots
-  const chunks = chunkManager.getActiveChunks();
+  const chunks = [...chunkManager.getActiveChunks()];
   for (const chunk of chunks) {
     if (!chunk.active) continue;
     for (const cp of chunk.collectiblePositions) {
@@ -618,6 +623,33 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
       ctx.beginPath();
       ctx.arc(px, py, 2.5, 0, Math.PI * 2);
       ctx.fill();
+    }
+  }
+
+  // Cottages as warm orange house markers
+  for (const chunk of chunks) {
+    if (!chunk.active || !chunk.cottagePositions) continue;
+    for (const cp of chunk.cottagePositions) {
+      const dx = cp.x - playerPos.x;
+      const dz = cp.z - playerPos.z;
+      if (dx * dx + dz * dz > radius * radius) continue;
+      const sx = -dx * fz + dz * fx;
+      const sy = -(dx * fx + dz * fz);
+      const px = half + sx * scale;
+      const py = half + sy * scale;
+      // House icon: larger filled square with triangle roof + outline
+      ctx.fillStyle = '#ffaa44';
+      ctx.strokeStyle = '#cc6600';
+      ctx.lineWidth = 1;
+      ctx.fillRect(px - 4, py - 1.5, 8, 6);
+      ctx.strokeRect(px - 4, py - 1.5, 8, 6);
+      ctx.beginPath();
+      ctx.moveTo(px, py - 6);
+      ctx.lineTo(px - 5.5, py - 1.5);
+      ctx.lineTo(px + 5.5, py - 1.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     }
   }
 
@@ -827,6 +859,9 @@ function onFrame() {
   );
   // Weather rain audio (uses shared audio context + noise buffer + spatial bus for 3D drips)
   weather.updateAudio(audio.ctx, audio.masterGain, audio._noiseBuffer, audio.spatialBus, pos, delta);
+
+  // Cottage smoke + window glow
+  cottages.update(delta, dayNight.sunElevation);
 
   // Collectibles
   collectibles.update(delta, pos, audio);

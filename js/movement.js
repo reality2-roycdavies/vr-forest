@@ -302,6 +302,19 @@ export class MovementSystem {
             return true;
           }
         }
+
+        // Cottage collision
+        if (chunk.cottagePositions) {
+          const cottageR = CONFIG.COTTAGE_COLLISION_RADIUS + playerR;
+          const cottageSq = cottageR * cottageR;
+          for (const cp of chunk.cottagePositions) {
+            const ddx = px - cp.x;
+            const ddz = pz - cp.z;
+            if (ddx * ddx + ddz * ddz < cottageSq) {
+              return true;
+            }
+          }
+        }
       }
     }
     return false;

@@ -51,6 +51,9 @@ const mountainDetailNoise2D = createNoise2D(rng12);
 const rng13 = mulberry32(CONFIG.TERRAIN_SEED + 12);
 const logNoise2D = createNoise2D(rng13);
 
+const rng14 = mulberry32(CONFIG.TERRAIN_SEED + 13);
+const cottageNoise2D = createNoise2D(rng14);
+
 /**
  * Multi-octave fractal noise
  */
@@ -210,4 +213,25 @@ export function getCollectibleDensity(worldX, worldZ) {
  */
 export function getLogDensity(worldX, worldZ) {
   return logNoise2D(worldX * 0.04, worldZ * 0.04);
+}
+
+/**
+ * Cottage placement noise — low frequency for sparse placement
+ */
+export function getCottageDensity(worldX, worldZ) {
+  return cottageNoise2D(worldX * 0.02, worldZ * 0.02);
+}
+
+/**
+ * Terrain slope at world coordinates (rise/run from finite differences)
+ */
+export function getTerrainSlope(worldX, worldZ) {
+  const eps = 0.5;
+  const hL = getTerrainHeight(worldX - eps, worldZ);
+  const hR = getTerrainHeight(worldX + eps, worldZ);
+  const hD = getTerrainHeight(worldX, worldZ - eps);
+  const hU = getTerrainHeight(worldX, worldZ + eps);
+  const dx = (hR - hL) / (2 * eps);
+  const dz = (hU - hD) / (2 * eps);
+  return Math.sqrt(dx * dx + dz * dz);
 }

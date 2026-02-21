@@ -150,7 +150,7 @@ export const CONFIG = {
   ROCK_COLOR: 0x888888,
   FERN_COLOR: 0x4a8040,
   FLOWER_COLORS: [0xff4da6, 0xffe040, 0x8b6cf7, 0xff80b0, 0xffee55, 0xff6060],
-  FLOWER_DENSITY_THRESHOLD: 0.45,
+  FLOWER_DENSITY_THRESHOLD: 0.55,
   FLOWER_GRID_SPACING: 2.0,
   FLOWER_SCALE: 0.55,
 
@@ -232,4 +232,21 @@ export const CONFIG = {
   // Ground wetness
   WETNESS_WET_RATE: 0.0083,            // per second (~2 min to fully wet)
   WETNESS_DRY_RATE: 0.0042,            // per second (~4 min to fully dry)
+
+  // Cottages
+  COTTAGE_GRID_SPACING: 16,            // meters between potential cottage positions
+  COTTAGE_DENSITY_THRESHOLD: 0.45,     // noise > this = cottage (uncommon)
+  COTTAGE_CLEARING_RADIUS: 10,         // meters — no trees/veg within this radius
+  COTTAGE_MIN_TREE_DENSITY: 0.0,       // in or near forested area (relaxed)
+  COTTAGE_MAX_SLOPE: 0.3,              // max terrain slope (moderate — allows gentle hills)
+  COTTAGE_COLLISION_RADIUS: 2.0,       // player collision radius
+
+  // Cottage smoke particles
+  SMOKE_PARTICLES_PER_COTTAGE: 20,
+  SMOKE_LIFETIME: 7.0,                 // seconds (longer to reach above trees)
+  SMOKE_RISE_SPEED: 2.2,               // m/s upward (~12m rise over lifetime)
+  SMOKE_DRIFT_SPEED: 0.5,              // m/s wind drift
+  SMOKE_START_SIZE: 0.4,               // meters (visible at chimney)
+  SMOKE_END_SIZE: 3.5,                 // meters (big diffuse puff above trees)
+  SMOKE_COLOR: { r: 0.55, g: 0.55, b: 0.58 },  // subtle grey wisps
 };

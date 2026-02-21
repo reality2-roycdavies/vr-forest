@@ -226,14 +226,17 @@ export class DayNightSystem {
           float illumination = smoothstep(-0.05, 0.10, dot(normal, sunDir));
           // Sample texture
           vec4 texColor = texture2D(moonMap, uv);
-          // Mix lit surface with dark earthshine
-          vec3 earthshine = vec3(0.04, 0.04, 0.06);
+          // Mix lit surface with dark earthshine (fades out during day)
+          vec3 earthshine = vec3(0.04, 0.04, 0.06) * (1.0 - skyBrightness);
           vec3 color = mix(earthshine, texColor.rgb, illumination);
-          // Shadow side fades to transparent against bright sky
-          float shadowAlpha = 1.0 - skyBrightness * 0.95;
+          // During day: wash lit side pale/bright to match sky luminance
+          color = mix(color, vec3(0.85, 0.87, 0.92), skyBrightness * 0.6);
+          // Shadow side fades to fully transparent against bright sky
+          float shadowAlpha = 1.0 - skyBrightness;
           float pixelAlpha = mix(shadowAlpha, 1.0, illumination);
-          // Soft disc edge
-          float edge = smoothstep(1.0, 0.9, dist2);
+          // Soft disc edge (softer during day to avoid hard rim)
+          float edgeSoftness = mix(0.9, 0.7, skyBrightness);
+          float edge = smoothstep(1.0, edgeSoftness, dist2);
           gl_FragColor = vec4(color, edge * opacity * pixelAlpha);
         }
       `,
@@ -999,14 +1002,15 @@ export class DayNightSystem {
     );
     this.moonMesh.position.copy(playerPos).add(_moonPos);
     this.moonMesh.lookAt(playerPos);
-    // Visible when above horizon AND sun is low
+    // Visible whenever above horizon (daytime moon is real!)
     const moonAboveHorizon = moon.altitude > 0.05;
-    const sunLowEnough = elevation < 0.15;
-    this.moonMesh.visible = moonAboveHorizon && sunLowEnough;
-    // Fade with horizon proximity and twilight
+    this.moonMesh.visible = moonAboveHorizon;
+    // Fade with horizon proximity; during day/twilight, fade to a pale ghost
     const horizonFade = Math.min(1, (moon.altitude - 0.05) / 0.1);
-    const twilightFade = Math.min(1, (0.15 - elevation) / 0.2);
-    let moonOpacity = Math.max(0, horizonFade * twilightFade);
+    // Start washing out at early twilight (-0.10), fully pale by 0.15
+    const skyB = Math.max(0, Math.min(1, (elevation + 0.10) / 0.25));
+    const dayFade = 1 - skyB * 0.82; // night=1.0, bright day=0.18
+    let moonOpacity = Math.max(0, horizonFade * dayFade);
     if (weather && weather.cloudDensity > 0.01) {
       // Behind clouds: hide detailed moon, show hazy glow sprite instead
       this.moonMesh.visible = false;
@@ -1022,7 +1026,7 @@ export class DayNightSystem {
         this._moonGlow.renderOrder = -1;
         this.scene.add(this._moonGlow);
       }
-      this._moonGlow.visible = moonAboveHorizon && sunLowEnough;
+      this._moonGlow.visible = moonAboveHorizon;
       this._moonGlow.position.copy(playerPos).add(_moonPos);
       // Fade aggressively — just a hazy hint
       const glowOpacity = moonOpacity * (1 - weather.cloudDarkness * 0.92) * 0.5;
@@ -1039,8 +1043,8 @@ export class DayNightSystem {
     }
     this.moonMat.uniforms.opacity.value = moonOpacity;
     this.moonMat.uniforms.phase.value = moon.phase;
-    // Sky brightness: shadow side goes transparent against bright sky
-    this.moonMat.uniforms.skyBrightness.value = Math.max(0, Math.min(1, (elevation + 0.05) / 0.15));
+    // Sky brightness: ramps from early twilight so moon washes out during dawn/dusk
+    this.moonMat.uniforms.skyBrightness.value = Math.max(0, Math.min(1, (elevation + 0.10) / 0.25));
     // Compute sun direction on the moon disc (lit side faces scene sun).
     // Project onto moon mesh's own local axes (not camera), so the
     // phase shadow stays fixed regardless of camera rotation.
