@@ -3,7 +3,7 @@
 **Version:** 1.0  
 **Date:** 20 February 2026  
 **Status:** Active  
-**Purpose:** Three tree types with exact geometry, tree placement algorithm, vegetation (grass/ferns/flowers/rocks/logs/stumps), and wind animation.  
+**Purpose:** Three tree types with exact geometry, tree placement algorithm, vegetation (grass/ferns/flowers/rocks/logs/stumps), ramshackle log cabins with smoke and garden ground effects, and wind animation.  
 **Dependencies:** VF-CONFIG, VF-TERRAIN, VF-WEATHER  
 
 ---
@@ -130,7 +130,61 @@ Trees MUST be planted 0.15m below terrain height so trunks emerge naturally with
   - Top face has lighter "cut wood" colour (0x8b6b4a)
 - **Placement**: 8m grid, density threshold 0.55, only near trees (tree density > 0), below treeline
 
-## 4. Wind Animation
+## 4. Ramshackle Log Cabins
+
+Rare cottages appear in forest clearings. Each is a unique procedural log cabin built from merged `BufferGeometry` with vertex colours.
+
+### 4.1 Cottage Geometry (cottage-factory.js)
+
+Each cottage is generated from a seed-based hash for variation:
+
+- **Dimensions**: Width X 2.5–5.0m, Width Z 2.0–4.0m, log radius 0.10–0.16m
+- **Walls**: Stacked horizontal cylinder logs (10–14 per wall, spacing = logDiameter × 0.76). Logs are split around door and window openings via `splitLog()`. Corner notch cylinders cap each corner. Heavy vertex jitter (0.06m) for warped timber look.
+- **Door**: Opening on front wall (Z-facing), dark threshold plank at base
+- **Windows**: Glass panes (0.28m × 0.20m) with amber tint on 3 walls (both Z-sides + back X-wall). Timber frame pieces (0.012m thick) around each pane. Window inset scales with log radius.
+- **Roof**: Two tilted planes from eaves to ridge with extra jitter (0.1m) for visible sag. Panels extend past ridge by `roofThick` for overlap (no gap). Ridge beam log runs along the top seam.
+- **Gable triangles**: Stacked logs filling the triangular wall sections above the wall top, with progressively shorter logs toward the peak
+- **Chimney**: Slightly leaning box (~5° tilt), stone-grey vertex colours, positioned near one end of the ridge
+- **Material**: `MeshLambertMaterial` with `vertexColors`, reuses bark texture from tree-factory
+
+### 4.2 Placement (chunk.js)
+
+Cottages are generated BEFORE trees so clearing suppression works:
+
+```
+for each grid cell at spacing COTTAGE_GRID_SPACING (16m):
+    density = cottageDensityNoise(worldX × 0.025, worldZ × 0.025)
+    if density > COTTAGE_DENSITY_THRESHOLD (0.45):
+        check terrain height: skip if below SHORE_LEVEL or above TREELINE_START
+        check slope: sample 8 points in radius 2.5m, reject if ANY too steep (> 0.3)
+        check height variation: reject if footprint > 0.6m variation
+        check tree density: skip if too sparse (< COTTAGE_MIN_TREE_DENSITY)
+
+        Y position = minimum height across footprint (sinks into slopes)
+
+        push cottage at (finalX, minY, finalZ, seed, rotation)
+```
+
+- **Clearing suppression**: Trees, vegetation, flowers, rocks, logs, and collectibles within `COTTAGE_CLEARING_RADIUS` (10m) are excluded
+- **Minimap markers**: Orange house icons with roof shape
+
+### 4.3 Cottage System (cottage-system.js)
+
+- **Rendering pool**: Up to 50 cottages visible at once. Geometry cached by seed for reuse.
+- **Smoke particles**: `THREE.Sprite` per particle (~20 per cottage). Rise from chimney top, drift with wind, fade via opacity. Subtle grey wisps. Storm-reactive (suppressed in heavy rain).
+- **Emissive windows**: Separate `MeshBasicMaterial` meshes with amber colour. `emissiveIntensity` tracks inverse sun elevation — windows glow at night, dim during day.
+- **Integration**: `cottageSystem.rebuild()` called in `onChunksChanged`; `cottageSystem.update(delta)` each frame for smoke animation.
+
+### 4.4 Garden Ground Effect (ground-material.js)
+
+A `cottageDensity` vertex attribute is computed per chunk vertex based on proximity to nearby cottages (quadratic falloff within clearing radius). The ground fragment shader blends:
+
+- Warm earthy garden colour (`COTTAGE_GARDEN_COLOR`) near cottage centres
+- Per-pixel value noise for organic blending edges
+- Patch variation for garden beds vs paths
+- Tree dirt suppressed inside garden area
+
+## 5. Wind Animation
 
 All plant materials MUST have vertex shader wind displacement injected via `onBeforeCompile`. Three profiles:
 

@@ -30,6 +30,7 @@ graph TB
     Chunks --> TerrainGen[Terrain Generator]
     Chunks --> TreePlacement[Tree Placement]
     Chunks --> VegPlacement[Vegetation Placement]
+    Chunks --> CottagePlacement[Cottage Placement]
     Chunks --> FoamGen[Foam Contour]
     
     TerrainGen --> Noise[Noise System<br/>13 instances]
@@ -38,6 +39,7 @@ graph TB
 
     ChunkMgr -->|onChunksChanged| TreePool[Tree Pool<br/>InstancedMesh × 6]
     ChunkMgr -->|onChunksChanged| VegPool[Vegetation Pool<br/>InstancedMesh × many]
+    ChunkMgr -->|onChunksChanged| CottageSystem[Cottage System<br/>Pool + Smoke]
     ChunkMgr -->|onChunksChanged| Collectibles
 
     Weather -->|drives| DayNight
@@ -58,7 +60,7 @@ graph TB
 
 | Module | Role | Key Exports |
 |--------|------|-------------|
-| `config.js` | All tunable constants (~170 parameters) | `CONFIG` object |
+| `config.js` | All tunable constants (~190 parameters) | `CONFIG` object |
 | `vr-setup.js` | WebXR renderer, camera rig, controllers | `VRSetup` class |
 | `input.js` | VR gamepad + keyboard/mouse input abstraction | `InputManager` class |
 | `movement.js` | Player locomotion, physics, collision | `MovementSystem` class |
@@ -71,6 +73,8 @@ graph TB
 | `forest/tree-pool.js` | InstancedMesh tree rendering | `TreePool` class |
 | `forest/vegetation.js` | Grass, ferns, flowers, rocks, logs, foam | `VegetationPool` class |
 | `forest/textures.js` | Procedural canvas textures | Texture creators |
+| `forest/cottage-factory.js` | Procedural log cabin geometry + materials | `createCottageGeometry()`, material getters |
+| `forest/cottage-system.js` | Cottage pool, smoke particles, emissive windows | `CottageSystem` class |
 | `forest/birds.js` | Bird flock visual + crow audio | `BirdFlockSystem` class |
 | `forest/wildlife.js` | Bear, lion, Wally peek encounters | `WildlifeSystem` class |
 | `forest/collectibles.js` | Fairy orbs with collection mechanics | `CollectibleSystem` class |
@@ -147,6 +151,7 @@ sequenceDiagram
         Pool-->>Chunk: chunk object
         ChunkMgr->>TerrainGen: generateTerrainData(chunkX, chunkZ)
         TerrainGen-->>Chunk: positions, normals, UVs, treeDensity
+        Chunk->>Chunk: place cottages (before trees for clearing suppression)
         Chunk->>Chunk: place trees, vegetation, collectibles
         Chunk->>Chunk: generate foam contour
     end
@@ -277,14 +282,18 @@ The order of operations within each frame matters. Dependencies between systems 
     - Wind modulation
     - Ski slide sound
 
-11. Collectible animation
+11. Cottage system
+    - Smoke particle animation (rise, drift, fade, respawn)
+    - Window emissive intensity update (tracks sun elevation)
+
+12. Collectible animation
     - Update orb positions (bob, drift)
     - Check collection (distance to player)
 
-12. Minimap
+13. Minimap
     - Every 10th frame: render minimap canvas
 
-13. GPU render
+14. GPU render
     - Submit draw calls
 ```
 

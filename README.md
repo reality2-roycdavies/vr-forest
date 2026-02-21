@@ -138,13 +138,23 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Power/score HUD for desktop and VR
 - Sprint mechanic (shift/grip) drains power over time
 
+### Ramshackle Log Cabins
+- Rare cottages in forest clearings with procedural stacked-log walls, sagging roofs, and leaning chimneys
+- Each cottage unique via seed-based variation (dimensions, log size, lean, window placement)
+- Walls split around door and window openings with carved glass panes and timber frames
+- Emissive amber windows that glow at night (intensity tracks sun elevation)
+- Chimney smoke particles that rise, drift with wind, and respond to storms
+- Warm earthy garden ground effect around cottages (custom shader blending with noisy edges)
+- Clearing suppression: trees, vegetation, and collectibles excluded within cottage radius
+- Placement rules: forested areas only, below treeline, moderate slope, sunk into hillsides
+
 ### Fallen Logs and Stumps
 - Procedural fallen logs with bark texture, angled placement on terrain slopes
 - Tree stumps with concentric ring cross-sections
 - Noise-driven placement with configurable density and spacing
 
 ### Minimap
-- Rotating overhead minimap showing terrain, water, trees, and player
+- Rotating overhead minimap showing terrain, water, trees, cottages, and player
 - Compass North indicator aligned with astronomical coordinate system (+X = North)
 - Stable rendering regardless of camera pitch (XZ-normalised direction)
 - Adapts for both desktop (corner overlay) and VR (wrist-mounted)
@@ -235,14 +245,14 @@ Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS 
 - **Rendering**: WebGL 2 with WebXR
 - **Textures**: All procedurally generated on HTML5 Canvas (moon photo loaded externally with procedural fallback)
 - **Geometry**: All built from Three.js primitives (no 3D models)
-- **Lines of code**: ~12,100 lines of JavaScript across 26 modules
+- **Lines of code**: ~13,500 lines of JavaScript across 28 modules
 
 ## Project Structure
 
 ```
 js/
 ├── main.js              # Scene bootstrap, render loop, system orchestration
-├── config.js            # All tunable constants (~170 parameters)
+├── config.js            # All tunable constants (~190 parameters)
 ├── vr-setup.js          # WebXR renderer, camera rig, controllers
 ├── input.js             # VR gamepad + keyboard/mouse input
 ├── movement.js          # Player locomotion, physics, collision
@@ -257,6 +267,8 @@ js/
 │   ├── tree-pool.js     # InstancedMesh tree rendering
 │   ├── vegetation.js    # Grass, ferns (3 variants), flowers (3×6), rocks
 │   ├── textures.js      # Procedural canvas textures (bark, leaves, rock)
+│   ├── cottage-factory.js # Procedural log cabin geometry + materials
+│   ├── cottage-system.js  # Cottage pool, smoke particles, emissive windows
 │   ├── birds.js         # Bird flock visual + crow audio
 │   └── wildlife.js      # Bear, lion, Wally peek encounters
 └── atmosphere/

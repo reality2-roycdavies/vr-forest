@@ -240,6 +240,7 @@ export const CONFIG = {
   COTTAGE_MIN_TREE_DENSITY: 0.0,       // in or near forested area (relaxed)
   COTTAGE_MAX_SLOPE: 0.3,              // max terrain slope (moderate — allows gentle hills)
   COTTAGE_COLLISION_RADIUS: 2.0,       // player collision radius
+  COTTAGE_GARDEN_COLOR: { r: 0.38, g: 0.30, b: 0.16 },  // warm earthy garden soil
 
   // Cottage smoke particles
   SMOKE_PARTICLES_PER_COTTAGE: 20,

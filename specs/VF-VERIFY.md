@@ -47,6 +47,22 @@
 - [ ] Wind animation: gentle sway in sunny, moderate in cloudy, strong in rainy
 - [ ] Trees thin and shrink near treeline, disappear above it
 
+### 3.1 Cottages
+
+- [ ] Rare log cabins appear in forest clearings (roughly 1 per 3–4 chunks)
+- [ ] Each cottage has unique dimensions, log size, and lean
+- [ ] Walls are stacked horizontal logs with visible door and window openings
+- [ ] Roof has visible sag/droop, no gaps at the ridge
+- [ ] Chimney leans slightly, smoke rises and drifts with wind
+- [ ] No trees or vegetation within clearing radius (~10m)
+- [ ] No collectible orbs within clearing radius
+- [ ] No cottages on water, steep slopes, or above treeline
+- [ ] Cottage sinks into hillside (Y follows lowest footprint point)
+- [ ] Windows glow amber at night, dim during day
+- [ ] Warm earthy garden ground surrounds cottage (visible colour blend)
+- [ ] Player collides with cottage (cannot walk through)
+- [ ] Cottage appears as orange house icon on minimap
+
 ---
 
 ## 4. Birds & Wildlife

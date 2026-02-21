@@ -69,14 +69,15 @@ export function getGroundMaterial() {
       shader.uniforms.treelineStart = { value: CONFIG.TREELINE_START };
       shader.uniforms.alpineStart = { value: CONFIG.ALPINE_START };
       shader.uniforms.snowlineStart = { value: CONFIG.SNOWLINE_START };
+      shader.uniforms.gardenColor = { value: new THREE.Color(CONFIG.COTTAGE_GARDEN_COLOR.r, CONFIG.COTTAGE_GARDEN_COLOR.g, CONFIG.COTTAGE_GARDEN_COLOR.b) };
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute float treeDensity;\nvarying float vTreeDensity;'
+        '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute float treeDensity;\nvarying float vTreeDensity;\nattribute float cottageDensity;\nvarying float vCottageDensity;'
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;\nvWorldNormal = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);'
+        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;\nvCottageDensity = cottageDensity;\nvWorldNormal = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);'
       );
 
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -107,9 +108,11 @@ export function getGroundMaterial() {
          uniform float treelineStart;
          uniform float alpineStart;
          uniform float snowlineStart;
+         uniform vec3 gardenColor;
          varying vec3 vWorldPos;
          varying vec3 vWorldNormal;
          varying float vTreeDensity;
+         varying float vCottageDensity;
 
          // Per-pixel value noise for dirt patches (no triangle artifacts)
          float _hash(vec2 p) {
@@ -201,6 +204,21 @@ export function getGroundMaterial() {
            terrainColor = mix(terrainColor, dColor, dirtFactor);
          }
 
+         // Garden ground near cottages — warm earthy tones with noisy edges
+         if (vCottageDensity > 0.01) {
+           float gardenNoise = _vnoise(vWorldPos.xz * 0.3) * 0.25 + _vnoise(vWorldPos.xz * 0.8 + 70.0) * 0.15
+                             + _vnoise(vWorldPos.xz * 2.0 + 130.0) * 0.08;
+           float gardenFactor = smoothstep(0.01, 0.35, vCottageDensity + gardenNoise);
+           // Richer green near edges, warm soil near center
+           vec3 gardenGreen = mix(grassColor, gardenColor, smoothstep(0.3, 0.8, vCottageDensity));
+           // Per-pixel patch variation: garden beds vs paths
+           float patchNoise = _vnoise(vWorldPos.xz * 1.5 + 40.0);
+           vec3 gardenBlend = mix(gardenGreen, gardenColor * 1.15, patchNoise * 0.4);
+           terrainColor = mix(terrainColor, gardenBlend, gardenFactor * grassBlend);
+           // Suppress tree dirt inside garden (cottage clearing has no trees)
+           dirtFactor *= (1.0 - gardenFactor);
+         }
+
          // Subalpine: darker green (wide transition)
          float subalpineBlend = smoothstep(subalpineH - 3.0, subalpineH + 4.0, h);
          terrainColor = mix(terrainColor, subalpineColor, subalpineBlend * grassBlend);
@@ -273,6 +291,11 @@ export function getGroundMaterial() {
            // Select detail based on terrain type
            vec3 detail = mix(sandTexDetail * 2.5, grassTexDetail, grassBlend);
            detail = mix(detail, dirtTexDetail, dirtFactor);
+           // Garden area: blend toward dirt texture (cottage clearings are bare soil)
+           if (vCottageDensity > 0.01) {
+             float gfFactor = smoothstep(0.05, 0.35, vCottageDensity);
+             detail = mix(detail, dirtTexDetail, gfFactor);
+           }
 
            // Apply as strong additive detail — suppress near waterline and fade at altitude
            float detailSuppress = smoothstep(dynWater - 0.2, dynWater + 0.5, h);

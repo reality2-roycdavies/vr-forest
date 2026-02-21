@@ -55,7 +55,49 @@ export class CollectibleSystem {
     this.glowMesh.count = 0;
     scene.add(this.glowMesh);
 
+    // Ground glow — soft radial gradient beneath each orb, visible at night
+    const groundGlowGeom = new THREE.PlaneGeometry(2.4, 2.4);
+    groundGlowGeom.rotateX(-Math.PI / 2); // lay flat on ground
+    const groundGlowMat = new THREE.MeshBasicMaterial({
+      map: this._createGlowTexture(),
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -4,
+    });
+    this.groundGlowMesh = new THREE.InstancedMesh(groundGlowGeom, groundGlowMat, MAX);
+    this.groundGlowMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3);
+    this.groundGlowMesh.frustumCulled = false;
+    this.groundGlowMesh.count = 0;
+    scene.add(this.groundGlowMesh);
+
     this._time = 0;
+    this._groundGlowOpacity = 0;
+  }
+
+  /**
+   * Create a soft radial gradient texture for ground glow.
+   */
+  _createGlowTexture() {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const cx = size / 2, cy = size / 2;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cx);
+    grad.addColorStop(0, 'rgba(255,255,255,1.0)');
+    grad.addColorStop(0.3, 'rgba(255,255,255,0.5)');
+    grad.addColorStop(0.7, 'rgba(255,255,255,0.1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    return tex;
   }
 
   /**
@@ -107,10 +149,14 @@ export class CollectibleSystem {
       // Glow is a slightly darker/saturated version
       _color.copy(coreColor).multiplyScalar(0.7);
       this.glowMesh.setColorAt(i, _color);
+      // Ground glow — dimmer version of orb color
+      _color.copy(coreColor).multiplyScalar(0.4);
+      this.groundGlowMesh.setColorAt(i, _color);
     }
     if (this._count > 0) {
       this.coreMesh.instanceColor.needsUpdate = true;
       this.glowMesh.instanceColor.needsUpdate = true;
+      this.groundGlowMesh.instanceColor.needsUpdate = true;
     }
   }
 
@@ -159,21 +205,48 @@ export class CollectibleSystem {
       this.glowMesh.setMatrixAt(i, _glowDummy.matrix);
     }
 
+    // Ground glow — soft pool of light on terrain beneath each orb
+    if (this.groundGlowMesh.visible) {
+      for (let i = 0; i < this._count; i++) {
+        const p = this._positions[i];
+        // Orb base Y is terrainY + 0.8; position glow at terrain + 0.06 (above ground)
+        _dummy.position.set(p.x, p.y - 0.74, p.z);
+        _dummy.rotation.set(0, 0, 0);
+        // Gentle scale pulse synced to orb bob
+        const p2 = p.x * 0.53 + p.z * 0.29;
+        const pulse = 0.9 + Math.sin(t * 2.0 + p2) * 0.1;
+        _dummy.scale.setScalar(pulse);
+        _dummy.updateMatrix();
+        this.groundGlowMesh.setMatrixAt(i, _dummy.matrix);
+      }
+    }
+
     this.coreMesh.count = this._count;
     this.glowMesh.count = this._count;
+    this.groundGlowMesh.count = this._count;
     if (this._count > 0) {
       this.coreMesh.instanceMatrix.needsUpdate = true;
       this.glowMesh.instanceMatrix.needsUpdate = true;
+      this.groundGlowMesh.instanceMatrix.needsUpdate = true;
     }
   }
 
   /**
    * Per-frame update: animate, check collection
    */
-  update(delta, playerPos, audio) {
+  update(delta, playerPos, audio, sunElevation = 0.5) {
     if (this._count === 0) return;
 
     this._time += delta;
+
+    // Ground glow fades in at dusk, full at night
+    // sunElevation: ~0.05 = near horizon, negative = below horizon
+    const targetOpacity = sunElevation < -0.05 ? 0.22
+                        : sunElevation < 0.08 ? 0.22 * (1 - (sunElevation + 0.05) / 0.13)
+                        : 0;
+    this._groundGlowOpacity += (targetOpacity - this._groundGlowOpacity) * Math.min(1, delta * 2);
+    this.groundGlowMesh.material.opacity = this._groundGlowOpacity;
+    this.groundGlowMesh.visible = this._groundGlowOpacity > 0.005;
 
     // Check collection (XZ distance only)
     const collectRadSq = CONFIG.COLLECTIBLE_COLLISION_RADIUS * CONFIG.COLLECTIBLE_COLLISION_RADIUS;

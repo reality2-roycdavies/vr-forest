@@ -84,7 +84,7 @@ Imagine putting on a VR headset and finding yourself standing in a forest cleari
 
 **Sound is everywhere.** Footsteps change with the surface — soft thuds on grass, sharp taps on rock, squelching slosh in water, crunchy crunch in snow. Crickets chirp at dusk (4200–5400 Hz sine waves). Bird flocks circle overhead with harsh crow caws. At night, from somewhere distant in the trees, a morepork owl calls — New Zealand's native owl — and another answers from a different direction.
 
-**Small details.** Fairy-like collectible orbs glow and flutter in seven colours. Fallen logs and tree stumps litter the forest floor. Fireflies pulse at night. Occasionally, a bear, mountain lion, or Where's Wally peeks out from behind a tree, watches you for a few seconds, then hides again.
+**Small details.** Rare ramshackle log cabins appear in forest clearings — stacked-log walls, sagging roofs, leaning chimneys with wisps of smoke. Amber windows glow at night. The ground around them is warm earthy garden soil. Fairy-like collectible orbs glow and flutter in seven colours. Fallen logs and tree stumps litter the forest floor. Fireflies pulse at night. Occasionally, a bear, mountain lion, or Where's Wally peeks out from behind a tree, watches you for a few seconds, then hides again.
 
 **Everything is procedural.** No 3D models, no pre-made textures (except one moon photograph with a procedural fallback), no pre-recorded sounds (except one owl call). Every texture is painted on a canvas at startup. Every sound is synthesised from oscillators, noise, and filters. The entire project is ~450KB of code.
 

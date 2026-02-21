@@ -89,6 +89,14 @@ function collidesWithAnyTree(pos):
     return false
 ```
 
+### 5.1 Cottage Collision
+
+Cottage collision uses the same slide-along pattern as trees. Cottages are checked as cylinders with radius `COTTAGE_COLLISION_RADIUS` (2.0m) centred on the cottage position. The collision loop searches all cottage positions in the 3×3 chunk neighbourhood.
+
+### 5.2 Rock Collision
+
+Rocks have per-size collision radii: `ROCK_COLLISION_RADII = [0.15, 0.35, 0.7]` for small, medium, and large respectively.
+
 ## 6. Walk Bob
 
 Sinusoidal bob at WALK_BOB_SPEED (2.2 Hz) while walking, proportionally faster when sprinting. Amplitude = WALK_BOB_AMOUNT (0.025m).

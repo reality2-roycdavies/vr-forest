@@ -42,6 +42,7 @@ export class Chunk {
     this.mesh.visible = true;
 
     this._generateCottages(chunkX, chunkZ);
+    // cottageDensity updated later in onChunksChanged with all cottage positions
     this._generateTrees(chunkX, chunkZ);
     this._generateVegetation(chunkX, chunkZ);
     this._generateFlowers(chunkX, chunkZ);
@@ -57,6 +58,9 @@ export class Chunk {
     geometry.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
     geometry.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
     geometry.setAttribute('treeDensity', new THREE.BufferAttribute(data.treeDensityAttr, 1));
+    // cottageDensity filled after _generateCottages
+    const vertexCount = data.treeDensityAttr.length;
+    geometry.setAttribute('cottageDensity', new THREE.BufferAttribute(new Float32Array(vertexCount), 1));
     geometry.setIndex(new THREE.BufferAttribute(data.indices, 1));
 
     this.mesh = new THREE.Mesh(geometry, getGroundMaterial());
@@ -494,6 +498,70 @@ export class Chunk {
         }
       }
     }
+  }
+
+  /**
+   * Update cottageDensity vertex attribute using ALL cottage positions
+   * (from all active chunks, not just this chunk's own).
+   * Uses a wider blend radius than the clearing for smooth visual falloff.
+   */
+  updateCottageDensity(allCottagePositions) {
+    const geom = this.mesh.geometry;
+    const attr = geom.getAttribute('cottageDensity');
+    const arr = attr.array;
+    const size = CONFIG.CHUNK_SIZE;
+    const segments = CONFIG.CHUNK_SEGMENTS;
+    const verticesPerSide = segments + 1;
+    const step = size / segments;
+    const worldOffX = this.chunkX * size;
+    const worldOffZ = this.chunkZ * size;
+    // Visual blend extends 50% beyond clearing for gradual transition
+    const blendR = CONFIG.COTTAGE_CLEARING_RADIUS * 1.5;
+    const blendR2 = blendR * blendR;
+
+    // Quick reject: check if any cottage is close enough to affect this chunk
+    const chunkCx = worldOffX + size * 0.5;
+    const chunkCz = worldOffZ + size * 0.5;
+    const chunkHalfDiag = size * 0.71; // ~sqrt(2)/2
+    let anyNear = false;
+    for (const cp of allCottagePositions) {
+      const dx = chunkCx - cp.x;
+      const dz = chunkCz - cp.z;
+      if (dx * dx + dz * dz < (blendR + chunkHalfDiag) * (blendR + chunkHalfDiag)) {
+        anyNear = true;
+        break;
+      }
+    }
+
+    if (!anyNear) {
+      arr.fill(0);
+      attr.needsUpdate = true;
+      return;
+    }
+
+    for (let iz = 0; iz < verticesPerSide; iz++) {
+      for (let ix = 0; ix < verticesPerSide; ix++) {
+        const i = iz * verticesPerSide + ix;
+        const wx = worldOffX + ix * step;
+        const wz = worldOffZ + iz * step;
+
+        let maxDens = 0;
+        for (const cp of allCottagePositions) {
+          const dx = wx - cp.x;
+          const dz = wz - cp.z;
+          const dist2 = dx * dx + dz * dz;
+          if (dist2 < blendR2) {
+            const t = 1 - Math.sqrt(dist2) / blendR;
+            // Smooth cubic hermite falloff (3t² - 2t³) — gentler at edge than quadratic
+            const dens = t * t * (3 - 2 * t);
+            if (dens > maxDens) maxDens = dens;
+          }
+        }
+        arr[i] = maxDens;
+      }
+    }
+
+    attr.needsUpdate = true;
   }
 
   _isNearAnyCottage(worldX, worldZ) {

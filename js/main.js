@@ -321,6 +321,17 @@ chunkManager.onChunksChanged = () => {
   vegPool.rebuild(chunkManager.getActiveChunks(), px, pz);
   cottages.rebuild(chunkManager.getActiveChunks());
   collectibles.rebuild(chunkManager.getActiveChunks());
+
+  // Update cottage ground density across all chunks (cross-chunk blending)
+  const allCottagePos = [];
+  for (const chunk of chunkManager.getActiveChunks()) {
+    if (chunk.active && chunk.cottagePositions) {
+      for (const cp of chunk.cottagePositions) allCottagePos.push(cp);
+    }
+  }
+  for (const chunk of chunkManager.getActiveChunks()) {
+    if (chunk.active) chunk.updateCottageDensity(allCottagePos);
+  }
 };
 
 // --- VR Session Events ---
@@ -864,7 +875,7 @@ function onFrame() {
   cottages.update(delta, dayNight.sunElevation);
 
   // Collectibles
-  collectibles.update(delta, pos, audio);
+  collectibles.update(delta, pos, audio, dayNight.sunElevation);
 
   // Minimap — throttled to every 10 frames
   _minimapFrame++;

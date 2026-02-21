@@ -3,7 +3,7 @@
 **Version:** 0.1 Draft  
 **Date:** 2026-02-20  
 **Status:** Draft  
-**Purpose:** Complete table of ALL tunable configuration parameters (~170), organised by system. Every magic number in the experience lives here.  
+**Purpose:** Complete table of ALL tunable configuration parameters (~190), organised by system. Every magic number in the experience lives here.  
 **Dependencies:** None (this spec is referenced by all others)  
 
 ---
@@ -105,7 +105,26 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `STUMP_HEIGHT_MIN` | 0.15 | Minimum stump height (m) |
 | `STUMP_HEIGHT_MAX` | 0.4 | Maximum stump height (m) |
 
-## 7. Movement
+## 7. Cottages
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `COTTAGE_GRID_SPACING` | 16 | Meters between potential cottage positions |
+| `COTTAGE_DENSITY_THRESHOLD` | 0.45 | Noise value above this = cottage placement |
+| `COTTAGE_CLEARING_RADIUS` | 10 | Meters — no trees/vegetation within this radius |
+| `COTTAGE_MIN_TREE_DENSITY` | 0.0 | Minimum tree density noise for placement |
+| `COTTAGE_MAX_SLOPE` | 0.3 | Maximum terrain slope (rejects if any sample point exceeds) |
+| `COTTAGE_COLLISION_RADIUS` | 2.0 | Player collision radius (m) |
+| `COTTAGE_GARDEN_COLOR` | (0.38, 0.30, 0.16) | Warm earthy garden soil colour |
+| `SMOKE_PARTICLES_PER_COTTAGE` | 20 | Smoke sprites per cottage |
+| `SMOKE_LIFETIME` | 7.0 | Particle lifetime (s) |
+| `SMOKE_RISE_SPEED` | 2.2 | Upward speed (m/s) |
+| `SMOKE_DRIFT_SPEED` | 0.5 | Wind drift speed (m/s) |
+| `SMOKE_START_SIZE` | 0.4 | Initial particle size (m) |
+| `SMOKE_END_SIZE` | 3.5 | Final particle size (m) |
+| `SMOKE_COLOR` | (0.55, 0.55, 0.58) | Subtle grey wisp colour |
+
+## 8. Movement
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -122,7 +141,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `WALK_BOB_AMOUNT` | 0.025 | Vertical bob amplitude (m) |
 | `ROCK_COLLISION_RADII` | [0.15, 0.35, 0.7] | Collision radius per rock size index |
 
-## 8. Water & Shore
+## 9. Water & Shore
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -139,7 +158,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `FOAM_SHORE_WIDTH` | 0.6 | Foam strip offset toward shore (m) |
 | `FOAM_WATER_WIDTH` | 0.8 | Foam strip offset toward water (m) |
 
-## 9. Weather
+## 10. Weather
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -160,7 +179,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `WETNESS_WET_RATE` | 0.0083 | Ground wetting rate per second (~2 min to full wet) |
 | `WETNESS_DRY_RATE` | 0.0042 | Ground drying rate per second (~4 min to full dry) |
 
-## 10. Atmosphere
+## 11. Atmosphere
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -178,7 +197,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `MOON_VISUAL_RADIUS` | 1.75 | Moon disc radius |
 | `MOON_DISTANCE` | 135 | Moon sprite distance from player (m) |
 
-## 11. Audio
+## 12. Audio
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -200,7 +219,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `SPATIAL_MAX_DISTANCE` | 60 | HRTF panner maximum distance |
 | `SPATIAL_ROLLOFF` | 0.8 | HRTF panner rolloff factor |
 
-## 12. Wildlife
+## 13. Wildlife
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -217,7 +236,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | Showing duration | 2–6 | Seconds (breathing + head tilt) |
 | Fadeout duration | 0.6 | Seconds (easeInCubic) |
 
-## 13. Collectibles
+## 14. Collectibles
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -234,7 +253,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `COLLECTIBLE_CHIME_FREQ` | 880 | Base chime frequency (Hz) |
 | `COLLECTIBLE_MAX_INSTANCES` | 500 | Maximum instanced mesh capacity |
 
-## 14. Renderer
+## 15. Renderer
 
 | Setting | Value | Description |
 |---------|-------|-------------|
@@ -252,7 +271,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | XR reference space | `local-floor` | Player starts standing at ground level |
 | Foveated rendering | Level 1 | Saves GPU on peripheral vision (Quest) |
 
-## 15. Render Order
+## 16. Render Order
 
 | Object | Render Order | Reason |
 |--------|-------------|--------|

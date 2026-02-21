@@ -164,10 +164,9 @@ export function createCottageGeometry(seed) {
   const gableRows = Math.ceil(roofPitch / logStep);
   for (let g = 0; g < gableRows; g++) {
     const gy = wallH + logRadius + g * logStep;
-    if (gy > ridgeY) break;
-    const fraction = 1 - (gy - wallH) / roofPitch;
-    const gableLen = widthZ * fraction;
-    if (gableLen < logRadius * 3) break;
+    if (gy > ridgeY + logRadius) break;
+    const fraction = Math.max(0, 1 - (gy - wallH) / roofPitch);
+    const gableLen = Math.max(logRadius * 2, widthZ * fraction);
     const gSeed = seed + 500 + g * 17;
     const gR = logRadius * hashRange(gSeed, 0.8, 1.1);
     const gR2 = gR * hashRange(gSeed + 5, 0.93, 1.07);
@@ -190,9 +189,10 @@ export function createCottageGeometry(seed) {
   // --- Roof: two angled box slabs with gentle sag ---
   const roofHalfSpan = hz + roofOverhang;
   const roofLen = widthX + roofOverhang;
-  const slopeLen = Math.sqrt(roofHalfSpan * roofHalfSpan + roofPitch * roofPitch);
   const roofAngle = Math.atan2(roofPitch, roofHalfSpan);
   const roofThick = 0.2;
+  // Extend each panel past the ridge so they overlap (no gap from jitter/thickness)
+  const slopeLen = Math.sqrt(roofHalfSpan * roofHalfSpan + roofPitch * roofPitch) + roofThick;
 
   const roofL = new THREE.BoxGeometry(roofLen, roofThick, slopeLen, 8, 3, 6);
   jitterThatch(roofL, 0.03, seed + 600);
@@ -209,6 +209,15 @@ export function createCottageGeometry(seed) {
   roofR.translate(0, wallH + roofPitch / 2, roofHalfSpan / 2);
   addThatchColors(roofR, roofColor, seed + 900);
   parts.push(roofR);
+
+  // Ridge beam — log running along the top seam
+  const ridgeBeamR = logRadius * 0.9;
+  const ridgeBeam = new THREE.CylinderGeometry(ridgeBeamR, ridgeBeamR, roofLen, 6, 2);
+  jitterLog(ridgeBeam, 0.01, seed + 950);
+  ridgeBeam.rotateZ(Math.PI / 2);
+  ridgeBeam.translate(0, ridgeY + ridgeBeamR * 0.3, 0);
+  addLogColors(ridgeBeam, woodBase, seed + 951);
+  parts.push(ridgeBeam);
 
   // --- Chimney: stone box ---
   const chimneyW = 0.35;

@@ -122,6 +122,7 @@ function generateCollectibles(chunk):
             // Check terrain
             terrainY = getTerrainHeight(finalX, finalZ)
             if terrainY < SHORE_LEVEL: continue  // no orbs in water
+            if isNearAnyCottage(finalX, finalZ): continue  // no orbs in cottage clearings
 
             // Check if already collected
             hash = str(round(finalX × 2)) + "," + str(round(finalZ × 2))
@@ -299,6 +300,7 @@ The XZ direction MUST be normalised from camera direction to prevent the minimap
 - [ ] Walking near an orb (< 1.2m) collects it with a chime
 - [ ] Collected orbs don't reappear when you leave and return to the area
 - [ ] Orbs do not appear in water (shore exclusion)
+- [ ] Orbs do not appear within cottage clearing radius
 
 ### Score/Sprint Checks
 
