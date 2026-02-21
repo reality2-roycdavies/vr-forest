@@ -333,7 +333,7 @@ export function getGroundMaterial() {
            // Apply as strong additive detail — suppress near waterline and fade at altitude
            float detailSuppress = smoothstep(dynWater - 0.2, dynWater + 0.5, h);
            detailSuppress *= (1.0 - smoothstep(0.0, 1.0, tussockBlend));
-           diffuseColor.rgb += detail * 1.2 * detailSuppress;
+           diffuseColor.rgb += detail * 2.5 * detailSuppress;
          #endif`
       );
 
