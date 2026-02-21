@@ -233,12 +233,16 @@ export function getGroundMaterial() {
          }
 
          // Garden ground near cottages — warm earthy tones with noisy edges
-         if (vCottageDensity > 0.01) {
-           float gardenNoise = _vnoise(vWorldPos.xz * 0.3) * 0.25 + _vnoise(vWorldPos.xz * 0.8 + 70.0) * 0.15
-                             + _vnoise(vWorldPos.xz * 2.0 + 130.0) * 0.08
-                             + _vnoise(vWorldPos.xz * 5.0 + 95.0) * 0.10
-                             + _vnoise(vWorldPos.xz * 12.0 + 160.0) * 0.06;
-           float gardenFactor = smoothstep(0.01, 0.35, vCottageDensity + gardenNoise);
+         // No if-guard on vCottageDensity: hard threshold creates pixel-sharp border.
+         // Instead, taper noise by attribute so it's zero away from cottages.
+         float _gardenScale = smoothstep(0.0, 0.1, vCottageDensity);
+         float gardenNoise = ((_vnoise(vWorldPos.xz * 0.3) - 0.5) * 0.25
+                            + (_vnoise(vWorldPos.xz * 0.8 + 70.0) - 0.5) * 0.15
+                            + (_vnoise(vWorldPos.xz * 2.0 + 130.0) - 0.5) * 0.08
+                            + (_vnoise(vWorldPos.xz * 5.0 + 95.0) - 0.5) * 0.10
+                            + (_vnoise(vWorldPos.xz * 12.0 + 160.0) - 0.5) * 0.06) * _gardenScale;
+         float gardenFactor = smoothstep(0.02, 0.55, vCottageDensity + gardenNoise);
+         if (gardenFactor > 0.005) {
            // Richer green near edges, warm soil near center
            vec3 gardenGreen = mix(grassColor, gardenColor, smoothstep(0.3, 0.8, vCottageDensity));
            // Per-pixel patch variation: garden beds vs paths
@@ -268,16 +272,18 @@ export function getGroundMaterial() {
          alpineBlend = clamp(alpineBlend + alpNoise * (1.0 - abs(alpineBlend * 2.0 - 1.0)), 0.0, 1.0);
          terrainColor = mix(terrainColor, alpineRockColor, alpineBlend);
 
-         // Smooth slope from vertex-interpolated world normal + noise
-         // (dFdx/dFdy gives flat per-triangle normals → visible triangle edges on rock/snow)
+         // Per-pixel tangent-plane perturbation of the slope normal.
+         // Adding noise to .y (scalar) still gives straight boundaries per triangle
+         // because slopeNorm.y varies linearly. Tilting the normal in xz and
+         // re-normalizing makes .y vary NON-linearly, so boundaries curve within triangles.
          vec3 slopeNorm = normalize(vWorldNormal);
-         // Centered noise (±range) so slope boundaries wiggle both directions,
-         // breaking the linear vertex-interpolation pattern within each triangle
-         float slopeNoise = (_vnoise(vWorldPos.xz * 0.5) - 0.5) * 0.20
-                          + (_vnoise(vWorldPos.xz * 1.3 + 30.0) - 0.5) * 0.14
-                          + (_vnoise(vWorldPos.xz * 3.5 + 70.0) - 0.5) * 0.08
-                          + (_vnoise(vWorldPos.xz * 8.0 + 110.0) - 0.5) * 0.10
-                          + (_vnoise(vWorldPos.xz * 18.0 + 200.0) - 0.5) * 0.06;
+         float _spx = (_vnoise(vWorldPos.xz * 4.0 + 50.0) - 0.5) * 0.30
+                    + (_vnoise(vWorldPos.xz * 12.0 + 130.0) - 0.5) * 0.20
+                    + (_vnoise(vWorldPos.xz * 32.0 + 220.0) - 0.5) * 0.10;
+         float _spz = (_vnoise(vWorldPos.xz * 4.0 + vec2(70.0, 30.0)) - 0.5) * 0.30
+                    + (_vnoise(vWorldPos.xz * 12.0 + vec2(160.0, 60.0)) - 0.5) * 0.20
+                    + (_vnoise(vWorldPos.xz * 32.0 + vec2(250.0, 90.0)) - 0.5) * 0.10;
+         slopeNorm = normalize(slopeNorm + vec3(_spx, 0.0, _spz));
 
          // Snow: slope-aware (flat = snow, steep = rock), wide transition
          float snowBlend = smoothstep(snowlineH - 6.0, snowlineH + 8.0, h);
@@ -287,16 +293,16 @@ export function getGroundMaterial() {
                          + (_vnoise(vWorldPos.xz * 4.0 + 180.0) - 0.5) * 0.20
                          + (_vnoise(vWorldPos.xz * 9.0 + 220.0) - 0.5) * 0.12;
          snowBlend = clamp(snowBlend + snowNoise * (1.0 - abs(snowBlend * 2.0 - 1.0)), 0.0, 1.0);
-         float slopeFlat = smoothstep(0.4, 0.95, slopeNorm.y + slopeNoise);
+         // Light per-effect noise (different from steep rock) so snow/rock boundaries diverge
+         float slopeNoise = (_vnoise(vWorldPos.xz * 2.0 + 30.0) - 0.5) * 0.10
+                          + (_vnoise(vWorldPos.xz * 7.0 + 95.0) - 0.5) * 0.08;
+         float slopeFlat = smoothstep(0.38, 0.95, slopeNorm.y + slopeNoise);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
          // Steep slopes → bare rock (grey stone on moderate-to-steep slopes)
-         float steepNoise = (_vnoise(vWorldPos.xz * 0.3) - 0.5) * 0.08
-                          + (_vnoise(vWorldPos.xz * 1.5 + 45.0) - 0.5) * 0.06
-                          + (_vnoise(vWorldPos.xz * 5.0 + 100.0) - 0.5) * 0.08
-                          + (_vnoise(vWorldPos.xz * 12.0 + 170.0) - 0.5) * 0.06
-                          + (_vnoise(vWorldPos.xz * 22.0 + 230.0) - 0.5) * 0.04;
-         float steepFactor = 1.0 - smoothstep(0.48, 0.92, slopeNorm.y + steepNoise);
+         float steepNoise = (_vnoise(vWorldPos.xz * 2.5 + 45.0) - 0.5) * 0.10
+                          + (_vnoise(vWorldPos.xz * 8.0 + 115.0) - 0.5) * 0.08;
+         float steepFactor = 1.0 - smoothstep(0.45, 0.93, slopeNorm.y + steepNoise);
          // Reduce on sand/shore but don't fully suppress (stream banks show rock)
          steepFactor *= mix(0.3, 1.0, grassBlend);
          // Snow takes full precedence at high altitude
@@ -374,10 +380,8 @@ export function getGroundMaterial() {
            // Steep rock texture
            detail = mix(detail, rockTexDetail, steepFactor);
            // Garden area: blend toward dirt texture (cottage clearings are bare soil)
-           if (vCottageDensity > 0.01) {
-             float gfFactor = smoothstep(0.05, 0.35, vCottageDensity);
-             detail = mix(detail, dirtTexDetail, gfFactor);
-           }
+           // Use gardenFactor (already computed with soft noisy edges) instead of hard threshold
+           detail = mix(detail, dirtTexDetail, gardenFactor);
 
            // Apply as moderate additive detail — suppress near waterline, fade at altitude
            // but keep some rock texture in snow zone for surface variation
