@@ -129,7 +129,7 @@ export const CONFIG = {
   SUBALPINE_START: 10,
   TREELINE_START: 16,
   ALPINE_START: 20,
-  SNOWLINE_START: 24,
+  SNOWLINE_START: 22,
   TREELINE_SCALE_MIN: 0.3,       // tree scale at treeline (fraction of normal)
 
   // Mountain ground colors
