@@ -218,8 +218,8 @@ export function getGroundMaterial() {
          float snowlineH = snowlineStart + zoneOffset;
 
          // Tussock blend (used to suppress dirt above treeline)
-         float tussockNoise = _vnoise(vWorldPos.xz * 1.8 + 105.0) * 0.08
-                            + _vnoise(vWorldPos.xz * 6.0 + 145.0) * 0.05;
+         float tussockNoise = (_vnoise(vWorldPos.xz * 1.8 + 105.0) - 0.5) * 0.16
+                            + (_vnoise(vWorldPos.xz * 6.0 + 145.0) - 0.5) * 0.10;
          float tussockBlend = smoothstep(treelineH - 3.0, treelineH + 4.0, h + tussockNoise * 8.0);
 
          // Suppress dirt above treeline
@@ -251,9 +251,9 @@ export function getGroundMaterial() {
 
          // Subalpine: darker green (wide transition with noise)
          float subalpineBlend = smoothstep(subalpineH - 5.0, subalpineH + 6.0, h);
-         float subNoise = _vnoise(vWorldPos.xz * 1.2 + 80.0) * 0.12
-                        + _vnoise(vWorldPos.xz * 4.0 + 135.0) * 0.06
-                        + _vnoise(vWorldPos.xz * 10.0 + 190.0) * 0.04;
+         float subNoise = (_vnoise(vWorldPos.xz * 1.2 + 80.0) - 0.5) * 0.24
+                        + (_vnoise(vWorldPos.xz * 4.0 + 135.0) - 0.5) * 0.12
+                        + (_vnoise(vWorldPos.xz * 10.0 + 190.0) - 0.5) * 0.08;
          subalpineBlend = clamp(subalpineBlend + subNoise * (1.0 - abs(subalpineBlend * 2.0 - 1.0)), 0.0, 1.0);
          terrainColor = mix(terrainColor, subalpineColor, subalpineBlend * grassBlend);
 
@@ -262,37 +262,41 @@ export function getGroundMaterial() {
 
          // Alpine: exposed rock (wide transition with noise)
          float alpineBlend = smoothstep(alpineH - 5.0, alpineH + 6.0, h);
-         float alpNoise = _vnoise(vWorldPos.xz * 1.0 + 160.0) * 0.15
-                        + _vnoise(vWorldPos.xz * 3.5 + 200.0) * 0.08
-                        + _vnoise(vWorldPos.xz * 9.0 + 250.0) * 0.05;
+         float alpNoise = (_vnoise(vWorldPos.xz * 1.0 + 160.0) - 0.5) * 0.30
+                        + (_vnoise(vWorldPos.xz * 3.5 + 200.0) - 0.5) * 0.16
+                        + (_vnoise(vWorldPos.xz * 9.0 + 250.0) - 0.5) * 0.10;
          alpineBlend = clamp(alpineBlend + alpNoise * (1.0 - abs(alpineBlend * 2.0 - 1.0)), 0.0, 1.0);
          terrainColor = mix(terrainColor, alpineRockColor, alpineBlend);
 
          // Smooth slope from vertex-interpolated world normal + noise
          // (dFdx/dFdy gives flat per-triangle normals → visible triangle edges on rock/snow)
          vec3 slopeNorm = normalize(vWorldNormal);
-         float slopeNoise = _vnoise(vWorldPos.xz * 0.5) * 0.10
-                          + _vnoise(vWorldPos.xz * 1.3 + 30.0) * 0.06
-                          + _vnoise(vWorldPos.xz * 3.5 + 70.0) * 0.03
-                          + _vnoise(vWorldPos.xz * 8.0 + 110.0) * 0.04;
+         // Centered noise (±range) so slope boundaries wiggle both directions,
+         // breaking the linear vertex-interpolation pattern within each triangle
+         float slopeNoise = (_vnoise(vWorldPos.xz * 0.5) - 0.5) * 0.20
+                          + (_vnoise(vWorldPos.xz * 1.3 + 30.0) - 0.5) * 0.14
+                          + (_vnoise(vWorldPos.xz * 3.5 + 70.0) - 0.5) * 0.08
+                          + (_vnoise(vWorldPos.xz * 8.0 + 110.0) - 0.5) * 0.10
+                          + (_vnoise(vWorldPos.xz * 18.0 + 200.0) - 0.5) * 0.06;
 
          // Snow: slope-aware (flat = snow, steep = rock), wide transition
          float snowBlend = smoothstep(snowlineH - 6.0, snowlineH + 8.0, h);
-         // Per-pixel noise in the transition zone to break up banding
-         float snowNoise = _vnoise(vWorldPos.xz * 0.6 + 40.0) * 0.10
-                         + _vnoise(vWorldPos.xz * 1.5) * 0.18
-                         + _vnoise(vWorldPos.xz * 4.0 + 180.0) * 0.10
-                         + _vnoise(vWorldPos.xz * 9.0 + 220.0) * 0.06;
+         // Centered per-pixel noise in the transition zone to break up banding
+         float snowNoise = (_vnoise(vWorldPos.xz * 0.6 + 40.0) - 0.5) * 0.22
+                         + (_vnoise(vWorldPos.xz * 1.5) - 0.5) * 0.36
+                         + (_vnoise(vWorldPos.xz * 4.0 + 180.0) - 0.5) * 0.20
+                         + (_vnoise(vWorldPos.xz * 9.0 + 220.0) - 0.5) * 0.12;
          snowBlend = clamp(snowBlend + snowNoise * (1.0 - abs(snowBlend * 2.0 - 1.0)), 0.0, 1.0);
-         float slopeFlat = smoothstep(0.5, 0.9, slopeNorm.y + slopeNoise);
+         float slopeFlat = smoothstep(0.4, 0.95, slopeNorm.y + slopeNoise);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
          // Steep slopes → bare rock (grey stone on moderate-to-steep slopes)
-         float steepNoise = _vnoise(vWorldPos.xz * 0.3) * 0.04
-                          + _vnoise(vWorldPos.xz * 1.5 + 45.0) * 0.03
-                          + _vnoise(vWorldPos.xz * 5.0 + 100.0) * 0.04
-                          + _vnoise(vWorldPos.xz * 12.0 + 170.0) * 0.03;
-         float steepFactor = 1.0 - smoothstep(0.55, 0.88, slopeNorm.y + steepNoise);
+         float steepNoise = (_vnoise(vWorldPos.xz * 0.3) - 0.5) * 0.08
+                          + (_vnoise(vWorldPos.xz * 1.5 + 45.0) - 0.5) * 0.06
+                          + (_vnoise(vWorldPos.xz * 5.0 + 100.0) - 0.5) * 0.08
+                          + (_vnoise(vWorldPos.xz * 12.0 + 170.0) - 0.5) * 0.06
+                          + (_vnoise(vWorldPos.xz * 22.0 + 230.0) - 0.5) * 0.04;
+         float steepFactor = 1.0 - smoothstep(0.48, 0.92, slopeNorm.y + steepNoise);
          // Reduce on sand/shore but don't fully suppress (stream banks show rock)
          steepFactor *= mix(0.3, 1.0, grassBlend);
          // Snow takes full precedence at high altitude
