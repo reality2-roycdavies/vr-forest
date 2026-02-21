@@ -45,7 +45,7 @@ export const CONFIG = {
   GRAVITY: 9.8,                // m/s^2
   WALK_BOB_SPEED: 2.2,         // oscillations per second while moving (≈ footstep rate)
   WALK_BOB_AMOUNT: 0.025,      // meters of vertical bob
-  ROCK_COLLISION_RADII: [0.15, 0.35, 0.7], // per size index
+  ROCK_COLLISION_RADII: [0.35, 0.7, 1.4], // per size index
 
   // Atmosphere
   FOG_NEAR: 50,
@@ -78,7 +78,7 @@ export const CONFIG = {
   // Rocks
   ROCK_GRID_SPACING: 5,         // spacing for larger scattered rocks
   ROCK_DENSITY_THRESHOLD: 0.45, // noise threshold for rock placement
-  ROCK_COLORS: [0x787878, 0x8a8580, 0x6e6e6e, 0x959085],
+  ROCK_COLORS: [0x504d4a, 0x5a5652, 0x464442, 0x625e5a, 0x3e3c3a],
 
   // Fallen logs & stumps
   LOG_GRID_SPACING: 8,

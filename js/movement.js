@@ -387,7 +387,7 @@ export class MovementSystem {
     const radii = CONFIG.ROCK_COLLISION_RADII;
 
     // Rock heights by size index (matches vegetation.js rock creation)
-    const rockHeights = [0.07, 0.12, 0.22]; // approximate top surface offset
+    const rockHeights = [0.15, 0.30, 0.55]; // approximate top surface offset
 
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {

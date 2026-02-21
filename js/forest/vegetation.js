@@ -281,9 +281,9 @@ export class VegetationPool {
 
     // 3 rock sizes with different jagged shapes
     const sizes = [
-      { radius: 0.12, detail: 0, scaleY: 0.6 },  // small pebble
-      { radius: 0.25, detail: 1, scaleY: 0.5 },  // medium rock
-      { radius: 0.5,  detail: 1, scaleY: 0.45 },  // large boulder
+      { radius: 0.3,  detail: 0, scaleY: 0.55 },  // small rock
+      { radius: 0.6,  detail: 1, scaleY: 0.5 },   // medium rock
+      { radius: 1.2,  detail: 1, scaleY: 0.45 },   // large boulder
     ];
 
     for (let si = 0; si < sizes.length; si++) {
@@ -303,16 +303,18 @@ export class VegetationPool {
       pos.needsUpdate = true;
       geom.computeVertexNormals();
 
-      // Add vertex colors for stone variation
+      // Add vertex colors for stone variation — wider range for natural look
       const colors = new Float32Array(pos.count * 3);
-      const colorIdx = si % CONFIG.ROCK_COLORS.length;
-      const baseColor = new THREE.Color(CONFIG.ROCK_COLORS[colorIdx]);
+      const baseColor = new THREE.Color(CONFIG.ROCK_COLORS[si % CONFIG.ROCK_COLORS.length]);
       for (let i = 0; i < pos.count; i++) {
         const hash = Math.sin(pos.getX(i) * 431.1 + pos.getZ(i) * 217.3) * 43758.5453;
         const frac = (hash - Math.floor(hash)) - 0.5;
-        colors[i * 3] = Math.max(0, Math.min(1, baseColor.r + frac * 0.12));
-        colors[i * 3 + 1] = Math.max(0, Math.min(1, baseColor.g + frac * 0.1));
-        colors[i * 3 + 2] = Math.max(0, Math.min(1, baseColor.b + frac * 0.1));
+        // Wider variation + slight warm/cool shift per vertex
+        const hash2 = Math.sin(pos.getY(i) * 173.3 + pos.getX(i) * 91.1) * 43758.5453;
+        const warmCool = ((hash2 - Math.floor(hash2)) - 0.5) * 0.06;
+        colors[i * 3] = Math.max(0, Math.min(1, baseColor.r + frac * 0.2 + warmCool));
+        colors[i * 3 + 1] = Math.max(0, Math.min(1, baseColor.g + frac * 0.18));
+        colors[i * 3 + 2] = Math.max(0, Math.min(1, baseColor.b + frac * 0.18 - warmCool));
       }
       geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
@@ -949,9 +951,9 @@ export class VegetationPool {
         );
         _quaternion.setFromEuler(_euler);
 
-        // Slight per-instance scale variation
-        const sv = 0.8 + (Math.sin(seed * 5.3) * 0.5 + 0.5) * 0.6;
-        const svY = sv * (0.6 + Math.sin(seed * 3.1) * 0.3);
+        // Per-instance scale variation (wider range for natural look)
+        const sv = 0.7 + (Math.sin(seed * 5.3) * 0.5 + 0.5) * 1.0;
+        const svY = sv * (0.5 + Math.sin(seed * 3.1) * 0.3);
         _scale.set(sv, svY, sv);
 
         _matrix.compose(_position, _quaternion, _scale);
