@@ -123,8 +123,12 @@ export function getGroundMaterial() {
          varying float vCottageDensity;
 
          // Per-pixel value noise for dirt patches (no triangle artifacts)
+         // Sin-free hash: sin(large_arg) loses precision on mobile GPUs (Quest)
+         // and creates grid-aligned patterns. Multiply/fract is precise at any scale.
          float _hash(vec2 p) {
-           return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+           vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+           p3 += vec3(dot(p3, p3.yzx + vec3(33.33)));
+           return fract((p3.x + p3.y) * p3.z);
          }
          float _vnoise(vec2 p) {
            vec2 i = floor(p);
