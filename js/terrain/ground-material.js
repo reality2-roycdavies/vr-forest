@@ -242,10 +242,10 @@ export function getGroundMaterial() {
          float slopeFlat = smoothstep(0.5, 0.9, vWorldNormal.y);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
-         // Steep slopes → bare rock (grey stone replaces grass/dirt on cliffs)
-         float steepNoise = _vnoise(vWorldPos.xz * 0.2) * 0.12
-                          + _vnoise(vWorldPos.xz * 0.6 + 90.0) * 0.06;
-         float steepFactor = 1.0 - smoothstep(0.7, 0.95, vWorldNormal.y + steepNoise);
+         // Steep slopes → bare rock (grey stone replaces grass/dirt on slopes)
+         float steepNoise = _vnoise(vWorldPos.xz * 0.2) * 0.08
+                          + _vnoise(vWorldPos.xz * 0.6 + 90.0) * 0.04;
+         float steepFactor = 1.0 - smoothstep(0.82, 0.98, vWorldNormal.y + steepNoise);
          // Suppress on sand/shore (rock blending looks wrong on beaches)
          steepFactor *= grassBlend;
          // Suppress where snow already covers (snow takes priority on high steep areas)
