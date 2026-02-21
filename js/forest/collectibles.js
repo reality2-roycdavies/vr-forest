@@ -56,14 +56,17 @@ export class CollectibleSystem {
     scene.add(this.glowMesh);
 
     // Ground glow — shader-based radial gradient beneath each orb, visible at night
-    // depthTest off so it never clips against sloped terrain
-    const groundGlowGeom = new THREE.PlaneGeometry(2.8, 2.8);
+    // Tight center gradient so clipping on slope edges is invisible
+    const groundGlowGeom = new THREE.PlaneGeometry(3.0, 3.0);
     groundGlowGeom.rotateX(-Math.PI / 2); // lay flat on ground
     const groundGlowMat = new THREE.ShaderMaterial({
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -8,
       uniforms: {
         uOpacity: { value: 0 },
       },
@@ -88,9 +91,11 @@ export class CollectibleSystem {
           // Radial distance from center (0 at center, 1 at edge)
           vec2 centered = vUv - 0.5;
           float dist = length(centered) * 2.0;
-          // Soft cubic falloff — bright center, gentle fade
-          float alpha = 1.0 - smoothstep(0.0, 1.0, dist);
-          alpha *= alpha; // extra softness
+          // Tight falloff — most brightness in center 40%, near-zero at edges
+          float alpha = 1.0 - smoothstep(0.0, 0.55, dist);
+          alpha *= alpha * alpha; // cubic for very soft edge
+          // Discard fully transparent pixels (avoids depth issues at edges)
+          if (alpha < 0.005) discard;
           gl_FragColor = vec4(vColor, alpha * uOpacity);
         }
       `,
@@ -214,8 +219,8 @@ export class CollectibleSystem {
     if (this.groundGlowMesh.visible) {
       for (let i = 0; i < this._count; i++) {
         const p = this._positions[i];
-        // Orb base Y is terrainY + 0.8; position glow at terrain + 0.06 (above ground)
-        _dummy.position.set(p.x, p.y - 0.74, p.z);
+        // Orb base Y is terrainY + 0.8; position glow at terrain + 0.2 (above ground)
+        _dummy.position.set(p.x, p.y - 0.6, p.z);
         _dummy.rotation.set(0, 0, 0);
         // Gentle scale pulse synced to orb bob
         const p2 = p.x * 0.53 + p.z * 0.29;
