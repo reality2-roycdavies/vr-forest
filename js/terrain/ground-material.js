@@ -22,8 +22,9 @@ export function getGroundMaterial() {
     const sandTex = createSandTexture();
     const dirtTex = createDirtTexture();
     const rockTex = createRockTexture();
-    groundMaterial = new THREE.MeshLambertMaterial({
+    groundMaterial = new THREE.MeshPhongMaterial({
       map: createGroundTexture(),
+      shininess: 0,
     });
     groundMaterial.userData.timeUniform = groundTimeUniform;
     groundMaterial.userData.wetnessUniform = groundWetnessUniform;
