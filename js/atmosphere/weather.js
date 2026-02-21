@@ -407,12 +407,14 @@ export class WeatherSystem {
       }
     }
 
-    // Particle color: rain blue-grey → snow white; shape: streaks → soft dots
+    // Particle color: rain blue-grey → snow white; darken at night
     const mat = this._rainMesh.material;
     const rc = mat.uniforms.uColor.value;
-    rc.r = lerp(0.7, 1.0, snowBlend);
-    rc.g = lerp(0.75, 1.0, snowBlend);
-    rc.b = lerp(0.85, 1.0, snowBlend);
+    // Night factor: 1.0 at day (elev>0.1), fades to 0.25 at night (elev<-0.05)
+    const nightDim = lerp(0.25, 1.0, clamp01((this._sunElevation + 0.05) / 0.15));
+    rc.r = lerp(0.7, 1.0, snowBlend) * nightDim;
+    rc.g = lerp(0.75, 1.0, snowBlend) * nightDim;
+    rc.b = lerp(0.85, 1.0, snowBlend) * nightDim;
     mat.uniforms.uSnowBlend.value = snowBlend;
     mat.uniforms.uStormIntensity.value = stormFactor;
 
@@ -943,8 +945,8 @@ export class WeatherSystem {
     // windMultiplier: 1.0 → 1.3 → 2.5 (cloudy = mild breeze, rainy = strong)
     this.windMultiplier = w <= 1 ? 1 + w * 0.3 : 1.3 + (w - 1) * 1.2;
 
-    // fogMultiplier: 1.0 → 0.65 → 0.6 (cloudy close to rainy)
-    let fogMul = w <= 1 ? 1 - w * 0.35 : 0.65 - (w - 1) * 0.05;
+    // fogMultiplier: 1.0 → 0.5 → 0.2 (cloudy = hazy, rainy = thick fog)
+    let fogMul = w <= 1 ? 1 - w * 0.5 : 0.5 - (w - 1) * 0.3;
     // Reduce visibility further in snow zone — whiteout in blizzards
     const terrainY = this._playerTerrainY || 0;
     const snowBlend = clamp01((terrainY - CONFIG.TREELINE_START) / (CONFIG.SNOWLINE_START - CONFIG.TREELINE_START));
@@ -1022,6 +1024,7 @@ export class WeatherSystem {
    */
   update(delta, sunElevation, playerPos, windDir, terrainHeight) {
     this._playerTerrainY = terrainHeight || 0;
+    this._sunElevation = sunElevation || 0;
     this._updateStateMachine(delta);
     this._updateDerivedParams();
     this._updateGroundWetness(delta);

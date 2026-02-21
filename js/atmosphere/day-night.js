@@ -41,26 +41,26 @@ const _fakeTimeHours = _fakeTimeParam ? (() => {
 const PALETTES = {
   // sunElevation ranges: night < -0.1, twilight -0.1..0.05, day > 0.05
   night: {
-    skyTop:    new THREE.Color(0x081020),
-    skyBottom: new THREE.Color(0x060a10),
-    fog:       new THREE.Color(0x04060a),
+    skyTop:    new THREE.Color(0x0c1830),
+    skyBottom: new THREE.Color(0x0a1018),
+    fog:       new THREE.Color(0x050810),
     sun:       new THREE.Color(0x444466),
     sunIntensity: 0,
-    hemiSky:   new THREE.Color(0x1a2540),
-    hemiGround: new THREE.Color(0x0c1018),
-    hemiIntensity: 0.3,
-    ambient:   0.25,
+    hemiSky:   new THREE.Color(0x253550),
+    hemiGround: new THREE.Color(0x121820),
+    hemiIntensity: 0.5,
+    ambient:   0.42,
   },
   deepNight: {
-    skyTop:    new THREE.Color(0x080c14),
-    skyBottom: new THREE.Color(0x060810),
-    fog:       new THREE.Color(0x040608),
+    skyTop:    new THREE.Color(0x0a1020),
+    skyBottom: new THREE.Color(0x080c14),
+    fog:       new THREE.Color(0x04070c),
     sun:       new THREE.Color(0x333344),
     sunIntensity: 0,
-    hemiSky:   new THREE.Color(0x101828),
-    hemiGround: new THREE.Color(0x0a0e14),
-    hemiIntensity: 0.2,
-    ambient:   0.16,
+    hemiSky:   new THREE.Color(0x182030),
+    hemiGround: new THREE.Color(0x0e1218),
+    hemiIntensity: 0.35,
+    ambient:   0.30,
   },
   twilight: {
     skyTop:    new THREE.Color(0x1a1a50),
@@ -1133,7 +1133,8 @@ export class DayNightSystem {
     // --- Ambient light ---
     this.ambientLight.intensity = palette.ambient;
     if (weather) {
-      this.ambientLight.intensity *= (1 - weather.lightDimming);
+      // Halve weather dimming on ambient so nearby objects stay visible in storms
+      this.ambientLight.intensity *= (1 - weather.lightDimming * 0.5);
       // Lightning flash: additive ambient burst (strong enough to illuminate the scene)
       this.ambientLight.intensity += weather.lightningFlash * 2.0;
     }
@@ -1154,15 +1155,22 @@ export class DayNightSystem {
       const desatAmount = weather.cloudDarkness;
       // Compute luminance-matched grey from current palette fog
       const fogLum = palette.fog.r * 0.3 + palette.fog.g * 0.5 + palette.fog.b * 0.2;
-      // Blend between palette-luminance grey and overcast grey based on brightness
-      // At night (fogLum ~0.03) → use dark grey; at day (fogLum ~0.5) → use overcast grey
-      const dayness = Math.min(1, fogLum * 3);
-      _color.setRGB(fogLum, fogLum, fogLum).lerp(_overcastHorizonGrey, dayness);
-      // At night, push rain fog toward near-black (rain blocks all ambient light)
-      const nightDarken = (1 - dayness) * weather.rainIntensity * 0.7;
+      // Threshold at 0.05: night (fogLum ~0.03) → 0; day (fogLum ~0.25+) → 1
+      const dayness = Math.min(1, Math.max(0, (fogLum - 0.05) * 5));
+      // Night: start from much darker luminance (preserve dark feel)
+      // Day: full luminance → overcast grey
+      const effectiveLum = fogLum * (0.25 + dayness * 0.75);
+      _color.setRGB(effectiveLum, effectiveLum, effectiveLum).lerp(_overcastHorizonGrey, dayness);
+      // At night, push rain fog darker (but not to pure black)
+      const nightDarken = (1 - dayness) * weather.rainIntensity * 0.4;
       _color.multiplyScalar(1 - nightDarken);
       // Storm dims fog at all times of day (especially noticeable at twilight/dawn)
-      _color.multiplyScalar(1 - weather.skyDarkening * 0.6);
+      _color.multiplyScalar(1 - weather.skyDarkening * 0.4);
+      // Floor: never let fog go pure black — keep a faint dark blue-grey
+      // so you can still see tree silhouettes and navigate
+      _color.r = Math.max(0.012, _color.r);
+      _color.g = Math.max(0.014, _color.g);
+      _color.b = Math.max(0.020, _color.b);
       this.scene.fog.color.lerp(_color, desatAmount);
       this.scene.background.lerp(_color, desatAmount);
     }
@@ -1184,7 +1192,7 @@ export class DayNightSystem {
     let baseFogMul = 1;
     if (weather) {
       const w = weather.weatherIntensity;
-      baseFogMul = w <= 1 ? 1 - w * 0.35 : 0.65 - (w - 1) * 0.05;
+      baseFogMul = w <= 1 ? 1 - w * 0.5 : 0.5 - (w - 1) * 0.3;
     }
     this.skyUniforms.fogHeight.value = Math.min(0.95, 0.2 + (1 - baseFogMul) * 1.6);
     this._updateSkyColors(palette.skyTop, palette.skyBottom, this.scene.fog.color, playerPos, weather);

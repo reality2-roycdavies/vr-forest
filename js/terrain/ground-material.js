@@ -236,14 +236,21 @@ export function getGroundMaterial() {
          float alpineBlend = smoothstep(alpineH - 3.0, alpineH + 4.0, h);
          terrainColor = mix(terrainColor, alpineRockColor, alpineBlend);
 
+         // Per-pixel slope from screen-space derivatives (avoids vertex normal zigzag artifacts)
+         vec3 dPdx = dFdx(vWorldPos);
+         vec3 dPdy = dFdy(vWorldPos);
+         vec3 pixelNormal = normalize(cross(dPdx, dPdy));
+         // Add noise to soften per-triangle edges
+         float slopeNoise = _vnoise(vWorldPos.xz * 0.5) * 0.1;
+
          // Snow: slope-aware (flat = snow, steep = rock), wide transition
          float snowBlend = smoothstep(snowlineH - 3.0, snowlineH + 4.0, h);
-         float slopeFlat = smoothstep(0.5, 0.9, vWorldNormal.y);
+         float slopeFlat = smoothstep(0.5, 0.9, pixelNormal.y + slopeNoise);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
          // Steep slopes → bare rock (grey stone on moderate-to-steep slopes)
          float steepNoise = _vnoise(vWorldPos.xz * 0.3) * 0.02;
-         float steepFactor = 1.0 - smoothstep(0.6, 0.82, vWorldNormal.y + steepNoise);
+         float steepFactor = 1.0 - smoothstep(0.6, 0.82, pixelNormal.y + steepNoise);
          // Reduce on sand/shore but don't fully suppress (stream banks show rock)
          steepFactor *= mix(0.3, 1.0, grassBlend);
          // Snow takes full precedence at high altitude
@@ -292,26 +299,24 @@ export function getGroundMaterial() {
 
          // --- Per-surface-type textures as detail overlays ---
          #ifdef USE_MAP
-           // Three UV layers at irrational scale ratios to break repeat patterns
-           vec2 wUV  = vWorldPos.xz * 0.3;
-           vec2 wUV2 = vWorldPos.xz * 0.137 + vec2(vWorldPos.z * 0.11, -vWorldPos.x * 0.09);
-           vec2 wUV3 = vWorldPos.xz * 0.071 + vec2(17.3, -23.7);
-           // Mipmap bias: prefer sharper level on mobile (-0.5)
-           float mBias = -0.5;
+           // Two UV layers at same scale but rotated ~30deg — eliminates beat
+           // frequency moiré while still breaking up repeat patterns
+           vec2 wUV = vWorldPos.xz * 0.25;
+           // Rotated copy: cos(30)=0.866, sin(30)=0.5
+           vec2 wUV2 = vec2(
+             vWorldPos.x * 0.866 - vWorldPos.z * 0.5,
+             vWorldPos.x * 0.5   + vWorldPos.z * 0.866
+           ) * 0.25 + vec2(17.3, -23.7);
 
-           // Sample each texture with 3-layer anti-tiling blend
-           vec3 grassSamp = texture2D(map, wUV, mBias).rgb * 0.4
-                          + texture2D(map, wUV2, mBias).rgb * 0.35
-                          + texture2D(map, wUV3, mBias).rgb * 0.25;
-           vec3 sandSamp = texture2D(sandMap, wUV * 0.8, mBias).rgb * 0.4
-                         + texture2D(sandMap, wUV2 * 0.9, mBias).rgb * 0.35
-                         + texture2D(sandMap, wUV3 * 1.1, mBias).rgb * 0.25;
-           vec3 dirtSamp = texture2D(dirtMap, wUV * 0.9, mBias).rgb * 0.4
-                         + texture2D(dirtMap, wUV2 * 1.0, mBias).rgb * 0.35
-                         + texture2D(dirtMap, wUV3 * 0.85, mBias).rgb * 0.25;
-           vec3 rockSamp = texture2D(rockMap, wUV * 0.7, mBias).rgb * 0.4
-                         + texture2D(rockMap, wUV2 * 0.8, mBias).rgb * 0.35
-                         + texture2D(rockMap, wUV3 * 0.95, mBias).rgb * 0.25;
+           // Sample each texture with 2-layer rotated blend (no mipmap bias)
+           vec3 grassSamp = texture2D(map, wUV).rgb * 0.5
+                          + texture2D(map, wUV2).rgb * 0.5;
+           vec3 sandSamp = texture2D(sandMap, wUV * 0.8).rgb * 0.5
+                         + texture2D(sandMap, wUV2 * 0.85).rgb * 0.5;
+           vec3 dirtSamp = texture2D(dirtMap, wUV * 0.9).rgb * 0.5
+                         + texture2D(dirtMap, wUV2 * 0.95).rgb * 0.5;
+           vec3 rockSamp = texture2D(rockMap, wUV * 0.7).rgb * 0.5
+                         + texture2D(rockMap, wUV2 * 0.75).rgb * 0.5;
 
            // Convert to detail: per-channel centering to preserve color character
            vec3 grassTexDetail = grassSamp - vec3(0.53, 0.54, 0.49);
@@ -320,7 +325,7 @@ export function getGroundMaterial() {
            vec3 rockTexDetail = rockSamp - vec3(0.48, 0.47, 0.46);
 
            // Select detail based on terrain type
-           vec3 detail = mix(sandTexDetail * 2.5, grassTexDetail, grassBlend);
+           vec3 detail = mix(sandTexDetail, grassTexDetail, grassBlend);
            detail = mix(detail, dirtTexDetail, dirtFactor);
            // Steep rock texture
            detail = mix(detail, rockTexDetail, steepFactor);
@@ -330,10 +335,10 @@ export function getGroundMaterial() {
              detail = mix(detail, dirtTexDetail, gfFactor);
            }
 
-           // Apply as strong additive detail — suppress near waterline and fade at altitude
+           // Apply as moderate additive detail — suppress near waterline and fade at altitude
            float detailSuppress = smoothstep(dynWater - 0.2, dynWater + 0.5, h);
            detailSuppress *= (1.0 - smoothstep(0.0, 1.0, tussockBlend));
-           diffuseColor.rgb += detail * 2.5 * detailSuppress;
+           diffuseColor.rgb += detail * 1.5 * detailSuppress;
          #endif`
       );
 
@@ -343,7 +348,10 @@ export function getGroundMaterial() {
         `#include <aomap_fragment>
          float dynWL = waterLevel + _waveH(vWorldPos.xz, uTime);
          float shadowSuppress = smoothstep(dynWL - 1.5, dynWL + 2.0, vWorldPos.y);
-         reflectedLight.directDiffuse = mix(reflectedLight.indirectDiffuse * 0.6, reflectedLight.directDiffuse, shadowSuppress);`
+         reflectedLight.directDiffuse = mix(reflectedLight.indirectDiffuse * 0.6, reflectedLight.directDiffuse, shadowSuppress);
+         // Snow emissive: faint self-illumination so snow stays visible at night
+         float snowGlow = snowBlend * slopeFlat;
+         reflectedLight.indirectDiffuse += vec3(1.0, 1.0, 1.05) * snowGlow * 0.035;`
       );
     };
   }

@@ -934,18 +934,17 @@ export class VegetationPool {
         const sx = (hR - hL) / (2 * eps);
         const sz = (hU - hD) / (2 * eps);
         const slopeMag = Math.sqrt(sx * sx + sz * sz);
-        // Sink proportional to slope and rock size — always sink a base amount
-        // so rocks look embedded, plus extra on slopes
-        const baseEmbed = [0.08, 0.15, 0.30];
-        const slopeSink = [0.3, 0.5, 0.8];
+        // Sink slightly so rocks look embedded, plus extra on slopes
+        const baseEmbed = [0.03, 0.06, 0.12];
+        const slopeSink = [0.15, 0.25, 0.4];
         const sink = baseEmbed[si] + slopeMag * slopeSink[si];
 
         _position.set(r.x, r.y - sink, r.z);
 
         // Tilt rock to match terrain slope + random variation
         const seed = r.rotSeed;
-        const slopeAngleX = Math.atan2(sz, 1);
-        const slopeAngleZ = Math.atan2(-sx, 1);
+        const slopeAngleX = Math.atan2(-sz, 1);
+        const slopeAngleZ = Math.atan2(sx, 1);
         _euler.set(
           slopeAngleX + Math.sin(seed * 1.1) * 0.2,
           (seed * 73.13) % (Math.PI * 2),
