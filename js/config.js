@@ -139,7 +139,7 @@ export const CONFIG = {
   SNOW_COLOR: { r: 1.4, g: 1.42, b: 1.5 },           // bright glowing snow (>1.0 for emissive bloom)
 
   // Steep slope bare rock
-  STEEP_ROCK_COLOR: { r: 0.52, g: 0.50, b: 0.48 },  // lighter grey rock (distinct from dirt/grass)
+  STEEP_ROCK_COLOR: { r: 0.28, g: 0.27, b: 0.26 },  // dark grey rock
 
   // Colors
   GROUND_LOW_COLOR: { r: 0.13, g: 0.24, b: 0.06 },   // dark green (low, near-shore)
