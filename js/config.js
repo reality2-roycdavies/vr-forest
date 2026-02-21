@@ -138,6 +138,9 @@ export const CONFIG = {
   ALPINE_ROCK_COLOR: { r: 0.45, g: 0.42, b: 0.38 }, // grey-brown rock
   SNOW_COLOR: { r: 1.4, g: 1.42, b: 1.5 },           // bright glowing snow (>1.0 for emissive bloom)
 
+  // Steep slope bare rock
+  STEEP_ROCK_COLOR: { r: 0.42, g: 0.40, b: 0.38 },  // neutral grey rock
+
   // Colors
   GROUND_LOW_COLOR: { r: 0.13, g: 0.24, b: 0.06 },   // dark green (low, near-shore)
   GROUND_MID_COLOR: { r: 0.28, g: 0.45, b: 0.12 },   // mid green

@@ -21,6 +21,7 @@ export function getGroundMaterial() {
   if (!groundMaterial) {
     const sandTex = createSandTexture();
     const dirtTex = createDirtTexture();
+    const rockTex = createRockTexture();
     groundMaterial = new THREE.MeshLambertMaterial({
       map: createGroundTexture(),
     });
@@ -29,6 +30,7 @@ export function getGroundMaterial() {
     groundMaterial.userData.waterDarkenUniform = groundWaterDarkenUniform;
     groundMaterial.userData.sandTex = sandTex;
     groundMaterial.userData.dirtTex = dirtTex;
+    groundMaterial.userData.rockTex = rockTex;
 
     // Per-pixel terrain coloring + texture + shadow control
     const shoreY = CONFIG.SHORE_LEVEL;
@@ -61,6 +63,8 @@ export function getGroundMaterial() {
       shader.uniforms.uWaterDarken = groundMaterial.userData.waterDarkenUniform;
       shader.uniforms.sandMap = { value: groundMaterial.userData.sandTex };
       shader.uniforms.dirtMap = { value: groundMaterial.userData.dirtTex };
+      shader.uniforms.rockMap = { value: groundMaterial.userData.rockTex };
+      shader.uniforms.steepRockColor = { value: new THREE.Color(CONFIG.STEEP_ROCK_COLOR.r, CONFIG.STEEP_ROCK_COLOR.g, CONFIG.STEEP_ROCK_COLOR.b) };
       shader.uniforms.subalpineColor = { value: new THREE.Color(CONFIG.SUBALPINE_COLOR.r, CONFIG.SUBALPINE_COLOR.g, CONFIG.SUBALPINE_COLOR.b) };
       shader.uniforms.tussockColor = { value: new THREE.Color(CONFIG.TUSSOCK_COLOR.r, CONFIG.TUSSOCK_COLOR.g, CONFIG.TUSSOCK_COLOR.b) };
       shader.uniforms.alpineRockColor = { value: new THREE.Color(CONFIG.ALPINE_ROCK_COLOR.r, CONFIG.ALPINE_ROCK_COLOR.g, CONFIG.ALPINE_ROCK_COLOR.b) };
@@ -100,6 +104,8 @@ export function getGroundMaterial() {
          uniform float uWaterDarken;
          uniform sampler2D sandMap;
          uniform sampler2D dirtMap;
+         uniform sampler2D rockMap;
+         uniform vec3 steepRockColor;
          uniform vec3 subalpineColor;
          uniform vec3 tussockColor;
          uniform vec3 alpineRockColor;
@@ -235,6 +241,18 @@ export function getGroundMaterial() {
          float slopeFlat = smoothstep(0.5, 0.9, vWorldNormal.y);
          terrainColor = mix(terrainColor, snowColor, snowBlend * slopeFlat);
 
+         // Steep slopes → bare rock (grey stone replaces grass/dirt on cliffs)
+         float steepNoise = _vnoise(vWorldPos.xz * 0.2) * 0.12
+                          + _vnoise(vWorldPos.xz * 0.6 + 90.0) * 0.06;
+         float steepFactor = 1.0 - smoothstep(0.55, 0.82, vWorldNormal.y + steepNoise);
+         // Suppress on sand/shore (rock blending looks wrong on beaches)
+         steepFactor *= grassBlend;
+         // Suppress where snow already covers (snow takes priority on high steep areas)
+         steepFactor *= (1.0 - snowBlend * 0.7);
+         if (steepFactor > 0.01) {
+           terrainColor = mix(terrainColor, steepRockColor, steepFactor);
+         }
+
          // Dynamic waterline that follows waves
          float dynWater = waterLevel + _waveH(vWorldPos.xz, uTime);
 
@@ -282,15 +300,19 @@ export function getGroundMaterial() {
            vec3 grassSamp = mix(texture2D(map, wUV).rgb, texture2D(map, wUV2).rgb, 0.35);
            vec3 sandSamp = mix(texture2D(sandMap, wUV * 0.7).rgb, texture2D(sandMap, wUV2 * 0.8).rgb, 0.35);
            vec3 dirtSamp = mix(texture2D(dirtMap, wUV * 0.85).rgb, texture2D(dirtMap, wUV2 * 0.9).rgb, 0.35);
+           vec3 rockSamp = mix(texture2D(rockMap, wUV * 0.6).rgb, texture2D(rockMap, wUV2 * 0.7).rgb, 0.35);
 
            // Convert to detail: per-channel centering to preserve color character
            vec3 grassTexDetail = grassSamp - vec3(0.53, 0.54, 0.49);
            vec3 sandTexDetail = sandSamp - vec3(0.56, 0.55, 0.52);
            vec3 dirtTexDetail = dirtSamp - vec3(0.50, 0.46, 0.40);
+           vec3 rockTexDetail = rockSamp - vec3(0.48, 0.47, 0.46);
 
            // Select detail based on terrain type
            vec3 detail = mix(sandTexDetail * 2.5, grassTexDetail, grassBlend);
            detail = mix(detail, dirtTexDetail, dirtFactor);
+           // Steep rock texture
+           detail = mix(detail, rockTexDetail, steepFactor);
            // Garden area: blend toward dirt texture (cottage clearings are bare soil)
            if (vCottageDensity > 0.01) {
              float gfFactor = smoothstep(0.05, 0.35, vCottageDensity);
@@ -328,6 +350,7 @@ export function setGroundAnisotropy(maxAnisotropy) {
     groundMaterial.map,
     groundMaterial.userData.sandTex,
     groundMaterial.userData.dirtTex,
+    groundMaterial.userData.rockTex,
   ];
   for (const tex of textures) {
     if (tex) {
@@ -587,6 +610,87 @@ function createDirtTexture(size = 256) {
     const y = Math.random() * size;
     const shade = 70 + Math.random() * 60;
     ctx.fillStyle = `rgba(${shade + 15 | 0}, ${shade | 0}, ${shade * 0.65 | 0}, ${0.1 + Math.random() * 0.15})`;
+    ctx.fillRect(x, y, 0.5 + Math.random(), 0.5 + Math.random());
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  return tex;
+}
+
+/**
+ * Procedural bare rock texture — grey stone with cracks, lichen patches, mineral veins.
+ */
+function createRockTexture(size = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Cool grey base
+  ctx.fillStyle = '#6a6764';
+  ctx.fillRect(0, 0, size, size);
+
+  // Broad stone grain — large gentle patches
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 2 + Math.random() * 8;
+    const shade = 80 + Math.random() * 50;
+    ctx.fillStyle = `rgba(${shade | 0}, ${shade * 0.97 | 0}, ${shade * 0.94 | 0}, ${0.1 + Math.random() * 0.2})`;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.arc(wx, wy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }, x, y, r + 2);
+  }
+
+  // Cracks — dark thin lines
+  for (let i = 0; i < 25; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const len = 8 + Math.random() * 25;
+    const angle = Math.random() * Math.PI * 2;
+    const shade = 40 + Math.random() * 25;
+    ctx.strokeStyle = `rgba(${shade | 0}, ${shade * 0.95 | 0}, ${shade * 0.9 | 0}, ${0.2 + Math.random() * 0.25})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.8;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.moveTo(wx, wy);
+      let cx = wx, cy = wy;
+      const steps = 3 + Math.floor(Math.random() * 3);
+      for (let s = 0; s < steps; s++) {
+        const t = (s + 1) / steps;
+        cx = wx + len * t * Math.cos(angle) + (Math.random() - 0.5) * 4;
+        cy = wy + len * t * Math.sin(angle) + (Math.random() - 0.5) * 4;
+        ctx.lineTo(cx, cy);
+      }
+      ctx.stroke();
+    }, x, y, len + 8);
+  }
+
+  // Lichen patches — subtle green-grey spots
+  for (let i = 0; i < 20; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 1.5 + Math.random() * 4;
+    const g = 85 + Math.random() * 30;
+    ctx.fillStyle = `rgba(${g * 0.8 | 0}, ${g | 0}, ${g * 0.7 | 0}, ${0.08 + Math.random() * 0.12})`;
+    drawWrappedHelper(ctx, size, (wx, wy) => {
+      ctx.beginPath();
+      ctx.arc(wx, wy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }, x, y, r + 2);
+  }
+
+  // Mineral speckle — fine bright/dark dots
+  for (let i = 0; i < 600; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const shade = 60 + Math.random() * 80;
+    ctx.fillStyle = `rgba(${shade | 0}, ${shade | 0}, ${shade * 0.95 | 0}, ${0.12 + Math.random() * 0.15})`;
     ctx.fillRect(x, y, 0.5 + Math.random(), 0.5 + Math.random());
   }
 

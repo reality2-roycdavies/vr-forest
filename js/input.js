@@ -122,7 +122,8 @@ export class InputManager {
       if (source.handedness === 'left') {
         this.leftStick.x = Math.abs(sx) > CONFIG.THUMBSTICK_DEADZONE ? sx : 0;
         this.leftStick.y = Math.abs(sy) > CONFIG.THUMBSTICK_DEADZONE ? sy : 0;
-        if ((buttons[4] && buttons[4].pressed) || (buttons[3] && buttons[3].pressed)) {
+        // Trigger (button 0) = jump
+        if (buttons[0] && buttons[0].pressed) {
           this.jumpPressed = true;
         }
         // Left grip = button 1
@@ -131,7 +132,8 @@ export class InputManager {
       } else if (source.handedness === 'right') {
         this.rightStick.x = Math.abs(sx) > CONFIG.THUMBSTICK_DEADZONE ? sx : 0;
         this.rightStick.y = Math.abs(sy) > CONFIG.THUMBSTICK_DEADZONE ? sy : 0;
-        if ((buttons[3] && buttons[3].pressed)) {
+        // Trigger (button 0) = jump
+        if (buttons[0] && buttons[0].pressed) {
           this.jumpPressed = true;
         }
         // Right grip = button 1
