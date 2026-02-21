@@ -416,7 +416,7 @@ export class MovementSystem {
 
   /**
    * Check if a position is too steep to walk on (bare rock cliff).
-   * Matches the shader's steep rock threshold (normalY < ~0.7).
+   * Only blocks on very steep cliffs where rock is visually dominant.
    */
   _isTooSteep(px, pz) {
     const eps = 0.5;
@@ -428,7 +428,7 @@ export class MovementSystem {
     const sz = (hU - hD) / (2 * eps);
     // Normal Y = 1 / sqrt(sx² + 1 + sz²)
     const normalY = 1 / Math.sqrt(sx * sx + 1 + sz * sz);
-    return normalY < 0.78;
+    return normalY < 0.55;
   }
 
   getPlayerPosition() {
