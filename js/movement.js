@@ -428,7 +428,7 @@ export class MovementSystem {
     const sz = (hU - hD) / (2 * eps);
     // Normal Y = 1 / sqrt(sx² + 1 + sz²)
     const normalY = 1 / Math.sqrt(sx * sx + 1 + sz * sz);
-    return normalY < 0.7;
+    return normalY < 0.78;
   }
 
   getPlayerPosition() {
