@@ -68,12 +68,15 @@ export class CollectibleSystem {
         uOpacity: { value: 0 },
       },
       vertexShader: `
-        attribute vec3 instanceColor;
         varying vec2 vUv;
         varying vec3 vColor;
         void main() {
           vUv = uv;
-          vColor = instanceColor;
+          #ifdef USE_INSTANCING_COLOR
+            vColor = instanceColor;
+          #else
+            vColor = vec3(1.0);
+          #endif
           gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
         }
       `,
