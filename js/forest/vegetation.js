@@ -934,9 +934,11 @@ export class VegetationPool {
         const sx = (hR - hL) / (2 * eps);
         const sz = (hU - hD) / (2 * eps);
         const slopeMag = Math.sqrt(sx * sx + sz * sz);
-        // Sink proportional to slope and rock size (larger rocks sink more)
-        const sinkAmounts = [0.06, 0.12, 0.25];
-        const sink = slopeMag * (sinkAmounts[si] + 0.15);
+        // Sink proportional to slope and rock size — always sink a base amount
+        // so rocks look embedded, plus extra on slopes
+        const baseEmbed = [0.08, 0.15, 0.30];
+        const slopeSink = [0.3, 0.5, 0.8];
+        const sink = baseEmbed[si] + slopeMag * slopeSink[si];
 
         _position.set(r.x, r.y - sink, r.z);
 

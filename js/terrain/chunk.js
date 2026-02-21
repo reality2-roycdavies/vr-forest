@@ -284,16 +284,12 @@ export class Chunk {
         const jxR = wx + jitterR.x * 1.5;
         const jzR = wz + jitterR.z * 1.5;
         const yR = getTerrainHeight(jxR, jzR);
-        if (yR > CONFIG.SNOWLINE_START + 3) {
-          continue; // no rocks deep into snow zone
-        } else if (yR > CONFIG.SNOWLINE_START) {
-          threshold -= 0.35; // dense rocks just below snowline
+        if (yR > CONFIG.SNOWLINE_START) {
+          continue; // no rock objects in snow zone
         } else if (yR > CONFIG.ALPINE_START) {
-          threshold -= 0.35; // rocky alpine scree fields
+          threshold -= 0.15; // more rocks in alpine
         } else if (yR > CONFIG.TREELINE_START) {
-          threshold -= 0.2;  // scattered rocks above treeline
-        } else if (yR > CONFIG.SUBALPINE_START) {
-          threshold -= 0.1;  // occasional rocks in subalpine
+          threshold -= 0.1;  // scattered rocks above treeline
         }
 
         if (density > threshold) {
@@ -316,25 +312,6 @@ export class Chunk {
       }
     }
 
-    // Extra dense pass for alpine/sub-snowline zone (half-grid offset)
-    const alpineSpacing = spacing * 0.5;
-    for (let lz = alpineSpacing * 0.7; lz < size; lz += alpineSpacing) {
-      for (let lx = alpineSpacing * 0.7; lx < size; lx += alpineSpacing) {
-        const wx = worldOffX + lx;
-        const wz = worldOffZ + lz;
-        const jitter = getJitter(wx + 500, wz + 500);
-        const jx = wx + jitter.x * 1.0;
-        const jz = wz + jitter.z * 1.0;
-        const y = getTerrainHeight(jx, jz);
-        if (y < CONFIG.ALPINE_START || y > CONFIG.SNOWLINE_START + 2) continue;
-        const density = getRockDensity(wx + 50, wz + 50); // offset to avoid overlapping main pass
-        if (density > 0.15) { // very low threshold = dense scree
-          const sizeIdx = density > 0.6 ? 1 : 0; // mostly small rocks
-          const rotSeed = jx * 13.1 + jz * 19.3;
-          this.rockPositions.push({ x: jx, y, z: jz, sizeIdx, rotSeed });
-        }
-      }
-    }
   }
 
   _generateLogs(chunkX, chunkZ) {
