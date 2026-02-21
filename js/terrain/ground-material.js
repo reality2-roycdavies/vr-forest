@@ -243,7 +243,7 @@ export function getGroundMaterial() {
 
          // Steep slopes → bare rock (grey stone on moderate-to-steep slopes)
          float steepNoise = _vnoise(vWorldPos.xz * 0.3) * 0.02;
-         float steepFactor = 1.0 - smoothstep(0.88, 0.96, vWorldNormal.y + steepNoise);
+         float steepFactor = 1.0 - smoothstep(0.75, 0.90, vWorldNormal.y + steepNoise);
          // Reduce on sand/shore but don't fully suppress (stream banks show rock)
          steepFactor *= mix(0.3, 1.0, grassBlend);
          // Suppress where snow already covers (snow takes priority on high steep areas)
