@@ -20,7 +20,7 @@ export function initTreeGeometries() {
     createCanopyTexture(0x18401a, 128, 'needle'),  // Pine: dark cool green needles
     createCanopyTexture(0x386020, 128, 'broad'),    // Oak: warm rich green broad leaves
     createCanopyTexture(0x5a9035, 128, 'small'),    // Birch: bright yellow-green small leaves
-    createCanopyTexture(0x1a3828, 128, 'scale'),    // Alpine: dense dark blue-green scales
+    createCanopyTexture(0xB08840, 128, 'small'),     // Tussock: golden straw (not used, tussock has vertex colors only)
   ];
 
   const trunkMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: barkTex });
@@ -113,43 +113,61 @@ export function initTreeGeometries() {
     canopyMaterials.push(birchCanopyMat);
   }
 
-  // --- Type 3: Alpine (hardy, windswept) ---
+  // --- Type 3: Tussock grass (alpine zone) ---
+  // NZ red tussock (Chionochloa rubra): dense dome of golden-straw blades.
+  // Inner core blades: short, wide, various angles → creates solid visual mass.
+  // Outer blades: longer, thinner, fountain-arching → creates characteristic silhouette.
   {
-    const trunk = buildTrunk(0.08, 0.15, 0.7, 8, 5, [
-      { height: 0.2, angle: 0.4, length: 0.45 },
-      { height: 0.32, angle: -0.8, length: 0.40 },
-      { height: 0.42, angle: 1.6, length: 0.35 },
-      { height: 0.52, angle: -0.2, length: 0.30 },
-      { height: 0.62, angle: 1.0, length: 0.25 },
-    ]);
-    // Stronger S-curve for gnarled feel
-    const trunkPos = trunk.getAttribute('position');
-    for (let i = 0; i < trunkPos.count; i++) {
-      const y = trunkPos.getY(i);
-      const t = y / 0.7;
-      const extraBend = Math.sin(t * Math.PI) * 0.04 + Math.sin(t * Math.PI * 3.0) * 0.02;
-      trunkPos.setX(i, trunkPos.getX(i) + extraBend);
-    }
-    trunkPos.needsUpdate = true;
-    trunk.computeVertexNormals();
-    addCylindricalUVs(trunk, 0.7);
+    const trunk = buildTrunk(0.02, 0.03, 0.05, 4, 1, []);
+    addCylindricalUVs(trunk, 0.05);
     trunkGeometries.push(trunk);
 
     const parts = [];
-    // Asymmetric canopy offset to +X for windswept look
-    parts.push(makeCanopySphere(0.2, 0.75, 0, 0.45, 2));
-    parts.push(makeCanopySphere(0.35, 0.85, 0.15, 0.38, 2));
-    parts.push(makeCanopySphere(-0.05, 0.9, -0.18, 0.40, 2));
-    parts.push(makeCanopySphere(0.15, 1.05, 0.05, 0.32, 2));
-    parts.push(makeCanopySphere(0.30, 0.7, -0.20, 0.30, 2));
+    const totalBlades = 140;
+
+    for (let i = 0; i < totalBlades; i++) {
+      const angle = (i / totalBlades) * Math.PI * 2 + Math.sin(i * 7.1) * 0.3;
+      const dist = 0.01 + Math.abs(Math.sin(i * 5.3)) * 0.07;
+      const bladeH = 0.20 + Math.abs(Math.sin(i * 11.3)) * 0.18; // 0.20-0.38
+      const bladeW = 0.007 + Math.abs(Math.sin(i * 9.1)) * 0.005; // fine
+      const blade = new THREE.PlaneGeometry(bladeW, bladeH, 1, 4);
+      const posAttr = blade.getAttribute('position');
+      // Taper to fine point
+      for (let vi = 0; vi < posAttr.count; vi++) {
+        const t = (posAttr.getY(vi) / bladeH) + 0.5;
+        posAttr.setX(vi, posAttr.getX(vi) * (1.0 - t * 0.92));
+      }
+      posAttr.needsUpdate = true;
+      // Random facing for all-angle visibility
+      blade.rotateY(angle + Math.sin(i * 13.7) * 0.8);
+      blade.translate(Math.cos(angle) * dist, bladeH * 0.5, Math.sin(angle) * dist);
+      // Outward lean from the base, increasing toward tip
+      const leanStr = 0.15 + Math.abs(Math.sin(i * 3.7)) * 0.20; // per-blade variation
+      for (let vi = 0; vi < posAttr.count; vi++) {
+        const y = posAttr.getY(vi);
+        const t = Math.max(0, Math.min(1, y / (bladeH * 0.92)));
+        const outward = t * t * bladeH * leanStr;
+        posAttr.setX(vi, posAttr.getX(vi) + Math.cos(angle) * outward);
+        posAttr.setZ(vi, posAttr.getZ(vi) + Math.sin(angle) * outward);
+        // Slight tip droop
+        if (t > 0.7) {
+          const droopT = (t - 0.7) / 0.3;
+          posAttr.setY(vi, y - droopT * droopT * bladeH * 0.10);
+        }
+      }
+      posAttr.needsUpdate = true;
+      blade.computeVertexNormals();
+      parts.push(blade);
+    }
+
     const canopy = mergeAll(parts);
-    tintCanopyVertexColors(canopy, 0x1a3828, 0.35);
+    tintCanopyVertexColors(canopy, 0xB08840, 0.20); // golden straw
     canopyGeometries.push(canopy);
 
     trunkMaterials.push(trunkMat);
-    const alpineMat = new THREE.MeshPhongMaterial({ vertexColors: true, map: canopyTexes[3], side: THREE.DoubleSide, specular: 0x000000, shininess: 0 });
-    addWindToMaterial(alpineMat, 'canopy');
-    canopyMaterials.push(alpineMat);
+    const tussockMat = new THREE.MeshPhongMaterial({ vertexColors: true, side: THREE.DoubleSide, specular: 0x111111, shininess: 8 });
+    addWindToMaterial(tussockMat, 'vegetation');
+    canopyMaterials.push(tussockMat);
   }
 }
 
@@ -317,12 +335,12 @@ function tintCanopyVertexColors(geometry, baseColorHex, variationAmount) {
     const t = ht * 0.6 + dt * 0.4;
     _color.copy(darker).lerp(lighter, t);
 
-    // Baked ambient occlusion: subtle darkening of interior/bottom vertices
+    // Baked ambient occlusion: very subtle darkening of interior/bottom vertices
     const trunkDist = Math.sqrt(x * x + z * z);
     const aoFactor = Math.min(1.0, trunkDist * 3.0) * (0.5 + ht * 0.5);
-    _color.r *= 0.65 + aoFactor * 0.35;
-    _color.g *= 0.65 + aoFactor * 0.35;
-    _color.b *= 0.65 + aoFactor * 0.35;
+    _color.r *= 0.80 + aoFactor * 0.20;
+    _color.g *= 0.80 + aoFactor * 0.20;
+    _color.b *= 0.80 + aoFactor * 0.20;
 
     // Warm/cool gradient: sunlit tops vs shadowed undersides
     const warmShift = ht * 0.03;

@@ -44,6 +44,7 @@ export class Chunk {
     this._generateCottages(chunkX, chunkZ);
     // cottageDensity updated later in onChunksChanged with all cottage positions
     this._generateTrees(chunkX, chunkZ);
+    this._generateTussock(chunkX, chunkZ);
     this._generateVegetation(chunkX, chunkZ);
     this._generateFlowers(chunkX, chunkZ);
     this._generateRocks(chunkX, chunkZ);
@@ -107,33 +108,102 @@ export class Chunk {
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL) continue;
 
-          // Mountain treeline: alpine trees survive higher
-          const treelineLimit = CONFIG.TREELINE_START + 2;
-          const alpineLimit = CONFIG.TREELINE_START + 4;
+          // Trees stop before scree/alpine rock; tussock in high alpine only
+          const treeUpperLimit = CONFIG.TREELINE_START + 2; // Y=18, before scree
+          const tussockStart = CONFIG.TREELINE_START + 2;   // Y=18
+          const tussockLimit = CONFIG.SNOWLINE_START + 2;   // Y=22
 
           // Cottage clearing: suppress trees near cottages
           if (this._isNearAnyCottage(jx, jz)) continue;
 
-          let type = Math.abs(Math.floor(density * 30)) % CONFIG.TREE_TYPES;
+          // Only 3 real tree types; type 3 = tussock (alpine only)
+          let type = Math.abs(Math.floor(density * 30)) % 3;
           let scale = CONFIG.TREE_MIN_HEIGHT +
             (density - CONFIG.TREE_DENSITY_THRESHOLD) /
             (1 - CONFIG.TREE_DENSITY_THRESHOLD) *
             (CONFIG.TREE_MAX_HEIGHT - CONFIG.TREE_MIN_HEIGHT);
 
           let altitudeScale = 1.0;
-          if (y > CONFIG.SUBALPINE_START) {
-            // Alpine trees survive higher than other types
-            if (y > alpineLimit) continue;
+          if (y > tussockStart) {
+            continue; // tussock zone — handled by _generateTussock
+          } else if (y > CONFIG.SUBALPINE_START) {
+            // Subalpine: regular trees getting smaller, stop before scree
+            if (y > treeUpperLimit) continue;
             altitudeScale = 1 - (y - CONFIG.SUBALPINE_START) /
-              (alpineLimit - CONFIG.SUBALPINE_START);
-            altitudeScale = Math.max(CONFIG.TREELINE_SCALE_MIN, altitudeScale);
-            // Above subalpine: alpine trees only (type 3)
-            type = 3;
+              (treeUpperLimit - CONFIG.SUBALPINE_START);
+            altitudeScale = Math.max(0.5, altitudeScale);
+            scale *= altitudeScale;
           }
-          scale *= altitudeScale;
 
-          this.treePositions.push({ x: jx, y: y - 0.15, z: jz, type, scale });
+          const treeData = { x: jx, y: y - 0.15, z: jz, type, scale };
+          // Store slope gradient for tussock so instances can tilt with terrain
+          if (type === 3) {
+            const sEps = 0.5;
+            const shL = getTerrainHeight(jx - sEps, jz);
+            const shR = getTerrainHeight(jx + sEps, jz);
+            const shD = getTerrainHeight(jx, jz - sEps);
+            const shU = getTerrainHeight(jx, jz + sEps);
+            treeData.slopeX = (shR - shL) / (2 * sEps);
+            treeData.slopeZ = (shU - shD) / (2 * sEps);
+          }
+          this.treePositions.push(treeData);
         }
+      }
+    }
+  }
+
+  _generateTussock(chunkX, chunkZ) {
+    const spacing = 1.2; // dense grid for tussock
+    const size = CONFIG.CHUNK_SIZE;
+    const worldOffX = chunkX * size;
+    const worldOffZ = chunkZ * size;
+    const tussockStart = CONFIG.SUBALPINE_START + 2; // Y=12, amongst upper trees
+    const tussockPeak = CONFIG.TREELINE_START;       // Y=16, densest zone
+    const tussockLimit = CONFIG.SNOWLINE_START;       // Y=20, stops at snowline
+
+    for (let lz = spacing * 0.3; lz < size; lz += spacing) {
+      for (let lx = spacing * 0.3; lx < size; lx += spacing) {
+        const wx = worldOffX + lx;
+        const wz = worldOffZ + lz;
+        const jitter = getJitter(wx + 900, wz + 900);
+        const jx = wx + jitter.x * 0.5;
+        const jz = wz + jitter.z * 0.5;
+        const y = getTerrainHeight(jx, jz);
+
+        if (y < tussockStart || y > tussockLimit) continue;
+
+        // Density ramps: sparse at edges, dense in middle
+        let edgeDensity;
+        if (y < tussockPeak) {
+          edgeDensity = (y - tussockStart) / (tussockPeak - tussockStart); // 0→1
+        } else {
+          edgeDensity = (tussockLimit - y) / (tussockLimit - tussockPeak); // 1→0
+        }
+        // Hash-based rejection using edge density as probability
+        const placeHash = Math.sin(jx * 127.1 + jz * 311.7) * 43758.5453;
+        const placeFrac = placeHash - Math.floor(placeHash);
+        if (placeFrac > edgeDensity) continue;
+
+        // Noise-based clumping variation
+        const density = getTreeDensity(jx + 400, jz + 400);
+        if (density < -0.3) continue;
+
+        const sEps = 0.5;
+        const shL = getTerrainHeight(jx - sEps, jz);
+        const shR = getTerrainHeight(jx + sEps, jz);
+        const shD = getTerrainHeight(jx, jz - sEps);
+        const shU = getTerrainHeight(jx, jz + sEps);
+
+        // Varied size: hash-based scale 0.5 to 2.0
+        const sizeHash = Math.sin(jx * 41.57 + jz * 63.29) * 43758.5453;
+        const sizeFrac = sizeHash - Math.floor(sizeHash);
+        const tScale = 0.5 + sizeFrac * 1.5;
+
+        this.treePositions.push({
+          x: jx, y: y - 0.15, z: jz, type: 3, scale: tScale,
+          slopeX: (shR - shL) / (2 * sEps),
+          slopeZ: (shU - shD) / (2 * sEps),
+        });
       }
     }
   }

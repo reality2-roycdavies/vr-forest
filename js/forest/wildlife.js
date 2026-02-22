@@ -273,6 +273,8 @@ export class WildlifeSystem {
         if (!chunk || !chunk.active) continue;
 
         for (const tree of chunk.treePositions) {
+          // Skip tussock (type 3) — too small to hide behind
+          if (tree.type === 3) continue;
           _toTree.set(tree.x - playerPos.x, 0, tree.z - playerPos.z);
           const dist = _toTree.length();
           if (dist < 5 || dist > 30) continue;

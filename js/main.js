@@ -245,9 +245,9 @@ waterMat.onBeforeCompile = (shader) => {
     '#include <dithering_fragment>',
     `#include <dithering_fragment>
     vec2 wPos = vWorldPos.xz;
-    // Scale additive effects by current brightness so they fade at night
+    // Scale additive effects by current brightness so they vanish at night
     float baseLum = dot(gl_FragColor.rgb, vec3(0.3, 0.5, 0.2));
-    float effectScale = clamp(baseLum * 8.0, 0.05, 1.0);
+    float effectScale = smoothstep(0.0, 0.20, baseLum);
     // Wave height tinting — crests lighter, troughs darker
     float wNorm = clamp(vWaveH * 5.0 + 0.5, 0.0, 1.0);
     gl_FragColor.rgb += (wNorm - 0.5) * 0.12 * effectScale;

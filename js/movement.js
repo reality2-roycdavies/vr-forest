@@ -348,6 +348,7 @@ export class MovementSystem {
         if (!chunk || !chunk.active) continue;
 
         for (const tree of chunk.treePositions) {
+          if (tree.type === 3) continue; // tussock — no collision
           const ddx = px - tree.x;
           const ddz = pz - tree.z;
           const distSq = ddx * ddx + ddz * ddz;

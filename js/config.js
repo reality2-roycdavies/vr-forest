@@ -54,13 +54,13 @@ export const CONFIG = {
   AMBIENT_VOLUME: 0.3,
   SUN_VISUAL_RADIUS: 14,       // visual sun disc size
   SUN_DISTANCE: 150,           // distance from player (within camera far plane)
-  CLOUD_COUNT: 18,             // number of cloud groups
-  CLOUD_MIN_RADIUS: 40,        // cloud ring inner radius
-  CLOUD_MAX_RADIUS: 180,       // cloud ring outer radius
-  CLOUD_HEIGHT_MIN: 60,
-  CLOUD_HEIGHT_MAX: 110,
+  CLOUD_COUNT: 32,             // number of cloud groups
+  CLOUD_MIN_RADIUS: 35,        // cloud ring inner radius
+  CLOUD_MAX_RADIUS: 200,       // cloud ring outer radius
+  CLOUD_HEIGHT_MIN: 55,
+  CLOUD_HEIGHT_MAX: 115,
   CLOUD_SCALE_MIN: 25,
-  CLOUD_SCALE_MAX: 60,
+  CLOUD_SCALE_MAX: 65,
 
   // Default location for sun/moon calculation (overridden by geolocation)
   DEFAULT_LATITUDE: -36.85,    // Auckland fallback

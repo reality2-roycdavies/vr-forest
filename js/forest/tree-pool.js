@@ -13,13 +13,15 @@ const _position = new THREE.Vector3();
 const _quaternion = new THREE.Quaternion();
 const _scale = new THREE.Vector3();
 const _color = new THREE.Color();
+const _slopeQuat = new THREE.Quaternion();
+const _slopeAxis = new THREE.Vector3();
 
 // Base HSL values for per-instance canopy color variation
 const CANOPY_BASE_HSL = [
-  { h: 0.35, s: 0.55, l: 0.28 },  // Pine: dark cool green
-  { h: 0.30, s: 0.50, l: 0.35 },  // Oak: warm rich green
-  { h: 0.27, s: 0.45, l: 0.42 },  // Birch: bright yellow-green
-  { h: 0.42, s: 0.45, l: 0.24 },  // Alpine: dark blue-green
+  { h: 0.35, s: 0.50, l: 0.38 },  // Pine: cool green
+  { h: 0.30, s: 0.45, l: 0.42 },  // Oak: warm rich green
+  { h: 0.27, s: 0.40, l: 0.48 },  // Birch: bright yellow-green
+  { h: 0.10, s: 0.50, l: 0.42 },  // Tussock: golden straw
 ];
 
 export class TreePool {
@@ -103,6 +105,19 @@ export class TreePool {
         // Per-tree Y rotation from position hash for variety
         const angle = (t.x * 73.13 + t.z * 37.17) % (Math.PI * 2);
         _quaternion.setFromAxisAngle({ x: 0, y: 1, z: 0 }, angle);
+
+        // Tussock (type 3): tilt with terrain slope
+        if (type === 3 && t.slopeX !== undefined) {
+          const sMag = Math.sqrt(t.slopeX * t.slopeX + t.slopeZ * t.slopeZ);
+          if (sMag > 0.02) {
+            const tiltAmt = Math.min(sMag * 0.25, 0.35);
+            // Tilt axis perpendicular to slope gradient (cross product with up)
+            _slopeAxis.set(-t.slopeZ / sMag, 0, t.slopeX / sMag);
+            _slopeQuat.setFromAxisAngle(_slopeAxis, tiltAmt);
+            _quaternion.premultiply(_slopeQuat);
+          }
+        }
+
         const s = t.scale;
         _scale.set(s, s, s);
         _matrix.compose(_position, _quaternion, _scale);
@@ -110,10 +125,14 @@ export class TreePool {
         trunkMesh.setMatrixAt(i, _matrix);
         canopyMesh.setMatrixAt(i, _matrix);
 
-        // Per-instance canopy color variation
-        const hueShift = ((t.x * 73.13 + t.z * 37.17) % 1.0) * 0.12 - 0.06;
-        const satShift = ((t.x * 17.31 + t.z * 91.73) % 1.0) * 0.08 - 0.04;
-        const lumShift = ((t.x * 41.57 + t.z * 63.29) % 1.0) * 0.06 - 0.03;
+        // Per-instance canopy color variation (wider range for tussock)
+        const isTussock = type === 3;
+        const hRange = isTussock ? 0.30 : 0.12;  // golden → reddish → greenish
+        const sRange = isTussock ? 0.20 : 0.08;
+        const lRange = isTussock ? 0.18 : 0.06;
+        const hueShift = ((t.x * 73.13 + t.z * 37.17) % 1.0) * hRange - hRange * 0.5;
+        const satShift = ((t.x * 17.31 + t.z * 91.73) % 1.0) * sRange - sRange * 0.5;
+        const lumShift = ((t.x * 41.57 + t.z * 63.29) % 1.0) * lRange - lRange * 0.5;
         _color.setHSL(
           baseHSL.h + hueShift,
           Math.max(0, Math.min(1, baseHSL.s + satShift)),
