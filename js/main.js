@@ -166,9 +166,6 @@ waterMat.onBeforeCompile = (shader) => {
       h += sin(dot(pc, vec2( 1.60, -0.90)) + t * 2.80) * 0.015 * uRainIntensity;
       h += sin(dot(pc, vec2(-1.25,  1.55)) + t * 3.20) * 0.012 * uRainIntensity;
       h += sin(dot(pc, vec2( 2.00,  1.15)) + t * 2.50) * 0.010 * uRainIntensity;
-      h += sin(dot(pc, vec2(-0.95, -2.20)) + t * 3.60) * 0.008 * uRainIntensity;
-      h += sin(dot(pc, vec2( 2.40,  0.40)) + t * 4.10) * 0.006 * uRainIntensity;
-      h += sin(dot(pc, vec2(-1.85,  2.30)) + t * 3.80) * 0.005 * uRainIntensity;
       return h;
     }
     // Surface pattern for flecks — multiple sine layers, no grid
@@ -194,26 +191,14 @@ waterMat.onBeforeCompile = (shader) => {
     '#include <beginnormal_vertex>',
     `// Wave normal from finite differences (runs before defaultnormal_vertex)
     vec3 wpN = (modelMatrix * vec4(position, 1.0)).xyz;
-    // Wider sample spacing + averaged normals for smoother reflections
+    // Wave normal from finite differences (fragment shader adds fine detail)
     float epsN = 1.2;
     float hL = waveHeight(wpN.xz - vec2(epsN, 0.0), uTime) * uWaveAmplitude;
     float hR = waveHeight(wpN.xz + vec2(epsN, 0.0), uTime) * uWaveAmplitude;
     float hD = waveHeight(wpN.xz - vec2(0.0, epsN), uTime) * uWaveAmplitude;
     float hU = waveHeight(wpN.xz + vec2(0.0, epsN), uTime) * uWaveAmplitude;
-    // Second sample at tighter spacing for fine detail
-    float epsF = 0.4;
-    float hL2 = waveHeight(wpN.xz - vec2(epsF, 0.0), uTime) * uWaveAmplitude;
-    float hR2 = waveHeight(wpN.xz + vec2(epsF, 0.0), uTime) * uWaveAmplitude;
-    float hD2 = waveHeight(wpN.xz - vec2(0.0, epsF), uTime) * uWaveAmplitude;
-    float hU2 = waveHeight(wpN.xz + vec2(0.0, epsF), uTime) * uWaveAmplitude;
-    // Blend broad and fine normals (70% broad, 30% fine) for smooth yet detailed surface
-    float dxB = (hL - hR) / (2.0 * epsN);
-    float dzB = (hD - hU) / (2.0 * epsN);
-    float dxF = (hL2 - hR2) / (2.0 * epsF);
-    float dzF = (hD2 - hU2) / (2.0 * epsF);
-    float dxN = dxB * 0.7 + dxF * 0.3;
-    float dzN = dzB * 0.7 + dzF * 0.3;
-    // Moderate tilt so lighting reveals wave shape without harsh angular reflections
+    float dxN = (hL - hR) / (2.0 * epsN);
+    float dzN = (hD - hU) / (2.0 * epsN);
     vec3 objectNormal = normalize(vec3(dxN * 2.5, 1.0, dzN * 2.5));
     vWaveNormal = objectNormal;
     #ifdef USE_TANGENT

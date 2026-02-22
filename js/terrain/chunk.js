@@ -153,7 +153,7 @@ export class Chunk {
   }
 
   _generateTussock(chunkX, chunkZ) {
-    const spacing = 1.2; // dense grid for tussock
+    const spacing = 2.0; // tussock grid (denser than trees, lighter than veg)
     const size = CONFIG.CHUNK_SIZE;
     const worldOffX = chunkX * size;
     const worldOffZ = chunkZ * size;

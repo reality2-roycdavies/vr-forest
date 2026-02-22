@@ -30,12 +30,10 @@ export function initTreeGeometries() {
 
   // --- Type 0: Pine ---
   {
-    const trunk = buildTrunk(0.06, 0.13, 1.1, 8, 4, [
+    const trunk = buildTrunk(0.06, 0.13, 1.1, 8, 3, [
       { height: 0.4, angle: 0.5, length: 0.28 },
-      { height: 0.55, angle: -0.7, length: 0.25 },
-      { height: 0.7, angle: 1.9, length: 0.22 },
-      { height: 0.78, angle: -1.4, length: 0.18 },
-      { height: 0.88, angle: 0.9, length: 0.15 },
+      { height: 0.6, angle: -0.7, length: 0.25 },
+      { height: 0.78, angle: 1.9, length: 0.22 },
     ]);
     addCylindricalUVs(trunk, 1.1);
     trunkGeometries.push(trunk);
@@ -58,21 +56,19 @@ export function initTreeGeometries() {
 
   // --- Type 1: Oak ---
   {
-    const trunk = buildTrunk(0.09, 0.17, 0.95, 8, 4, [
+    const trunk = buildTrunk(0.09, 0.17, 0.95, 8, 3, [
       { height: 0.35, angle: 0.8, length: 0.48 },
-      { height: 0.45, angle: -0.6, length: 0.42 },
-      { height: 0.58, angle: 1.8, length: 0.35 },
-      { height: 0.7, angle: -1.2, length: 0.28 },
-      { height: 0.82, angle: 0.4, length: 0.22 },
+      { height: 0.55, angle: -0.6, length: 0.42 },
+      { height: 0.75, angle: 1.8, length: 0.35 },
     ]);
     addCylindricalUVs(trunk, 0.95);
     trunkGeometries.push(trunk);
 
     const parts = [];
-    parts.push(makeCanopySphere(0, 1.35, 0, 0.55, 3));
-    parts.push(makeCanopySphere(0.32, 1.25, 0.18, 0.45, 3));
-    parts.push(makeCanopySphere(-0.28, 1.3, -0.22, 0.48, 3));
-    parts.push(makeCanopySphere(0.05, 1.6, -0.12, 0.42, 3));
+    parts.push(makeCanopySphere(0, 1.35, 0, 0.55, 2));
+    parts.push(makeCanopySphere(0.32, 1.25, 0.18, 0.45, 2));
+    parts.push(makeCanopySphere(-0.28, 1.3, -0.22, 0.48, 2));
+    parts.push(makeCanopySphere(0.05, 1.6, -0.12, 0.42, 2));
     parts.push(makeCanopySphere(-0.15, 1.55, 0.25, 0.38, 2));
     parts.push(makeCanopySphere(0.2, 1.5, -0.3, 0.35, 2));
     const canopy = mergeAll(parts);
@@ -87,12 +83,10 @@ export function initTreeGeometries() {
 
   // --- Type 2: Birch ---
   {
-    const trunk = buildTrunk(0.04, 0.07, 1.3, 6, 5, [
+    const trunk = buildTrunk(0.04, 0.07, 1.3, 6, 3, [
       { height: 0.55, angle: 0.6, length: 0.28 },
-      { height: 0.72, angle: -0.9, length: 0.26 },
-      { height: 0.88, angle: 1.5, length: 0.23 },
-      { height: 1.02, angle: -0.3, length: 0.18 },
-      { height: 1.15, angle: 1.1, length: 0.14 },
+      { height: 0.75, angle: -0.9, length: 0.26 },
+      { height: 0.95, angle: 1.5, length: 0.23 },
     ]);
     tintTrunkBirch(trunk);
     addCylindricalUVs(trunk, 1.3);
@@ -123,14 +117,14 @@ export function initTreeGeometries() {
     trunkGeometries.push(trunk);
 
     const parts = [];
-    const totalBlades = 140;
+    const totalBlades = 56;
 
     for (let i = 0; i < totalBlades; i++) {
       const angle = (i / totalBlades) * Math.PI * 2 + Math.sin(i * 7.1) * 0.3;
       const dist = 0.01 + Math.abs(Math.sin(i * 5.3)) * 0.07;
       const bladeH = 0.20 + Math.abs(Math.sin(i * 11.3)) * 0.18; // 0.20-0.38
       const bladeW = 0.007 + Math.abs(Math.sin(i * 9.1)) * 0.005; // fine
-      const blade = new THREE.PlaneGeometry(bladeW, bladeH, 1, 4);
+      const blade = new THREE.PlaneGeometry(bladeW, bladeH, 1, 2);
       const posAttr = blade.getAttribute('position');
       // Taper to fine point
       for (let vi = 0; vi < posAttr.count; vi++) {
@@ -242,7 +236,7 @@ function tintTrunkBirch(geometry) {
  * A cone lobe for conifer-style canopies
  */
 function makeCanopyLobe(ox, oy, oz, radius, height, segments) {
-  const cone = new THREE.ConeGeometry(radius, height, segments, 3, true); // openEnded: no flat base
+  const cone = new THREE.ConeGeometry(radius, height, segments, 2, true); // openEnded: no flat base
   jitterVertices(cone, 0.08);
   cone.translate(ox, oy + height * 0.35, oz);
   return cone;

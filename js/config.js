@@ -54,7 +54,7 @@ export const CONFIG = {
   AMBIENT_VOLUME: 0.3,
   SUN_VISUAL_RADIUS: 14,       // visual sun disc size
   SUN_DISTANCE: 150,           // distance from player (within camera far plane)
-  CLOUD_COUNT: 32,             // number of cloud groups
+  CLOUD_COUNT: 20,             // number of cloud groups
   CLOUD_MIN_RADIUS: 35,        // cloud ring inner radius
   CLOUD_MAX_RADIUS: 200,       // cloud ring outer radius
   CLOUD_HEIGHT_MIN: 55,

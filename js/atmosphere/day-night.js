@@ -1205,10 +1205,12 @@ export class DayNightSystem {
     // perceived visibility; weather system handles storm reduction separately)
     let fogNear = 200;
     let fogFar = 500;
-    // Weather: reduce fog distance (closer fog = lower visibility)
+    // Weather: haze-like fog — near pulls close (quadratic), far stays
+    // distant (sqrt) so the taper is gradual, not a wall
     if (weather) {
-      fogNear *= weather.fogMultiplier;
-      fogFar *= weather.fogMultiplier;
+      const fm = weather.fogMultiplier;
+      fogNear *= fm * fm;
+      fogFar *= Math.max(0.3, Math.sqrt(fm));
     }
     this.scene.fog.near = fogNear;
     this.scene.fog.far = fogFar;

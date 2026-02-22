@@ -199,11 +199,9 @@ export function getGroundMaterial() {
          // Trees placed where original noise > 0.15 → treeDensity > ~0.575
          float treeDens = vTreeDensity;
          // Multi-octave per-pixel noise to break triangle-edge aligned boundaries
-         float dirtDetail = _vnoise(vWorldPos.xz * 0.15) * 0.12
-                          + _vnoise(vWorldPos.xz * 0.6 + 20.0) * 0.08
-                          + _vnoise(vWorldPos.xz * 1.7 + 55.0) * 0.05
-                          + _vnoise(vWorldPos.xz * 4.5 + 90.0) * 0.10
-                          + _vnoise(vWorldPos.xz * 11.0 + 140.0) * 0.06;
+         float dirtDetail = _vnoise(vWorldPos.xz * 0.15) * 0.14
+                          + _vnoise(vWorldPos.xz * 0.6 + 20.0) * 0.10
+                          + _vnoise(vWorldPos.xz * 1.7 + 55.0) * 0.08;
          // Wide smoothstep so transition doesn't follow polygon edges
          float dirtFactor = smoothstep(0.25, 0.85, treeDens + dirtDetail);
          // Suppress dirt on sand — use grassBlend (already wide smoothstep)
@@ -239,29 +237,26 @@ export function getGroundMaterial() {
          // Garden ground near cottages — warm earthy tones with noisy edges
          // No if-guard on vCottageDensity: hard threshold creates pixel-sharp border.
          // Instead, taper noise by attribute so it's zero away from cottages.
-         float _gardenScale = smoothstep(0.0, 0.1, vCottageDensity);
-         float gardenNoise = ((_vnoise(vWorldPos.xz * 0.3) - 0.5) * 0.25
-                            + (_vnoise(vWorldPos.xz * 0.8 + 70.0) - 0.5) * 0.15
-                            + (_vnoise(vWorldPos.xz * 2.0 + 130.0) - 0.5) * 0.08
-                            + (_vnoise(vWorldPos.xz * 5.0 + 95.0) - 0.5) * 0.10
-                            + (_vnoise(vWorldPos.xz * 12.0 + 160.0) - 0.5) * 0.06) * _gardenScale;
-         float gardenFactor = smoothstep(0.02, 0.55, vCottageDensity + gardenNoise);
-         if (gardenFactor > 0.005) {
-           // Richer green near edges, warm soil near center
-           vec3 gardenGreen = mix(grassColor, gardenColor, smoothstep(0.3, 0.8, vCottageDensity));
-           // Per-pixel patch variation: garden beds vs paths
-           float patchNoise = _vnoise(vWorldPos.xz * 1.5 + 40.0);
-           vec3 gardenBlend = mix(gardenGreen, gardenColor * 1.15, patchNoise * 0.4);
-           terrainColor = mix(terrainColor, gardenBlend, gardenFactor * grassBlend);
-           // Suppress tree dirt inside garden (cottage clearing has no trees)
-           dirtFactor *= (1.0 - gardenFactor);
+         float gardenFactor = 0.0;
+         if (vCottageDensity > 0.01) {
+           float gardenNoise = ((_vnoise(vWorldPos.xz * 0.3) - 0.5) * 0.28
+                              + (_vnoise(vWorldPos.xz * 0.8 + 70.0) - 0.5) * 0.18
+                              + (_vnoise(vWorldPos.xz * 2.0 + 130.0) - 0.5) * 0.10)
+                              * smoothstep(0.0, 0.1, vCottageDensity);
+           gardenFactor = smoothstep(0.02, 0.55, vCottageDensity + gardenNoise);
+           if (gardenFactor > 0.005) {
+             vec3 gardenGreen = mix(grassColor, gardenColor, smoothstep(0.3, 0.8, vCottageDensity));
+             float patchNoise = _vnoise(vWorldPos.xz * 1.5 + 40.0);
+             vec3 gardenBlend = mix(gardenGreen, gardenColor * 1.15, patchNoise * 0.4);
+             terrainColor = mix(terrainColor, gardenBlend, gardenFactor * grassBlend);
+             dirtFactor *= (1.0 - gardenFactor);
+           }
          }
 
          // Subalpine: darker green (wide transition with noise)
          float subalpineBlend = smoothstep(subalpineH - 5.0, subalpineH + 6.0, h);
-         float subNoise = (_vnoise(vWorldPos.xz * 1.2 + 80.0) - 0.5) * 0.24
-                        + (_vnoise(vWorldPos.xz * 4.0 + 135.0) - 0.5) * 0.12
-                        + (_vnoise(vWorldPos.xz * 10.0 + 190.0) - 0.5) * 0.08;
+         float subNoise = (_vnoise(vWorldPos.xz * 1.2 + 80.0) - 0.5) * 0.28
+                        + (_vnoise(vWorldPos.xz * 4.0 + 135.0) - 0.5) * 0.16;
          subalpineBlend = clamp(subalpineBlend + subNoise * (1.0 - abs(subalpineBlend * 2.0 - 1.0)), 0.0, 1.0);
          terrainColor = mix(terrainColor, subalpineColor, subalpineBlend * grassBlend);
 
@@ -270,9 +265,8 @@ export function getGroundMaterial() {
 
          // Alpine: exposed rock (wide transition with noise)
          float alpineBlend = smoothstep(alpineH - 5.0, alpineH + 6.0, h);
-         float alpNoise = (_vnoise(vWorldPos.xz * 1.0 + 160.0) - 0.5) * 0.30
-                        + (_vnoise(vWorldPos.xz * 3.5 + 200.0) - 0.5) * 0.16
-                        + (_vnoise(vWorldPos.xz * 9.0 + 250.0) - 0.5) * 0.10;
+         float alpNoise = (_vnoise(vWorldPos.xz * 1.0 + 160.0) - 0.5) * 0.36
+                        + (_vnoise(vWorldPos.xz * 3.5 + 200.0) - 0.5) * 0.20;
          alpineBlend = clamp(alpineBlend + alpNoise * (1.0 - abs(alpineBlend * 2.0 - 1.0)), 0.0, 1.0);
          terrainColor = mix(terrainColor, alpineRockColor, alpineBlend);
 
@@ -281,21 +275,17 @@ export function getGroundMaterial() {
          // because slopeNorm.y varies linearly. Tilting the normal in xz and
          // re-normalizing makes .y vary NON-linearly, so boundaries curve within triangles.
          vec3 slopeNorm = normalize(vWorldNormal);
-         float _spx = (_vnoise(vWorldPos.xz * 4.0 + 50.0) - 0.5) * 0.30
-                    + (_vnoise(vWorldPos.xz * 12.0 + 130.0) - 0.5) * 0.20
-                    + (_vnoise(vWorldPos.xz * 32.0 + 220.0) - 0.5) * 0.10;
-         float _spz = (_vnoise(vWorldPos.xz * 4.0 + vec2(70.0, 30.0)) - 0.5) * 0.30
-                    + (_vnoise(vWorldPos.xz * 12.0 + vec2(160.0, 60.0)) - 0.5) * 0.20
-                    + (_vnoise(vWorldPos.xz * 32.0 + vec2(250.0, 90.0)) - 0.5) * 0.10;
+         float _spx = (_vnoise(vWorldPos.xz * 4.0 + 50.0) - 0.5) * 0.35
+                    + (_vnoise(vWorldPos.xz * 12.0 + 130.0) - 0.5) * 0.22;
+         float _spz = (_vnoise(vWorldPos.xz * 4.0 + vec2(70.0, 30.0)) - 0.5) * 0.35
+                    + (_vnoise(vWorldPos.xz * 12.0 + vec2(160.0, 60.0)) - 0.5) * 0.22;
          slopeNorm = normalize(slopeNorm + vec3(_spx, 0.0, _spz));
 
          // Snow: slope-aware (flat = snow, steep = rock), wide transition
          float snowBlend = smoothstep(snowlineH - 6.0, snowlineH + 8.0, h);
          // Centered per-pixel noise in the transition zone to break up banding
-         float snowNoise = (_vnoise(vWorldPos.xz * 0.6 + 40.0) - 0.5) * 0.22
-                         + (_vnoise(vWorldPos.xz * 1.5) - 0.5) * 0.36
-                         + (_vnoise(vWorldPos.xz * 4.0 + 180.0) - 0.5) * 0.20
-                         + (_vnoise(vWorldPos.xz * 9.0 + 220.0) - 0.5) * 0.12;
+         float snowNoise = (_vnoise(vWorldPos.xz * 0.6 + 40.0) - 0.5) * 0.32
+                         + (_vnoise(vWorldPos.xz * 1.5) - 0.5) * 0.42;
          snowBlend = clamp(snowBlend + snowNoise * (1.0 - abs(snowBlend * 2.0 - 1.0)), 0.0, 1.0);
          // Light per-effect noise (different from steep rock) so snow/rock boundaries diverge
          float slopeNoise = (_vnoise(vWorldPos.xz * 2.0 + 30.0) - 0.5) * 0.10
@@ -396,10 +386,10 @@ export function getGroundMaterial() {
 
            // Sample each texture with anti-tiled 2-layer blend
            vec3 grassSamp = _antiTileSample(map, wUV) * 0.55
-                          + _antiTileSample(map, wUV2) * 0.45;
+                          + texture2D(map, wUV2).rgb * 0.45;
            vec3 sandSamp  = _antiTileSample(sandMap, wUV * 0.8);
            vec3 dirtSamp  = _antiTileSample(dirtMap, wUV * 0.9) * 0.55
-                          + _antiTileSample(dirtMap, wUV2 * 0.95) * 0.45;
+                          + texture2D(dirtMap, wUV2 * 0.95).rgb * 0.45;
            vec3 rockSamp  = _antiTileSample(rockMap, wUV * 0.7);
 
            // Convert to detail: per-channel centering to preserve color character
@@ -437,14 +427,10 @@ export function getGroundMaterial() {
         `// Smooth vertex-interpolated world normal + per-pixel noise to mask Mach bands
          vec3 wN = normalize(vWorldNormal);
          // Four octaves with irrational frequencies (can't align with triangle grid)
-         float nX = (_vnoise(vWorldPos.xz * 3.73) - 0.5) * 0.14
-                  + (_vnoise(vWorldPos.xz * 8.41 + 40.0) - 0.5) * 0.08
-                  + (_vnoise(vWorldPos.xz * 19.7 + 80.0) - 0.5) * 0.04
-                  + (_vnoise(vWorldPos.xz * 43.3 + 150.0) - 0.5) * 0.02;
-         float nZ = (_vnoise(vWorldPos.xz * 3.73 + vec2(100.0, 50.0)) - 0.5) * 0.14
-                  + (_vnoise(vWorldPos.xz * 8.41 + vec2(60.0, 90.0)) - 0.5) * 0.08
-                  + (_vnoise(vWorldPos.xz * 19.7 + vec2(140.0, 30.0)) - 0.5) * 0.04
-                  + (_vnoise(vWorldPos.xz * 43.3 + vec2(200.0, 70.0)) - 0.5) * 0.02;
+         float nX = (_vnoise(vWorldPos.xz * 3.73) - 0.5) * 0.16
+                  + (_vnoise(vWorldPos.xz * 8.41 + 40.0) - 0.5) * 0.10;
+         float nZ = (_vnoise(vWorldPos.xz * 3.73 + vec2(100.0, 50.0)) - 0.5) * 0.16
+                  + (_vnoise(vWorldPos.xz * 8.41 + vec2(60.0, 90.0)) - 0.5) * 0.10;
          wN = normalize(wN + vec3(nX, 0.0, nZ));
          vec3 normal = normalize(mat3(viewMatrix) * wN);
          #ifdef DOUBLE_SIDED

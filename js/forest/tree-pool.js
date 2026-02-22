@@ -79,9 +79,11 @@ export class TreePool {
     const counts = new Array(CONFIG.TREE_TYPES).fill(0);
     const allTrees = Array.from({ length: CONFIG.TREE_TYPES }, () => []);
 
+    const MAX_TUSSOCK = 800; // lighter cap for high-poly tussock
     for (const chunk of chunks) {
       for (const tree of chunk.treePositions) {
-        if (counts[tree.type] < MAX_TREES_PER_TYPE) {
+        const cap = tree.type === 3 ? MAX_TUSSOCK : MAX_TREES_PER_TYPE;
+        if (counts[tree.type] < cap) {
           allTrees[tree.type].push(tree);
           counts[tree.type]++;
         }
