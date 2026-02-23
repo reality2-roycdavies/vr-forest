@@ -1,5 +1,5 @@
 // Multi-octave heightmap terrain generator with grass/dirt blending
-import { getTerrainHeight, getTreeDensity } from './noise.js';
+import { getTerrainHeight, getTreeDensity, getStreamFactor, getRiverFlowDir } from './noise.js';
 import { CONFIG } from '../config.js';
 
 /**
@@ -15,6 +15,8 @@ export function generateTerrainData(chunkX, chunkZ) {
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   const treeDensityAttr = new Float32Array(vertexCount);
+  const streamChannelAttr = new Float32Array(vertexCount);
+  const streamFlowDirAttr = new Float32Array(vertexCount * 2);
 
   const worldOffsetX = chunkX * size;
   const worldOffsetZ = chunkZ * size;
@@ -65,6 +67,14 @@ export function generateTerrainData(chunkX, chunkZ) {
         treeDens = (getTreeDensity(worldX, worldZ) + 1) * 0.5;
       }
       treeDensityAttr[i] = treeDens;
+
+      // Stream channel factor: extend slightly below water level for seamless lake join
+      streamChannelAttr[i] = rawHeight > CONFIG.WATER_LEVEL - 1.0 ? getStreamFactor(worldX, worldZ) : 0;
+
+      // Flow direction from traced river segments
+      const flowDir = getRiverFlowDir(worldX, worldZ);
+      streamFlowDirAttr[i * 2] = flowDir[0];
+      streamFlowDirAttr[i * 2 + 1] = flowDir[1];
     }
   }
 
@@ -90,7 +100,7 @@ export function generateTerrainData(chunkX, chunkZ) {
 
   computeNormalsFromHeightmap(normals, heightCache, verticesPerSide, step, worldOffsetX, worldOffsetZ);
 
-  return { positions, normals, uvs, indices, treeDensityAttr, verticesPerSide };
+  return { positions, normals, uvs, indices, treeDensityAttr, streamChannelAttr, streamFlowDirAttr, verticesPerSide };
 }
 
 /**

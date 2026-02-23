@@ -1,6 +1,7 @@
 // Seeded simplex noise wrapper
 import { createNoise2D } from 'simplex-noise';
 import { CONFIG } from '../config.js';
+import { getRiverCarving } from './river-tracer.js';
 
 // Simple seeded PRNG (mulberry32)
 function mulberry32(seed) {
@@ -74,10 +75,10 @@ export function fractalNoise(x, z, scale, octaves, persistence, lacunarity) {
 }
 
 /**
- * Get terrain height at world coordinates.
- * Includes stream channel carving via domain-warped ridge noise.
+ * Get base terrain height (no river carving).
+ * Used by river tracer to find downhill paths, and by getTerrainHeight as the starting point.
  */
-export function getTerrainHeight(worldX, worldZ) {
+export function getBaseTerrainHeight(worldX, worldZ) {
   const baseHeight = fractalNoise(
     worldX,
     worldZ,
@@ -87,23 +88,17 @@ export function getTerrainHeight(worldX, worldZ) {
     CONFIG.TERRAIN_LACUNARITY
   ) * CONFIG.TERRAIN_HEIGHT;
 
-  // Stream channels — ridge noise creates continuous valley lines
-  const warp = CONFIG.STREAM_WARP;
-  const warpX = warpNoise2D(worldX * 0.006, worldZ * 0.006) * warp;
-  const warpZ = warpNoise2D(worldX * 0.006 + 100, worldZ * 0.006 + 100) * warp;
+  // Valley carving — domain-warped ridge noise creates landscape valleys and lakes
+  const vWarpX = warpNoise2D(worldX * 0.006, worldZ * 0.006) * CONFIG.VALLEY_WARP;
+  const vWarpZ = warpNoise2D(worldX * 0.006 + 100, worldZ * 0.006 + 100) * CONFIG.VALLEY_WARP;
+  const vRaw = streamNoise2D((worldX + vWarpX) * CONFIG.VALLEY_SCALE, (worldZ + vWarpZ) * CONFIG.VALLEY_SCALE);
+  const vRidge = 1 - Math.abs(vRaw);
+  const vChannel = Math.pow(vRidge, CONFIG.VALLEY_SHARPNESS);
+  const normalizedH = (baseHeight / CONFIG.TERRAIN_HEIGHT + 1) * 0.5;
+  const carveMask = Math.max(0, 1 - normalizedH * 0.8);
+  const valleyCarvedHeight = baseHeight - vChannel * CONFIG.VALLEY_DEPTH * carveMask;
 
-  const scale = CONFIG.STREAM_SCALE;
-  const raw = streamNoise2D((worldX + warpX) * scale, (worldZ + warpZ) * scale);
-  const ridge = 1 - Math.abs(raw);                         // peaks along zero-crossings
-  const channel = Math.pow(ridge, CONFIG.STREAM_SHARPNESS); // sharpen to narrow channels
-
-  // Carve through most terrain, only fade out on the highest peaks
-  const normalizedH = (baseHeight / CONFIG.TERRAIN_HEIGHT + 1) * 0.5; // 0..1
-  const carveMask = Math.max(0, 1 - normalizedH * 0.8);               // carves across most terrain
-
-  const streamH = baseHeight - channel * CONFIG.STREAM_DEPTH * carveMask;
-
-  // Mountain chains — additive ridge noise (inverse of stream carving)
+  // Mountain chains — additive ridge noise
   const mWarp = CONFIG.MOUNTAIN_WARP;
   const mwx = mountainWarpNoise2D(worldX * 0.004, worldZ * 0.004) * mWarp;
   const mwz = mountainWarpNoise2D(worldX * 0.004 + 200, worldZ * 0.004 + 200) * mWarp;
@@ -138,7 +133,15 @@ export function getTerrainHeight(worldX, worldZ) {
   // Active near mountains (foothillProximity > 0) but not on the ridges (mMask low)
   const valleyDip = foothillProximity * (1 - mMask) * CONFIG.MOUNTAIN_VALLEY_DEPTH;
 
-  return streamH + (mMask * ampMod * CONFIG.MOUNTAIN_HEIGHT + foothillH - valleyDip) * spawnFade;
+  return valleyCarvedHeight + (mMask * ampMod * CONFIG.MOUNTAIN_HEIGHT + foothillH - valleyDip) * spawnFade;
+}
+
+/**
+ * Get terrain height at world coordinates.
+ * Base terrain minus physically-traced river carving.
+ */
+export function getTerrainHeight(worldX, worldZ) {
+  return getBaseTerrainHeight(worldX, worldZ) - getRiverCarving(worldX, worldZ);
 }
 
 /**
@@ -220,6 +223,21 @@ export function getLogDensity(worldX, worldZ) {
  */
 export function getCottageDensity(worldX, worldZ) {
   return cottageNoise2D(worldX * 0.02, worldZ * 0.02);
+}
+
+/**
+ * Stream/river factor — re-exported from physically-traced river system.
+ */
+export { getRiverFactor as getStreamFactor, getRiverFlowDir } from './river-tracer.js';
+
+/**
+ * Jitter noise for river-tracer source point jittering (deterministic).
+ */
+const _jitterNoiseResult = { x: 0, z: 0 };
+export function getJitterNoise(worldX, worldZ) {
+  _jitterNoiseResult.x = jitterNoise2D(worldX, worldZ);
+  _jitterNoiseResult.z = jitterNoise2D(worldX + 100, worldZ + 100);
+  return _jitterNoiseResult;
 }
 
 /**

@@ -2,8 +2,9 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { generateTerrainData } from './terrain-generator.js';
-import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity, getMountainFactor, getLogDensity, getCottageDensity, getTerrainSlope } from './noise.js';
-import { getGroundMaterial } from './ground-material.js';
+import { getTreeDensity, getTerrainHeight, getJitter, getVegDensity, getRockDensity, getCollectibleDensity, getMountainFactor, getLogDensity, getCottageDensity, getTerrainSlope, getStreamFactor } from './noise.js';
+import { getGroundMaterial, getRiverWaterMaterial } from './ground-material.js';
+import { getSegmentsInArea } from './river-tracer.js';
 
 export class Chunk {
   constructor() {
@@ -18,6 +19,8 @@ export class Chunk {
     this.logPositions = [];    // { x, y, z, type, scale, rotSeed }  type: 0=log, 1=stump
     this.cottagePositions = []; // { x, y, z, seed, chimneyWorld }
     this.foamSegments = [];         // { x1, z1, x2, z2, nx, nz }
+    this.streamRockPositions = [];  // { x, y, z, sizeIdx, rotSeed }
+    this.riverWaterMesh = null;
     this.active = false;
   }
 
@@ -51,6 +54,8 @@ export class Chunk {
     this._generateLogs(chunkX, chunkZ);
     this._generateCollectibles(chunkX, chunkZ);
     this._generateFoam(chunkX, chunkZ);
+    this._generateStreamRocks(chunkX, chunkZ);
+    this._generateRiverWater(chunkX, chunkZ);
   }
 
   _createMesh(data) {
@@ -59,6 +64,8 @@ export class Chunk {
     geometry.setAttribute('normal', new THREE.BufferAttribute(data.normals, 3));
     geometry.setAttribute('uv', new THREE.BufferAttribute(data.uvs, 2));
     geometry.setAttribute('treeDensity', new THREE.BufferAttribute(data.treeDensityAttr, 1));
+    geometry.setAttribute('streamChannel', new THREE.BufferAttribute(data.streamChannelAttr, 1));
+    geometry.setAttribute('streamFlowDir', new THREE.BufferAttribute(data.streamFlowDirAttr, 2));
     // cottageDensity filled after _generateCottages
     const vertexCount = data.treeDensityAttr.length;
     geometry.setAttribute('cottageDensity', new THREE.BufferAttribute(new Float32Array(vertexCount), 1));
@@ -78,6 +85,12 @@ export class Chunk {
 
     geom.getAttribute('treeDensity').set(data.treeDensityAttr);
     geom.getAttribute('treeDensity').needsUpdate = true;
+
+    geom.getAttribute('streamChannel').set(data.streamChannelAttr);
+    geom.getAttribute('streamChannel').needsUpdate = true;
+
+    geom.getAttribute('streamFlowDir').set(data.streamFlowDirAttr);
+    geom.getAttribute('streamFlowDir').needsUpdate = true;
 
     geom.getAttribute('normal').set(data.normals);
     geom.getAttribute('normal').needsUpdate = true;
@@ -107,6 +120,9 @@ export class Chunk {
           const jz = wz + jitter.z * CONFIG.TREE_JITTER;
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL) continue;
+
+          // No trees in stream channels
+          if (getStreamFactor(jx, jz) > 0.15) continue;
 
           // Trees stop before scree/alpine rock; tussock in high alpine only
           const treeUpperLimit = CONFIG.TREELINE_START + 2; // Y=18, before scree
@@ -172,6 +188,9 @@ export class Chunk {
 
         if (y < tussockStart || y > tussockLimit) continue;
 
+        // No tussock in stream channels
+        if (getStreamFactor(jx, jz) > 0.15) continue;
+
         // Density ramps: sparse at edges, dense in middle
         let edgeDensity;
         if (y < tussockPeak) {
@@ -230,6 +249,9 @@ export class Chunk {
 
           // Above treeline: no ferns/grass
           if (y > CONFIG.TREELINE_START + 2) continue;
+
+          // No vegetation in stream channels
+          if (getStreamFactor(jx, jz) > 0.15) continue;
 
           // Cottage clearing: suppress vegetation near cottages
           if (this._isNearAnyCottage(jx, jz)) continue;
@@ -311,6 +333,9 @@ export class Chunk {
           if (y < CONFIG.SHORE_LEVEL) continue;
           if (y > CONFIG.SUBALPINE_START) continue;
 
+          // No flowers in stream channels
+          if (getStreamFactor(jx, jz) > 0.15) continue;
+
           // Same color for whole cluster
           const colorIdx = Math.abs(Math.floor((jx * 7.7 + jz * 3.3) * 100)) % numColors;
           const scale = nearCottage
@@ -372,6 +397,9 @@ export class Chunk {
           const y = yR;
           if (y < CONFIG.SHORE_LEVEL) continue;
 
+          // No rocks in stream channels
+          if (getStreamFactor(jx, jz) > 0.15) continue;
+
           // Size varies: 0=small, 1=medium, 2=large boulder
           let sizeIdx;
           if (density > 0.75) sizeIdx = 2;
@@ -410,6 +438,9 @@ export class Chunk {
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL) continue;
           if (y > CONFIG.TREELINE_START) continue;
+
+          // No logs/stumps in stream channels
+          if (getStreamFactor(jx, jz) > 0.15) continue;
 
           // Type split: hash-based, ~60% logs, ~40% stumps
           const hash = Math.sin(jx * 127.1 + jz * 311.7) * 43758.5453;
@@ -451,6 +482,9 @@ export class Chunk {
           const jz = wz + jitter.z * 2.0;
           const y = getTerrainHeight(jx, jz);
           if (y < CONFIG.SHORE_LEVEL) continue;
+
+          // No collectibles in stream channels
+          if (getStreamFactor(jx, jz) > 0.15) continue;
 
           // No collectibles inside cottage clearings
           if (this._isNearAnyCottage(jx, jz)) continue;
@@ -546,6 +580,8 @@ export class Chunk {
           if (y < CONFIG.SHORE_LEVEL + 1) continue;
           if (y > CONFIG.SUBALPINE_START) continue;
           if (y < CONFIG.WATER_LEVEL + 0.5) continue;
+          // No cottages in stream channels
+          if (getStreamFactor(jx, jz) > 0.15) continue;
           if (getTreeDensity(jx, jz) < CONFIG.COTTAGE_MIN_TREE_DENSITY) continue;
 
           // Check slope across footprint — reject if any point too steep
@@ -638,6 +674,165 @@ export class Chunk {
     attr.needsUpdate = true;
   }
 
+  _generateStreamRocks(chunkX, chunkZ) {
+    this.streamRockPositions.length = 0;
+    const size = CONFIG.CHUNK_SIZE;
+    const ox = chunkX * size;
+    const oz = chunkZ * size;
+    const segments = getSegmentsInArea(ox, oz, ox + size, oz + size);
+    if (segments.length === 0) return;
+
+    const spacing = 2.5; // meters between potential rock positions along each segment
+
+    for (const seg of segments) {
+      const dx = seg.x1 - seg.x0;
+      const dz = seg.z1 - seg.z0;
+      const segLen = Math.sqrt(dx * dx + dz * dz);
+      if (segLen < 0.5) continue;
+
+      const flow = (seg.flow0 + seg.flow1) * 0.5;
+      const halfWidth = Math.min(
+        CONFIG.RIVER_MAX_HALFWIDTH,
+        CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow)
+      );
+
+      // More rocks in small mountain streams, fewer in wide rivers
+      const rockChance = 0.4 * (1.0 - Math.min(1.0, flow / 40.0));
+      if (rockChance < 0.02) continue;
+
+      const fdx = dx / segLen;
+      const fdz = dz / segLen;
+      const px = -fdz; // perpendicular
+      const pz = fdx;
+
+      const steps = Math.max(1, Math.floor(segLen / spacing));
+      for (let i = 0; i < steps; i++) {
+        const t = (i + 0.5) / steps;
+        const cx = seg.x0 + dx * t;
+        const cz = seg.z0 + dz * t;
+
+        // Deterministic pseudo-random from position
+        const hash1 = Math.sin(cx * 127.1 + cz * 311.7) * 43758.5453;
+        const r1 = hash1 - Math.floor(hash1);
+        if (r1 > rockChance) continue;
+
+        const hash2 = Math.sin(cx * 269.5 + cz * 183.3) * 43758.5453;
+        const r2 = hash2 - Math.floor(hash2);
+        const hash3 = Math.sin(cx * 419.2 + cz * 71.9) * 43758.5453;
+        const r3 = hash3 - Math.floor(hash3);
+
+        // Place across the channel width — edges and bed
+        const spreadWidth = halfWidth + CONFIG.RIVER_BANK_WIDTH * 0.5;
+        const offset = (r2 - 0.5) * 2.0 * spreadWidth;
+
+        const wx = cx + px * offset + fdx * (r3 - 0.5) * spacing * 0.5;
+        const wz = cz + pz * offset + fdz * (r3 - 0.5) * spacing * 0.5;
+
+        // Skip if outside this chunk
+        if (wx < ox || wx >= ox + size || wz < oz || wz >= oz + size) continue;
+
+        const wy = getTerrainHeight(wx, wz);
+
+        // Size: mostly small/medium, rare large — smaller in narrow streams
+        let sizeIdx;
+        if (halfWidth < 0.8) {
+          sizeIdx = r3 < 0.85 ? 0 : 1; // mostly small in narrow streams
+        } else if (halfWidth < 2.0) {
+          sizeIdx = r3 < 0.5 ? 0 : (r3 < 0.9 ? 1 : 2);
+        } else {
+          sizeIdx = r3 < 0.3 ? 0 : (r3 < 0.7 ? 1 : 2);
+        }
+
+        const rotSeed = r1 * 1000;
+        this.streamRockPositions.push({ x: wx, y: wy, z: wz, sizeIdx, rotSeed });
+      }
+    }
+  }
+
+  _generateRiverWater(chunkX, chunkZ) {
+    // Remove old mesh if reusing chunk
+    if (this.riverWaterMesh) {
+      this.mesh.remove(this.riverWaterMesh);
+      this.riverWaterMesh.geometry.dispose();
+      this.riverWaterMesh = null;
+    }
+
+    const size = CONFIG.CHUNK_SIZE;
+    const ox = chunkX * size;
+    const oz = chunkZ * size;
+    const segments = getSegmentsInArea(ox, oz, ox + size, oz + size);
+    if (segments.length === 0) return;
+
+    const positions = [];
+    const flowDirs = [];
+    const flowAmounts = [];
+    const indices = [];
+
+    for (const seg of segments) {
+      const flow0 = seg.flow0;
+      const flow1 = seg.flow1;
+      // Mesh covers full carved channel + padding for bends & interpolation
+      const baseHW0 = Math.min(
+        CONFIG.RIVER_MAX_HALFWIDTH,
+        CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow0)
+      );
+      const baseHW1 = Math.min(
+        CONFIG.RIVER_MAX_HALFWIDTH,
+        CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow1)
+      );
+      // Use wider of: shader width or carve width, plus padding
+      const hw0 = Math.max(baseHW0 + CONFIG.RIVER_BANK_WIDTH, baseHW0 * 2.5) + 1.0;
+      const hw1 = Math.max(baseHW1 + CONFIG.RIVER_BANK_WIDTH, baseHW1 * 2.5) + 1.0;
+
+      const dx = seg.x1 - seg.x0;
+      const dz = seg.z1 - seg.z0;
+      const len = Math.sqrt(dx * dx + dz * dz);
+      if (len < 0.01) continue;
+
+      // Flow direction and perpendicular
+      const fdx = dx / len;
+      const fdz = dz / len;
+      const px = -fdz;
+      const pz = fdx;
+
+      // Y at river center (terrain already carved), slight lift above bed
+      const y0 = getTerrainHeight(seg.x0, seg.z0) + 0.06;
+      const y1 = getTerrainHeight(seg.x1, seg.z1) + 0.06;
+
+      // Convert to local chunk coordinates
+      const lx0 = seg.x0 - ox;
+      const lz0 = seg.z0 - oz;
+      const lx1 = seg.x1 - ox;
+      const lz1 = seg.z1 - oz;
+
+      const vi = positions.length / 3;
+
+      // Quad: start-left, start-right, end-left, end-right
+      positions.push(
+        lx0 + px * hw0, y0, lz0 + pz * hw0,
+        lx0 - px * hw0, y0, lz0 - pz * hw0,
+        lx1 + px * hw1, y1, lz1 + pz * hw1,
+        lx1 - px * hw1, y1, lz1 - pz * hw1
+      );
+
+      flowDirs.push(fdx, fdz, fdx, fdz, fdx, fdz, fdx, fdz);
+      flowAmounts.push(flow0, flow0, flow1, flow1);
+      indices.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3);
+    }
+
+    if (positions.length === 0) return;
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute('streamFlowDir', new THREE.Float32BufferAttribute(flowDirs, 2));
+    geom.setAttribute('flowAmount', new THREE.Float32BufferAttribute(flowAmounts, 1));
+    geom.setIndex(indices);
+    geom.computeVertexNormals();
+
+    this.riverWaterMesh = new THREE.Mesh(geom, getRiverWaterMaterial());
+    this.mesh.add(this.riverWaterMesh);
+  }
+
   _isNearAnyCottage(worldX, worldZ) {
     const r = CONFIG.COTTAGE_CLEARING_RADIUS;
     const r2 = r * r;
@@ -652,6 +847,11 @@ export class Chunk {
   deactivate() {
     this.active = false;
     if (this.mesh) this.mesh.visible = false;
+    if (this.riverWaterMesh) {
+      this.mesh.remove(this.riverWaterMesh);
+      this.riverWaterMesh.geometry.dispose();
+      this.riverWaterMesh = null;
+    }
     this.treePositions.length = 0;
     this.vegPositions.length = 0;
     this.flowerPositions.length = 0;
@@ -660,9 +860,15 @@ export class Chunk {
     this.logPositions.length = 0;
     this.cottagePositions.length = 0;
     this.foamSegments.length = 0;
+    this.streamRockPositions.length = 0;
   }
 
   dispose() {
+    if (this.riverWaterMesh) {
+      if (this.mesh) this.mesh.remove(this.riverWaterMesh);
+      this.riverWaterMesh.geometry.dispose();
+      this.riverWaterMesh = null;
+    }
     if (this.mesh) {
       this.mesh.geometry.dispose();
       this.mesh = null;
@@ -675,6 +881,7 @@ export class Chunk {
     this.logPositions.length = 0;
     this.cottagePositions.length = 0;
     this.foamSegments.length = 0;
+    this.streamRockPositions.length = 0;
     this.active = false;
   }
 }

@@ -22,9 +22,11 @@ export class VegetationPool {
     this.meshes = [];       // [grass, (unused slot), fern]
     this.flowerMeshes = [];
     this.rockMeshes = [];   // 3 sizes: small, medium, boulder
+    this.streamRockMeshes = []; // 3 sizes: smooth rounded stream rocks
     this._createMeshes();
     this._createFlowerMeshes();
     this._createRockMeshes();
+    this._createStreamRockMeshes();
     this._createLogMeshes();
     this.foamTimeUniform = { value: 0 };
     this._foamBaseColor = new THREE.Color(0x9aacb8);
@@ -329,6 +331,66 @@ export class VegetationPool {
       mesh.castShadow = true;
       this.scene.add(mesh);
       this.rockMeshes.push(mesh);
+    }
+  }
+
+  _createStreamRockMeshes() {
+    // Smooth, rounded rocks for stream beds — like water-worn cobbles/boulders
+    const sizes = [
+      { radius: 0.18, scaleY: 0.6 },   // small cobble
+      { radius: 0.35, scaleY: 0.55 },   // medium stone
+      { radius: 0.65, scaleY: 0.45 },   // large boulder
+    ];
+
+    // Wet rock colors: darker, slightly blue-green tinted
+    const baseColors = [
+      new THREE.Color(0x3a3836), // dark wet grey
+      new THREE.Color(0x44413e), // medium wet grey
+      new THREE.Color(0x4a4744), // light wet grey-brown
+    ];
+
+    for (let si = 0; si < sizes.length; si++) {
+      const s = sizes[si];
+      // Higher detail sphere for smooth rounded look
+      const geom = new THREE.IcosahedronGeometry(s.radius, 2);
+
+      // Gentle warping for organic shape (much less than jagged land rocks)
+      const pos = geom.getAttribute('position');
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const z = pos.getZ(i);
+        const hash = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+        const warp = ((hash - Math.floor(hash)) - 0.5) * s.radius * 0.15;
+        pos.setXYZ(i, x + warp * 0.2, y * s.scaleY + warp * 0.05, z + warp * 0.2);
+      }
+      pos.needsUpdate = true;
+      geom.computeVertexNormals();
+
+      // Vertex colors with wet look variation
+      const colors = new Float32Array(pos.count * 3);
+      const bc = baseColors[si];
+      for (let i = 0; i < pos.count; i++) {
+        const hash = Math.sin(pos.getX(i) * 431.1 + pos.getZ(i) * 217.3) * 43758.5453;
+        const frac = (hash - Math.floor(hash)) - 0.5;
+        colors[i * 3] = Math.max(0, Math.min(1, bc.r + frac * 0.08));
+        colors[i * 3 + 1] = Math.max(0, Math.min(1, bc.g + frac * 0.08));
+        colors[i * 3 + 2] = Math.max(0, Math.min(1, bc.b + frac * 0.10));
+      }
+      geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+      const mat = new THREE.MeshPhongMaterial({
+        vertexColors: true,
+        specular: new THREE.Color(0x222222),
+        shininess: 20,  // wet sheen
+      });
+
+      const mesh = new THREE.InstancedMesh(geom, mat, MAX_ROCKS);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      mesh.castShadow = true;
+      this.scene.add(mesh);
+      this.streamRockMeshes.push(mesh);
     }
   }
 
@@ -830,6 +892,8 @@ export class VegetationPool {
     const allFlowers = CONFIG.FLOWER_COLORS.map(() => []);
     const rockCounts = [0, 0, 0];
     const allRocks = [[], [], []];
+    const streamRockCounts = [0, 0, 0];
+    const allStreamRocks = [[], [], []];
     const allFoamSegments = [];
 
     for (const chunk of chunks) {
@@ -855,6 +919,15 @@ export class VegetationPool {
           if (rockCounts[r.sizeIdx] < MAX_ROCKS) {
             allRocks[r.sizeIdx].push(r);
             rockCounts[r.sizeIdx]++;
+          }
+        }
+      }
+
+      if (chunk.streamRockPositions) {
+        for (const r of chunk.streamRockPositions) {
+          if (streamRockCounts[r.sizeIdx] < MAX_ROCKS) {
+            allStreamRocks[r.sizeIdx].push(r);
+            streamRockCounts[r.sizeIdx]++;
           }
         }
       }
@@ -958,6 +1031,41 @@ export class VegetationPool {
         const sv = 0.7 + (Math.sin(seed * 5.3) * 0.5 + 0.5) * 1.0;
         const svY = sv * (0.5 + Math.sin(seed * 3.1) * 0.3);
         _scale.set(sv, svY, sv);
+
+        _matrix.compose(_position, _quaternion, _scale);
+        mesh.setMatrixAt(i, _matrix);
+      }
+
+      if (rocks.length > 0) mesh.instanceMatrix.needsUpdate = true;
+    }
+
+    // Rebuild stream rocks — smooth rounded cobbles in river channels
+    for (let si = 0; si < 3; si++) {
+      const rocks = allStreamRocks[si];
+      const mesh = this.streamRockMeshes[si];
+      mesh.count = rocks.length;
+
+      for (let i = 0; i < rocks.length; i++) {
+        const r = rocks[i];
+        const seed = r.rotSeed;
+
+        // Sink into stream bed slightly
+        const sinkAmount = [0.06, 0.10, 0.18][si];
+        _position.set(r.x, r.y - sinkAmount, r.z);
+
+        // Random rotation — stream rocks tumble freely
+        _euler.set(
+          Math.sin(seed * 1.1) * 0.4,
+          (seed * 73.13) % (Math.PI * 2),
+          Math.sin(seed * 2.7) * 0.3
+        );
+        _quaternion.setFromEuler(_euler);
+
+        // Scale variation — rounder proportions than land rocks
+        const sv = 0.7 + (Math.sin(seed * 5.3) * 0.5 + 0.5) * 0.8;
+        const svY = sv * (0.6 + Math.sin(seed * 3.1) * 0.2);
+        const svZ = sv * (0.8 + Math.sin(seed * 7.7) * 0.2);
+        _scale.set(sv, svY, svZ);
 
         _matrix.compose(_position, _quaternion, _scale);
         mesh.setMatrixAt(i, _matrix);

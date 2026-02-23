@@ -17,7 +17,8 @@ import { WeatherSystem } from './atmosphere/weather.js';
 import { BirdFlockSystem } from './forest/birds.js';
 import { CollectibleSystem } from './forest/collectibles.js';
 import { CottageSystem } from './forest/cottage-system.js';
-import { getTerrainHeight } from './terrain/noise.js';
+import { getTerrainHeight, getStreamFactor } from './terrain/noise.js';
+import { riverTracer } from './terrain/river-tracer.js';
 import { updateGroundTime, getGroundMaterial, setGroundAnisotropy } from './terrain/ground-material.js';
 
 // --- Scene ---
@@ -405,6 +406,9 @@ vr.onSessionEnd = () => {
 }
 
 // --- Initial Load ---
+// Trace rivers from mountain sources before any terrain is built
+riverTracer.init(0, 0, CONFIG.RIVER_TRACE_RADIUS);
+
 // Place player at origin, facing the lake
 vr.dolly.position.set(0, 0, 0);
 vr.dolly.rotation.y = Math.PI; // face 180° toward the lake
@@ -622,22 +626,26 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
       } else {
         let r, g, b;
         if (h > 24) {
-          // Snow
           r = 240; g = 243; b = 248;
         } else if (h > 20) {
-          // Alpine rock
           r = 115; g = 107; b = 97;
         } else if (h > 16) {
-          // Tussock
           r = 140; g = 128; b = 77;
         } else if (h > 10) {
-          // Subalpine (darker green)
           r = 38; g = 72; b = 20;
         } else {
           const t = Math.min(1, (h - shoreY) / 8);
           r = Math.floor(30 + t * 20);
           g = Math.floor(60 + t * 40);
           b = Math.floor(15 + t * 10);
+        }
+        // River streams: blue overlay where river factor is strong
+        const sf = getStreamFactor(wx, wz);
+        if (sf > 0.3 && h > waterY && h < 18) {
+          const blend = Math.min(1, (sf - 0.3) / 0.4);
+          r = Math.floor(r * (1 - blend) + 15 * blend);
+          g = Math.floor(g * (1 - blend) + 50 * blend);
+          b = Math.floor(b * (1 - blend) + 90 * blend);
         }
         color = `rgb(${r},${g},${b})`;
       }
@@ -767,6 +775,7 @@ function onFrame() {
 
   // Update chunks around player
   const pos = movement.getPlayerPosition();
+  riverTracer.checkRetrace(pos.x, pos.z);
   chunkManager.update(pos.x, pos.z);
 
   // Water plane follows player XZ, snapped to grid step so wave vertices
@@ -780,6 +789,7 @@ function onFrame() {
     updateHeightmap(pos.x, pos.z);
   }
   _tickHeightmap();
+  // Tarn water plane follows player XZ
   updateGroundTime(waterTimeUniform.value);
   // vegPool.updateFoamTime(waterTimeUniform.value); // foam strip disabled
 
@@ -795,6 +805,9 @@ function onFrame() {
   const groundMat = getGroundMaterial();
   if (groundMat?.userData?.wetnessUniform) {
     groundMat.userData.wetnessUniform.value = weather.groundWetness;
+  }
+  if (groundMat?.userData?.rainUniform) {
+    groundMat.userData.rainUniform.value = weather.rainIntensity;
   }
   // Drive ground water/foam darkening from scene brightness
   if (groundMat?.userData?.waterDarkenUniform) {

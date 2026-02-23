@@ -1,7 +1,7 @@
 // Locomotion + snap turn + terrain following + jump + walk bob + rock climbing + swimming
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
-import { getTerrainHeight, getMountainFactor } from './terrain/noise.js';
+import { getTerrainHeight, getStreamFactor } from './terrain/noise.js';
 
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
@@ -63,6 +63,15 @@ export class MovementSystem {
     const waterDepth = waterLevel - terrainY;
     this.isSwimming = waterDepth > CONFIG.SWIM_DEPTH_THRESHOLD;
 
+    // Stream wading detection — shallow water in stream channels
+    this.isWading = false;
+    if (!this.isSwimming) {
+      const sf = getStreamFactor(px, pz);
+      if (sf > 0.5 && terrainY > CONFIG.WATER_LEVEL) {
+        this.isWading = true;
+      }
+    }
+
     if (this.isSwimming) {
       // Float on water surface: eyes just above water
       this.currentGroundY = waterLevel + CONFIG.SWIM_EYE_ABOVE_WATER - CONFIG.TERRAIN_FOLLOW_OFFSET;
@@ -77,7 +86,8 @@ export class MovementSystem {
     const inVR = this.vr.isInVR();
     const canSprint = this.input.sprintPressed && this.collectibles && this.collectibles.score > 0 && !this.isSwimming;
     const baseSpeed = inVR ? CONFIG.MOVE_SPEED * 1.35 : CONFIG.MOVE_SPEED;
-    const moveSpeed = this.isSwimming ? CONFIG.SWIM_SPEED : (canSprint ? CONFIG.SPRINT_SPEED : baseSpeed);
+    const wadingSpeed = baseSpeed * 0.6;
+    const moveSpeed = this.isSwimming ? CONFIG.SWIM_SPEED : this.isWading ? wadingSpeed : (canSprint ? CONFIG.SPRINT_SPEED : baseSpeed);
     let isMoving = false;
 
     // Remap thumbstick past deadzone to smooth 0→1 range (removes jerk at deadzone edge)
@@ -316,7 +326,9 @@ export class MovementSystem {
 
     // Expose state for audio system
     this.isMoving = isMoving && this.isGrounded;
-    if (terrainY < CONFIG.WATER_LEVEL + 0.1) {
+    if (this.isWading) {
+      this.groundType = 'water';
+    } else if (terrainY < CONFIG.WATER_LEVEL + 0.1) {
       this.groundType = 'water';
     } else if (rockY > terrainY + 0.01) {
       this.groundType = 'rock';

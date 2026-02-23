@@ -6,6 +6,7 @@ let groundMaterial = null;
 const groundTimeUniform = { value: 0 };
 const groundWetnessUniform = { value: 0 };
 const groundWaterDarkenUniform = { value: 1.0 }; // 1 = full brightness, 0 = black
+const groundRainUniform = { value: 0 };
 
 /**
  * Update ground material time (call each frame for animated foam).
@@ -30,6 +31,7 @@ export function getGroundMaterial() {
     groundMaterial.userData.timeUniform = groundTimeUniform;
     groundMaterial.userData.wetnessUniform = groundWetnessUniform;
     groundMaterial.userData.waterDarkenUniform = groundWaterDarkenUniform;
+    groundMaterial.userData.rainUniform = groundRainUniform;
     groundMaterial.userData.sandTex = sandTex;
     groundMaterial.userData.dirtTex = dirtTex;
     groundMaterial.userData.rockTex = rockTex;
@@ -63,6 +65,7 @@ export function getGroundMaterial() {
       shader.uniforms.uTime = groundMaterial.userData.timeUniform;
       shader.uniforms.uWetness = groundMaterial.userData.wetnessUniform;
       shader.uniforms.uWaterDarken = groundMaterial.userData.waterDarkenUniform;
+      shader.uniforms.uRainIntensity = groundMaterial.userData.rainUniform;
       shader.uniforms.sandMap = { value: groundMaterial.userData.sandTex };
       shader.uniforms.dirtMap = { value: groundMaterial.userData.dirtTex };
       shader.uniforms.rockMap = { value: groundMaterial.userData.rockTex };
@@ -79,11 +82,11 @@ export function getGroundMaterial() {
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute float treeDensity;\nvarying float vTreeDensity;\nattribute float cottageDensity;\nvarying float vCottageDensity;'
+        '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute float treeDensity;\nvarying float vTreeDensity;\nattribute float cottageDensity;\nvarying float vCottageDensity;\nattribute float streamChannel;\nvarying float vStreamChannel;\nattribute vec2 streamFlowDir;\nvarying vec2 vStreamFlowDir;'
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;\nvCottageDensity = cottageDensity;\nvWorldNormal = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);'
+        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;\nvCottageDensity = cottageDensity;\nvStreamChannel = streamChannel;\nvStreamFlowDir = streamFlowDir;\nvWorldNormal = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);'
       );
 
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -104,6 +107,7 @@ export function getGroundMaterial() {
          uniform float uTime;
          uniform float uWetness;
          uniform float uWaterDarken;
+         uniform float uRainIntensity;
          uniform sampler2D sandMap;
          uniform sampler2D dirtMap;
          uniform sampler2D rockMap;
@@ -121,6 +125,8 @@ export function getGroundMaterial() {
          varying vec3 vWorldNormal;
          varying float vTreeDensity;
          varying float vCottageDensity;
+         varying float vStreamChannel;
+         varying vec2 vStreamFlowDir;
 
          // Per-pixel value noise for dirt patches (no triangle artifacts)
          // Sin-free hash: sin(large_arg) loses precision on mobile GPUs (Quest)
@@ -305,12 +311,64 @@ export function getGroundMaterial() {
            terrainColor = mix(terrainColor, steepRockColor, steepFactor);
          }
 
+         // --- River rendering in stream channels ---
+         // vStreamChannel is 0-1 from traced rivers (width already baked in)
+         float rainExpand = uRainIntensity * 0.15;
+         // Outer edge: wet bank zone (static dark ground, no animation)
+         float bankFactor = smoothstep(0.0, max(0.1, 0.3 - rainExpand), vStreamChannel);
+         // Inner edge: actual flowing water (tight core of the channel)
+         float streamFactor = smoothstep(max(0.1, 0.3 - rainExpand), 0.5, vStreamChannel);
+         // Extend rivers right down to/slightly below water level for seamless lake join
+         float aboveWater = smoothstep(waterLevel - 0.5, waterLevel + 0.3, h);
+         streamFactor *= aboveWater;
+         bankFactor *= aboveWater;
+         // Fade out rivers above snowline (mountain rivers visible in alpine zone)
+         float riverAltFade = 1.0 - smoothstep(snowlineH - 2.0, snowlineH + 4.0, h);
+         streamFactor *= riverAltFade;
+         bankFactor *= riverAltFade;
+
+         // Wet banks — static darkened ground (no flow animation)
+         float bankOnly = bankFactor * (1.0 - streamFactor);
+         if (bankOnly > 0.01) {
+           terrainColor = mix(terrainColor, terrainColor * vec3(0.65, 0.68, 0.72), bankOnly * 0.6);
+         }
+
+         if (streamFactor > 0.01) {
+           // Flow direction from traced river data, fallback to terrain normal
+           vec2 tracedDir = vStreamFlowDir;
+           float tracedLen = length(tracedDir);
+           vec3 nrm = normalize(vWorldNormal);
+           vec2 flowDir = tracedLen > 0.3
+             ? normalize(tracedDir)
+             : (length(nrm.xz) > 0.01 ? normalize(-nrm.xz) : vec2(0.0, -1.0));
+           vec2 perpDir = vec2(-flowDir.y, flowDir.x);
+
+           float along = dot(vWorldPos.xz, flowDir);
+           float across = dot(vWorldPos.xz, perpDir);
+
+           // Continuous sine-wave scroll — no two-phase, no pulsation
+           float bedW1 = sin(along * 1.5 - uTime * 3.0 + across * 0.4) * 0.5 + 0.5;
+           float bedW2 = sin(along * 2.8 - uTime * 5.5 - across * 0.5 + 7.0) * 0.5 + 0.5;
+           float bedW3 = sin(along * 4.5 - uTime * 8.0 + across * 0.8 + 13.0) * 0.5 + 0.5;
+           float flowPattern = bedW1 * 0.4 + bedW2 * 0.35 + bedW3 * 0.25;
+
+           // River bed color — dark with flowing light/dark variation
+           vec3 riverColor = vec3(0.08, 0.14, 0.18) * uWaterDarken;
+           riverColor += (flowPattern - 0.5) * 0.20 * uWaterDarken;
+
+           terrainColor = mix(terrainColor, riverColor, streamFactor);
+         }
+
          // Dynamic waterline that follows waves
          float dynWater = waterLevel + _waveH(vWorldPos.xz, uTime);
 
          // Shore transition: water color → foam → wet sand → dry sand
          float distAbove = h - dynWater;
          vec3 waterTint = vec3(0.05, 0.15, 0.28);
+
+         // Suppress shore effects in river channels for seamless river→lake join
+         // Use raw vStreamChannel (not bankFactor which fades at waterline)
+         float shoreSuppress = 1.0 - smoothstep(0.0, 0.3, vStreamChannel);
 
          // At and below waterline: terrain matches rendered water appearance
          // Wide blending zone so terrain gradually becomes water-colored,
@@ -321,7 +379,7 @@ export function getGroundMaterial() {
          float wlNoise = (_vnoise(vWorldPos.xz * 3.0 + vec2(uTime * 0.05, uTime * 0.03)) - 0.5) * 0.3
                        + (_vnoise(vWorldPos.xz * 8.0 + vec2(-uTime * 0.04, uTime * 0.06) + 40.0) - 0.5) * 0.15;
          float waterMatch = 1.0 - smoothstep(-0.3, 0.25 + wlNoise, distAbove);
-         terrainColor = mix(terrainColor, shallowWater, waterMatch);
+         terrainColor = mix(terrainColor, shallowWater, waterMatch * shoreSuppress);
 
          // --- Wave lapping at the shoreline ---
          // Curved lapping wave fronts (domain-warped position for organic shapes)
@@ -342,7 +400,7 @@ export function getGroundMaterial() {
 
          // Water tongue — area covered by the lapping wave looks like shallow water
          float waterTongue = smoothstep(0.05, -0.05, lapDist);
-         terrainColor = mix(terrainColor, shallowWater, waterTongue * 0.7);
+         terrainColor = mix(terrainColor, shallowWater, waterTongue * 0.7 * shoreSuppress);
 
          // Bright foam froth at the advancing wave front
          float fn1 = _vnoise(vWorldPos.xz * 8.0 + vec2(uTime * 0.2, uTime * 0.12));
@@ -351,15 +409,15 @@ export function getGroundMaterial() {
          float frothLine = smoothstep(0.08, -0.02, lapDist) * smoothstep(-0.20, -0.03, lapDist);
          frothLine *= 0.5 + 0.5 * foamNoise;
          vec3 foamColor = vec3(0.70, 0.74, 0.70) * uWaterDarken;
-         terrainColor = mix(terrainColor, foamColor, frothLine);
+         terrainColor = mix(terrainColor, foamColor, frothLine * shoreSuppress);
 
          // Wet sand behind the receding wave — darker and shinier looking
          float wetTrail = smoothstep(0.6, 0.0, lapDist) * (1.0 - waterTongue);
-         terrainColor = mix(terrainColor, terrainColor * vec3(0.65, 0.70, 0.75), wetTrail * 0.6);
+         terrainColor = mix(terrainColor, terrainColor * vec3(0.65, 0.70, 0.75), wetTrail * 0.6 * shoreSuppress);
 
          // Wider wet sand zone — darken and cool-shift (always-wet area near water)
          float wetZone = smoothstep(3.5, 0.5, distAbove);
-         terrainColor = mix(terrainColor, terrainColor * vec3(0.7, 0.74, 0.78), wetZone * 0.5);
+         terrainColor = mix(terrainColor, terrainColor * vec3(0.7, 0.74, 0.78), wetZone * 0.5 * shoreSuppress);
 
          // Deep water visibility falloff
          float depthBelow = max(0.0, -distAbove);
@@ -414,6 +472,8 @@ export function getGroundMaterial() {
            // Let rock texture show through faintly in snow (breaks up flat white)
            float snowDetail = snowBlend * slopeFlat * 0.3;
            detailSuppress *= max(altFade, snowDetail);
+           // Suppress detail texture in river water
+           detailSuppress *= (1.0 - streamFactor);
            diffuseColor.rgb += detail * 1.5 * detailSuppress;
          #endif`
       );
@@ -814,4 +874,169 @@ function createRockTexture(size = 512) {
   tex.magFilter = THREE.LinearFilter;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   return tex;
+}
+
+/**
+ * Semi-transparent river water overlay material.
+ * Sits on top of terrain to create visible flowing water surface.
+ */
+let riverWaterMat = null;
+
+export function getRiverWaterMaterial() {
+  if (!riverWaterMat) {
+    riverWaterMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: groundTimeUniform,
+        uWaterDarken: groundWaterDarkenUniform,
+      },
+      vertexShader: `
+        uniform float uTime;
+        attribute vec2 streamFlowDir;
+        attribute float flowAmount;
+        varying vec3 vWorldPos;
+        varying vec2 vFlowDir;
+        varying float vWaveH;
+        varying float vFlow;
+
+        float riverWave(vec2 p, vec2 flow, float t, float turbulence) {
+          vec2 perp = vec2(-flow.y, flow.x);
+          float along = dot(p, flow);
+          float across = dot(p, perp);
+
+          float h = 0.0;
+          // Fast downstream travelling waves — amplitude scales with turbulence
+          h += sin(along * 1.0 + across * 0.15 + t * 8.0) * 0.04 * turbulence;
+          h += sin(along * 1.8 - across * 0.3 + t * 11.0) * 0.03 * turbulence;
+          h += sin(along * 3.2 + across * 0.5 + t * 15.0) * 0.02 * turbulence;
+          h += sin(along * 5.0 - across * 0.2 + t * 20.0) * 0.012 * turbulence;
+          // Cross-stream wobble
+          h += sin(across * 2.5 + along * 0.2 + t * 1.5) * 0.008 * turbulence;
+          return h;
+        }
+
+        void main() {
+          vec4 worldPos4 = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos4.xyz;
+          vFlowDir = streamFlowDir;
+          vFlow = flowAmount;
+
+          vec2 flow = length(streamFlowDir) > 0.01
+            ? normalize(streamFlowDir) : vec2(0.0, -1.0);
+
+          // Low flow = mountain stream (more turbulent), high flow = wide river (calmer)
+          float turbulence = mix(1.5, 0.7, smoothstep(2.0, 40.0, flowAmount));
+
+          float wH = riverWave(worldPos4.xz, flow, uTime, turbulence);
+          vWaveH = wH;
+
+          vec3 displaced = position;
+          displaced.y += wH;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uWaterDarken;
+        varying vec3 vWorldPos;
+        varying vec2 vFlowDir;
+        varying float vWaveH;
+        varying float vFlow;
+
+        float _hash(vec2 p) {
+          vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+          p3 += vec3(dot(p3, p3.yzx + vec3(33.33)));
+          return fract((p3.x + p3.y) * p3.z);
+        }
+        float _vnoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = _hash(i);
+          float b = _hash(i + vec2(1.0, 0.0));
+          float c = _hash(i + vec2(0.0, 1.0));
+          float d = _hash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+
+        void main() {
+          vec2 flowDir = length(vFlowDir) > 0.01 ? normalize(vFlowDir) : vec2(0.0, -1.0);
+          vec2 perpDir = vec2(-flowDir.y, flowDir.x);
+
+          // Flow-dependent turbulence: low flow = mountain stream, high = wide river
+          float turbulence = smoothstep(40.0, 2.0, vFlow);
+
+          // Project world position into flow-aligned coordinates
+          float along = dot(vWorldPos.xz, flowDir);
+          float across = dot(vWorldPos.xz, perpDir);
+
+          // --- Continuous UV scroll — no two-phase, no pulsation ---
+          // Multiple sine-wave layers scrolling downstream at different speeds
+          // Each layer has cross-stream variation for diagonal streaks
+          float t = uTime;
+
+          // Broad swells (slow, wide)
+          float w1 = sin(along * 1.2 - t * 3.0 + across * 0.3) * 0.5 + 0.5;
+          float w2 = sin(along * 0.8 - t * 2.2 + across * 0.5 + 5.0) * 0.5 + 0.5;
+
+          // Medium detail (faster, tighter)
+          float w3 = sin(along * 2.5 - t * 5.0 - across * 0.6 + 11.0) * 0.5 + 0.5;
+          float w4 = sin(along * 3.2 - t * 6.5 + across * 0.4 + 17.0) * 0.5 + 0.5;
+
+          // Fine ripples (fastest, narrowest)
+          float w5 = sin(along * 5.0 - t * 10.0 + across * 1.0 + 23.0) * 0.5 + 0.5;
+          float w6 = sin(along * 7.0 - t * 13.0 - across * 0.8 + 31.0) * 0.5 + 0.5;
+
+          // Combine — broad shapes + medium detail + fine texture
+          float combined = w1 * 0.20 + w2 * 0.18
+                         + w3 * 0.18 + w4 * 0.16
+                         + w5 * 0.15 + w6 * 0.13;
+
+          // Add noise for breakup (stationary, not scrolling — adds texture variation)
+          float noiseBreak = _vnoise(vec2(along * 1.5, across * 3.0));
+          combined = combined * 0.8 + noiseBreak * 0.2;
+
+          // --- Color palette: mountain stream (cyan) ↔ lowland river (steel blue) ---
+          vec3 mtDeep  = vec3(0.04, 0.14, 0.18) * uWaterDarken;
+          vec3 mtMid   = vec3(0.08, 0.28, 0.35) * uWaterDarken;
+          vec3 mtCrest = vec3(0.35, 0.60, 0.65) * uWaterDarken;
+          vec3 mtFoam  = vec3(0.80, 0.90, 0.92) * uWaterDarken;
+
+          vec3 rvDeep  = vec3(0.04, 0.08, 0.14) * uWaterDarken;
+          vec3 rvMid   = vec3(0.10, 0.18, 0.28) * uWaterDarken;
+          vec3 rvCrest = vec3(0.40, 0.50, 0.55) * uWaterDarken;
+          vec3 rvFoam  = vec3(0.65, 0.72, 0.75) * uWaterDarken;
+
+          vec3 deepColor  = mix(rvDeep, mtDeep, turbulence);
+          vec3 midColor   = mix(rvMid, mtMid, turbulence);
+          vec3 crestColor = mix(rvCrest, mtCrest, turbulence);
+          vec3 foamColor  = mix(rvFoam, mtFoam, turbulence);
+
+          // Build color from wave pattern
+          vec3 color = mix(deepColor, midColor, smoothstep(0.25, 0.45, combined));
+          color = mix(color, crestColor, smoothstep(0.50, 0.65, combined));
+
+          // Foam streaks on peaks — more in turbulent mountain streams
+          float foamThreshold = mix(0.72, 0.55, turbulence);
+          float foam = smoothstep(foamThreshold, foamThreshold + 0.12, combined);
+          color = mix(color, foamColor, foam);
+
+          // Vertex wave crest/trough interaction
+          float waveCrest = smoothstep(0.02, 0.07, vWaveH);
+          color += waveCrest * 0.15 * uWaterDarken;
+          float waveTrough = smoothstep(0.0, -0.05, vWaveH);
+          color *= 1.0 - waveTrough * 0.3;
+
+          // Alpha
+          float baseAlpha = mix(0.14, 0.22, turbulence);
+          float alpha = baseAlpha + combined * 0.15 + foam * 0.20 + waveCrest * 0.06;
+
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+  }
+  return riverWaterMat;
 }

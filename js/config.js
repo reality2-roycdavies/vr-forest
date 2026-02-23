@@ -109,11 +109,36 @@ export const CONFIG = {
   FOAM_SHORE_WIDTH: 0.6,         // strip offset toward shore
   FOAM_WATER_WIDTH: 0.8,         // strip offset toward water
 
-  // Stream channels (ridge noise carving)
-  STREAM_SCALE: 0.009,        // lower frequency = longer continuous channels
-  STREAM_DEPTH: 6.0,          // deeper carving to push more below water level
-  STREAM_WARP: 22,            // more meander
-  STREAM_SHARPNESS: 2,        // wider channels (lower = broader)
+  // Valley carving (ridge noise — creates landscape valleys and lakes)
+  VALLEY_SCALE: 0.009,            // noise frequency for valley lines
+  VALLEY_DEPTH: 6.0,              // max carving depth
+  VALLEY_WARP: 22,                // domain warp for meander
+  VALLEY_SHARPNESS: 2,            // power exponent (higher = narrower valleys)
+
+  // Rivers (physically-traced downhill from mountain sources)
+  RIVER_SOURCE_SPACING: 64,       // source candidate grid (meters, denser for high-altitude valleys)
+  RIVER_SOURCE_MIN_ALT: 12,       // min base terrain height for sources (mountain zone)
+  RIVER_STEP_SIZE: 4.0,           // trace step (meters)
+  RIVER_GRAD_EPS: 2.0,            // gradient central-difference epsilon
+  RIVER_MAX_STEPS: 500,           // max steps per river
+  RIVER_MOMENTUM: 0.3,            // blend previous dir (escapes shallow pits)
+  RIVER_MERGE_DIST: 6.0,          // confluence detection radius (meters)
+  RIVER_HASH_CELL: 8,             // spatial hash cell size (meters)
+  RIVER_MIN_HALFWIDTH: 0.02,      // narrowest stream halfwidth (near-zero at source)
+  RIVER_WIDTH_SCALE: 0.2,         // halfwidth = MIN + SCALE * sqrt(flow)
+  RIVER_MAX_HALFWIDTH: 2.8,       // widest river halfwidth
+  RIVER_CARVE_SCALE: 0.4,         // carve depth = SCALE * sqrt(flow)
+  RIVER_MAX_CARVE: 5.0,           // max carve depth
+  RIVER_BANK_WIDTH: 1.5,          // soft bank transition width
+  RIVER_TRACE_RADIUS: 800,        // trace radius from player (meters)
+  RIVER_RETRACE_DIST: 200,        // re-trace trigger distance
+  RIVER_SOURCE_VALLEY_RADIUS: 24, // meters — ring sample radius for valley check
+  RIVER_SOURCE_VALLEY_DROP: 0.0,  // source must be at/below surrounding avg (any depression)
+  RIVER_PIT_SEARCH_RADIUS: 120,   // max search radius for escape point (meters)
+  RIVER_PIT_SEARCH_STEP: 8,       // ring spacing in escape search (meters)
+  RIVER_PIT_MAX_BREAKS: 8,        // max pit-breaks per river before giving up
+  RIVER_PIT_STUCK_INTERVAL: 20,   // check descent every N steps
+  RIVER_PIT_MIN_DESCENT: 0.3,     // min height drop over stuck interval to count as progressing
 
   // Mountain chains (additive ridge noise — inverse of stream carving)
   MOUNTAIN_SCALE: 0.003,          // lower freq than streams = broader chains
