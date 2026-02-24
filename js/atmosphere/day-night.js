@@ -407,16 +407,16 @@ export class DayNightSystem {
       positions[i * 3 + 2] = -cosDec * Math.sin(ra) * R;
 
       // Logarithmic brightness — magnitude is log scale, so use pow for perceptual accuracy
-      // mag -1.4 (Sirius) → 1.0, mag 3.0 → ~0.35, mag 5.5 → ~0.15
+      // mag -1.4 (Sirius) → 1.0, mag 3.0 → ~0.20, mag 5.5 → ~0.04
       const normMag = (mag + 1.5) / 7.0; // 0..1 range
-      const lumFactor = Math.pow(1.0 - normMag, 2.0);
+      const lumFactor = Math.pow(1.0 - normMag, 2.5);
 
-      // Size: modest range — stars are points, not blobs
-      // Sirius (mag -1.4) → ~5.5, Vega (mag 0) → ~4.5, mag 3 → ~2.8, mag 5 → ~1.8
-      sizes[i] = Math.max(1.5, 2.0 + lumFactor * 4.0);
+      // Size: wide contrast — faint stars are tiny, bright stars stand out
+      // Sirius (mag -1.4) → ~5, Vega (mag 0) → ~3.5, mag 3 → ~1.5, mag 5 → ~0.8
+      sizes[i] = 0.6 + lumFactor * 5.0;
 
-      // Brightness: boosted floor + steep curve so even faint stars are visible
-      brightness[i] = Math.max(0.35, lumFactor * 1.4);
+      // Brightness: low floor keeps faint stars visible but dim; bright stars vivid
+      brightness[i] = Math.max(0.15, lumFactor * 1.3);
 
       // Per-star color from B-V index
       const [cr, cg, cb] = this._bvToRGB(bv);
