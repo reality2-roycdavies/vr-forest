@@ -477,53 +477,12 @@ export class DayNightSystem {
 
     ctx.putImageData(imageData, 0, 0);
 
-    // Gaussian blur for soft nebulosity (smooth diffuse glow)
+    // Gaussian blur — texture is just a smooth density/colour envelope
     const blurCanvas = document.createElement('canvas');
     blurCanvas.width = w; blurCanvas.height = h;
     const blurCtx = blurCanvas.getContext('2d');
     blurCtx.filter = 'blur(4px)';
     blurCtx.drawImage(canvas, 0, 0);
-
-    // Overlay unresolved starfield graininess on top of the blurred glow
-    // (applied AFTER blur so individual star points stay crisp)
-    const blurredData = blurCtx.getImageData(0, 0, w, h);
-    const bd = blurredData.data;
-    const hash = (a, b) => {
-      const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
-      return v - Math.floor(v);
-    };
-
-    for (let py = 0; py < h; py++) {
-      for (let px = 0; px < w; px++) {
-        const i = (py * w + px) * 4;
-        const existingA = bd[i + 3] / 255;
-        if (existingA < 0.005) continue;
-
-        // Two independent hashes for layered star distribution
-        const grain  = hash(px + 0.5, py + 0.5);
-        const grain2 = hash(px * 1.7 + 100, py * 1.3 + 200);
-
-        // Dense faint stars: subtle per-pixel graininess everywhere in band
-        const faintGrain = (grain - 0.5) * existingA * 0.2;
-
-        // Medium stars: moderately sparse bright points
-        const medThreshold = 0.85 - existingA * 0.2;
-        const medStar = grain2 > medThreshold
-          ? ((grain2 - medThreshold) / (1 - medThreshold)) * existingA * 0.35 : 0;
-
-        // Bright star points: very sparse, more frequent in bright regions
-        const brightThreshold = 0.95 - existingA * 0.12;
-        const brightStar = grain > brightThreshold
-          ? ((grain - brightThreshold) / (1 - brightThreshold)) * existingA * 0.6 : 0;
-
-        const boost = faintGrain + medStar + brightStar;
-        bd[i]     = Math.max(0, Math.min(255, bd[i]     + boost * 255));
-        bd[i + 1] = Math.max(0, Math.min(255, bd[i + 1] + boost * 255));
-        bd[i + 2] = Math.max(0, Math.min(255, bd[i + 2] + boost * 255));
-        bd[i + 3] = Math.min(255, bd[i + 3] + (medStar + brightStar) * 80);
-      }
-    }
-    blurCtx.putImageData(blurredData, 0, 0);
 
     const tex = new THREE.CanvasTexture(blurCanvas);
     tex.wrapS = THREE.RepeatWrapping;
@@ -612,7 +571,6 @@ export class DayNightSystem {
         varying float vElevation;
         void main() {
           vUv = uv;
-          // World-space elevation for horizon fade
           vec4 worldPos = modelMatrix * vec4(position, 1.0);
           vElevation = normalize(worldPos.xyz - cameraPosition).y;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -623,11 +581,51 @@ export class DayNightSystem {
         uniform float uOpacity;
         varying vec2 vUv;
         varying float vElevation;
+
+        // Hash for procedural star generation
+        float hash21(vec2 p) {
+          vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+          p3 += dot(p3, p3.yzx + 33.33);
+          return fract((p3.x + p3.y) * p3.z);
+        }
+
+        // Generate star contribution from one grid layer
+        float starLayer(vec2 uv, vec2 gridSize, float density, float radius, vec2 seed) {
+          vec2 grid = uv * gridSize;
+          vec2 cell = floor(grid);
+          vec2 f = fract(grid);
+          float h = hash21(cell + seed);
+          float thresh = 1.0 - density;
+          if (h < thresh) return 0.0;
+          vec2 sp = vec2(hash21(cell + seed + vec2(127.1, 311.7)),
+                         hash21(cell + seed + vec2(269.5, 183.3)));
+          float d = length(f - sp);
+          float mag = (h - thresh) / (1.0 - thresh);
+          return smoothstep(radius, 0.0, d) * mag;
+        }
+
         void main() {
-          // Fade out at/below horizon so band doesn't go through ground
           float horizonFade = smoothstep(-0.02, 0.12, vElevation);
           vec4 tex = texture2D(uTexture, vUv);
-          gl_FragColor = vec4(tex.rgb, tex.a * uOpacity * horizonFade);
+          float density = tex.a;
+          float vis = density * uOpacity * horizonFade;
+          if (vis < 0.002) discard;
+
+          // Layer 1: Dense dim stars (thousands of faint points)
+          float s1 = starLayer(vUv, vec2(4096.0, 1024.0), density * 0.45, 0.45, vec2(0.0));
+          // Layer 2: Medium stars (sparser, brighter)
+          float s2 = starLayer(vUv, vec2(2048.0, 512.0), density * 0.22, 0.35, vec2(500.0, 700.0));
+          // Layer 3: Bright stars (very sparse highlights)
+          float s3 = starLayer(vUv, vec2(1024.0, 256.0), density * 0.08, 0.3, vec2(1300.0, 900.0));
+
+          float stars = s1 * 0.4 + s2 * 0.7 + s3 * 1.0;
+
+          // Minimal diffuse glow underneath (truly unresolved background)
+          float glow = density * 0.06;
+
+          vec3 color = tex.rgb * (glow + stars);
+          float alpha = (glow + stars * 0.65) * uOpacity * horizonFade;
+          gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
