@@ -493,13 +493,21 @@ export function getRiverFactor(worldX, worldZ) {
     CONFIG.RIVER_MAX_HALFWIDTH,
     CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow)
   );
-  const totalWidth = halfWidth + CONFIG.RIVER_BANK_WIDTH;
+
+  // Match carving: deep channels have wider flat zone and banks
+  const maxDepth = Math.min(
+    CONFIG.RIVER_MAX_CARVE,
+    CONFIG.RIVER_CARVE_SCALE * Math.sqrt(flow)
+  );
+  const flatWidth = Math.max(halfWidth, maxDepth * 1.0);
+  const bankWidth = Math.max(CONFIG.RIVER_BANK_WIDTH, maxDepth * 1.5);
+  const totalWidth = flatWidth + bankWidth;
 
   if (dist >= totalWidth) return 0;
-  if (dist <= halfWidth) return 1.0;
+  if (dist <= flatWidth) return 1.0;
 
   // Smoothstep falloff in bank zone
-  const bt = (dist - halfWidth) / CONFIG.RIVER_BANK_WIDTH;
+  const bt = (dist - flatWidth) / bankWidth;
   return 1 - bt * bt * (3 - 2 * bt);
 }
 
@@ -516,21 +524,22 @@ export function getRiverCarving(worldX, worldZ) {
     CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow)
   );
 
-  // Carve channel wider than visual width for a gentler valley profile
-  const carveWidth = halfWidth * 2.5;
-  if (dist >= carveWidth) return 0;
-
   const maxDepth = Math.min(
     CONFIG.RIVER_MAX_CARVE,
     CONFIG.RIVER_CARVE_SCALE * Math.sqrt(flow)
   );
 
+  // Carve width scales with both water width and depth — deep channels are wide
+  const flatWidth = Math.max(halfWidth, maxDepth * 1.0);
+  const carveWidth = flatWidth + Math.max(CONFIG.RIVER_BANK_WIDTH, maxDepth * 1.5);
+  if (dist >= carveWidth) return 0;
+
   // Extra carving for breach segments (cutting through terrain barriers)
   const extraCarve = (seg.extraCarve0 || 0) * (1 - t) + (seg.extraCarve1 || 0) * t;
 
-  // Flat-bottomed channel: flat within halfWidth, cosine slopes on banks
+  // Flat-bottomed channel: flat within flatWidth, cosine slopes on banks
   const u = dist / carveWidth;
-  const flatRatio = halfWidth / carveWidth; // inner flat zone
+  const flatRatio = flatWidth / carveWidth;
   let profile;
   if (u <= flatRatio) {
     profile = 1.0; // flat bottom at full depth

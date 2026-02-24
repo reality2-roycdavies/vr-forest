@@ -721,8 +721,10 @@ export class Chunk {
         const hash3 = Math.sin(cx * 419.2 + cz * 71.9) * 43758.5453;
         const r3 = hash3 - Math.floor(hash3);
 
-        // Place across the channel width — edges and bed
-        const spreadWidth = halfWidth + CONFIG.RIVER_BANK_WIDTH * 0.5;
+        // Place across the channel width — scales with depth like carving does
+        const depth = Math.min(CONFIG.RIVER_MAX_CARVE, CONFIG.RIVER_CARVE_SCALE * Math.sqrt(flow));
+        const flatW = Math.max(halfWidth, depth * 1.0);
+        const spreadWidth = flatW + CONFIG.RIVER_BANK_WIDTH * 0.3;
         const offset = (r2 - 0.5) * 2.0 * spreadWidth;
 
         const wx = cx + px * offset + fdx * (r3 - 0.5) * spacing * 0.5;
@@ -771,7 +773,7 @@ export class Chunk {
     for (const seg of segments) {
       const flow0 = seg.flow0;
       const flow1 = seg.flow1;
-      // Mesh covers full carved channel + padding for bends & interpolation
+      // Mesh covers full carved channel (matches getRiverCarving formula) + padding
       const baseHW0 = Math.min(
         CONFIG.RIVER_MAX_HALFWIDTH,
         CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow0)
@@ -780,9 +782,16 @@ export class Chunk {
         CONFIG.RIVER_MAX_HALFWIDTH,
         CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow1)
       );
-      // Use wider of: shader width or carve width, plus padding
-      const hw0 = Math.max(baseHW0 + CONFIG.RIVER_BANK_WIDTH, baseHW0 * 2.5) + 1.0;
-      const hw1 = Math.max(baseHW1 + CONFIG.RIVER_BANK_WIDTH, baseHW1 * 2.5) + 1.0;
+      const depth0 = Math.min(CONFIG.RIVER_MAX_CARVE, CONFIG.RIVER_CARVE_SCALE * Math.sqrt(flow0));
+      const depth1 = Math.min(CONFIG.RIVER_MAX_CARVE, CONFIG.RIVER_CARVE_SCALE * Math.sqrt(flow1));
+      const flat0 = Math.max(baseHW0, depth0 * 1.0);
+      const flat1 = Math.max(baseHW1, depth1 * 1.0);
+      // Mesh stops inside the rock bank edge — only covers the water core
+      // vStreamChannel ≈ 0.7 at dist = flatWidth + bankWidth * 0.2
+      const bank0 = Math.max(CONFIG.RIVER_BANK_WIDTH, depth0 * 1.5);
+      const bank1 = Math.max(CONFIG.RIVER_BANK_WIDTH, depth1 * 1.5);
+      const hw0 = flat0 + bank0 * 0.2 + 0.2;
+      const hw1 = flat1 + bank1 * 0.2 + 0.2;
 
       const dx = seg.x1 - seg.x0;
       const dz = seg.z1 - seg.z0;
@@ -795,24 +804,30 @@ export class Chunk {
       const px = -fdz;
       const pz = fdx;
 
-      // Y at river center (terrain already carved), slight lift above bed
-      const y0 = getTerrainHeight(seg.x0, seg.z0) + 0.06;
-      const y1 = getTerrainHeight(seg.x1, seg.z1) + 0.06;
-
       // Convert to local chunk coordinates
       const lx0 = seg.x0 - ox;
       const lz0 = seg.z0 - oz;
       const lx1 = seg.x1 - ox;
       const lz1 = seg.z1 - oz;
 
+      // Y sampled at each vertex's actual world position, slight lift above terrain
+      const wx0L = seg.x0 + px * hw0, wz0L = seg.z0 + pz * hw0;
+      const wx0R = seg.x0 - px * hw0, wz0R = seg.z0 - pz * hw0;
+      const wx1L = seg.x1 + px * hw1, wz1L = seg.z1 + pz * hw1;
+      const wx1R = seg.x1 - px * hw1, wz1R = seg.z1 - pz * hw1;
+      const y0L = getTerrainHeight(wx0L, wz0L) + 0.05;
+      const y0R = getTerrainHeight(wx0R, wz0R) + 0.05;
+      const y1L = getTerrainHeight(wx1L, wz1L) + 0.05;
+      const y1R = getTerrainHeight(wx1R, wz1R) + 0.05;
+
       const vi = positions.length / 3;
 
       // Quad: start-left, start-right, end-left, end-right
       positions.push(
-        lx0 + px * hw0, y0, lz0 + pz * hw0,
-        lx0 - px * hw0, y0, lz0 - pz * hw0,
-        lx1 + px * hw1, y1, lz1 + pz * hw1,
-        lx1 - px * hw1, y1, lz1 - pz * hw1
+        lx0 + px * hw0, y0L, lz0 + pz * hw0,
+        lx0 - px * hw0, y0R, lz0 - pz * hw0,
+        lx1 + px * hw1, y1L, lz1 + pz * hw1,
+        lx1 - px * hw1, y1R, lz1 - pz * hw1
       );
 
       flowDirs.push(fdx, fdz, fdx, fdz, fdx, fdz, fdx, fdz);

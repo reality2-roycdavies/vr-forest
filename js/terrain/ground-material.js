@@ -327,14 +327,17 @@ export function getGroundMaterial() {
          streamFactor *= riverAltFade;
          bankFactor *= riverAltFade;
 
-         // Wet banks — static darkened ground (no flow animation)
-         float bankOnly = bankFactor * (1.0 - streamFactor);
-         if (bankOnly > 0.01) {
-           terrainColor = mix(terrainColor, terrainColor * vec3(0.65, 0.68, 0.72), bankOnly * 0.6);
-         }
+         // Water core — the flowing center of the channel
+         // No aboveWater fade: water extends seamlessly to the lake
+         float waterCore = smoothstep(0.35, 0.7, vStreamChannel) * riverAltFade;
 
-         if (streamFactor > 0.01) {
-           // Flow direction from traced river data, fallback to terrain normal
+         // Channel banks — dark wet rock across entire bank (all in water channel)
+         if (bankFactor > 0.01) {
+           vec3 bankRock = _antiTileSample(rockMap, vWorldPos.xz * 0.25 * 0.7);
+           vec3 bankRockColor = bankRock * vec3(0.08, 0.11, 0.16) * uWaterDarken;
+           terrainColor = mix(terrainColor, bankRockColor, bankFactor);
+         }
+         if (waterCore > 0.01) {
            vec2 tracedDir = vStreamFlowDir;
            float tracedLen = length(tracedDir);
            vec3 nrm = normalize(vWorldNormal);
@@ -346,17 +349,17 @@ export function getGroundMaterial() {
            float along = dot(vWorldPos.xz, flowDir);
            float across = dot(vWorldPos.xz, perpDir);
 
-           // Continuous sine-wave scroll — no two-phase, no pulsation
-           float bedW1 = sin(along * 1.5 - uTime * 3.0 + across * 0.4) * 0.5 + 0.5;
-           float bedW2 = sin(along * 2.8 - uTime * 5.5 - across * 0.5 + 7.0) * 0.5 + 0.5;
-           float bedW3 = sin(along * 4.5 - uTime * 8.0 + across * 0.8 + 13.0) * 0.5 + 0.5;
+           // Fine-scale continuous sine-wave scroll for water surface
+           float bedW1 = sin(along * 12.0 - uTime * 6.0 + across * 2.0) * 0.5 + 0.5;
+           float bedW2 = sin(along * 20.0 - uTime * 10.0 - across * 3.0 + 7.0) * 0.5 + 0.5;
+           float bedW3 = sin(along * 35.0 - uTime * 16.0 + across * 5.0 + 13.0) * 0.5 + 0.5;
            float flowPattern = bedW1 * 0.4 + bedW2 * 0.35 + bedW3 * 0.25;
 
-           // River bed color — dark with flowing light/dark variation
-           vec3 riverColor = vec3(0.08, 0.14, 0.18) * uWaterDarken;
-           riverColor += (flowPattern - 0.5) * 0.20 * uWaterDarken;
+           // Dark water with flowing light/dark variation
+           vec3 riverColor = vec3(0.06, 0.12, 0.18) * uWaterDarken;
+           riverColor += (flowPattern - 0.5) * 0.18 * uWaterDarken;
 
-           terrainColor = mix(terrainColor, riverColor, streamFactor);
+           terrainColor = mix(terrainColor, riverColor, waterCore);
          }
 
          // Dynamic waterline that follows waves
@@ -367,8 +370,8 @@ export function getGroundMaterial() {
          vec3 waterTint = vec3(0.05, 0.15, 0.28);
 
          // Suppress shore effects in river channels for seamless river→lake join
-         // Use raw vStreamChannel (not bankFactor which fades at waterline)
-         float shoreSuppress = 1.0 - smoothstep(0.0, 0.3, vStreamChannel);
+         // Use raw vStreamChannel — tight threshold so no shore bleeds into channel
+         float shoreSuppress = 1.0 - smoothstep(0.0, 0.08, vStreamChannel);
 
          // At and below waterline: terrain matches rendered water appearance
          // Wide blending zone so terrain gradually becomes water-colored,
@@ -903,14 +906,12 @@ export function getRiverWaterMaterial() {
           float along = dot(p, flow);
           float across = dot(p, perp);
 
+          // Gentle broad undulation only — fine detail done in fragment shader
+          // These are swells, not individual ripples (mesh is ~4m vertex spacing)
           float h = 0.0;
-          // Fast downstream travelling waves — amplitude scales with turbulence
-          h += sin(along * 1.0 + across * 0.15 + t * 8.0) * 0.04 * turbulence;
-          h += sin(along * 1.8 - across * 0.3 + t * 11.0) * 0.03 * turbulence;
-          h += sin(along * 3.2 + across * 0.5 + t * 15.0) * 0.02 * turbulence;
-          h += sin(along * 5.0 - across * 0.2 + t * 20.0) * 0.012 * turbulence;
-          // Cross-stream wobble
-          h += sin(across * 2.5 + along * 0.2 + t * 1.5) * 0.008 * turbulence;
+          h += sin(along * 0.4 + across * 0.1 - t * 1.5) * 0.008 * turbulence;
+          h += sin(along * 0.7 - across * 0.15 - t * 2.2) * 0.006 * turbulence;
+          h += sin(across * 0.5 + along * 0.1 - t * 0.8) * 0.004 * turbulence;
           return h;
         }
 
@@ -969,66 +970,60 @@ export function getRiverWaterMaterial() {
           float along = dot(vWorldPos.xz, flowDir);
           float across = dot(vWorldPos.xz, perpDir);
 
-          // --- Continuous UV scroll — no two-phase, no pulsation ---
-          // Multiple sine-wave layers scrolling downstream at different speeds
-          // Each layer has cross-stream variation for diagonal streaks
-          float t = uTime;
+          // --- Continuous UV scroll — fine ripple scale ---
+          // Speed varies with flow: low flow (steep mountain) = fast, high flow (flat) = slow
+          float speed = mix(3.0, 0.5, smoothstep(2.0, 40.0, vFlow));
+          float t = uTime * speed;
 
-          // Broad swells (slow, wide)
-          float w1 = sin(along * 1.2 - t * 3.0 + across * 0.3) * 0.5 + 0.5;
-          float w2 = sin(along * 0.8 - t * 2.2 + across * 0.5 + 5.0) * 0.5 + 0.5;
+          // Medium ripples (~30cm wavelength, visible waves)
+          float w1 = sin(along * 18.0 - t * 8.0 + across * 3.0) * 0.5 + 0.5;
+          float w2 = sin(along * 14.0 - t * 6.0 + across * 4.0 + 5.0) * 0.5 + 0.5;
 
-          // Medium detail (faster, tighter)
-          float w3 = sin(along * 2.5 - t * 5.0 - across * 0.6 + 11.0) * 0.5 + 0.5;
-          float w4 = sin(along * 3.2 - t * 6.5 + across * 0.4 + 17.0) * 0.5 + 0.5;
+          // Fine ripples (~15cm wavelength)
+          float w3 = sin(along * 35.0 - t * 14.0 - across * 6.0 + 11.0) * 0.5 + 0.5;
+          float w4 = sin(along * 45.0 - t * 18.0 + across * 5.0 + 17.0) * 0.5 + 0.5;
 
-          // Fine ripples (fastest, narrowest)
-          float w5 = sin(along * 5.0 - t * 10.0 + across * 1.0 + 23.0) * 0.5 + 0.5;
-          float w6 = sin(along * 7.0 - t * 13.0 - across * 0.8 + 31.0) * 0.5 + 0.5;
+          // Very fine texture (~8cm wavelength, subtle shimmer)
+          float w5 = sin(along * 70.0 - t * 25.0 + across * 12.0 + 23.0) * 0.5 + 0.5;
+          float w6 = sin(along * 90.0 - t * 32.0 - across * 10.0 + 31.0) * 0.5 + 0.5;
 
-          // Combine — broad shapes + medium detail + fine texture
-          float combined = w1 * 0.20 + w2 * 0.18
+          float combined = w1 * 0.22 + w2 * 0.20
                          + w3 * 0.18 + w4 * 0.16
-                         + w5 * 0.15 + w6 * 0.13;
+                         + w5 * 0.13 + w6 * 0.11;
 
-          // Add noise for breakup (stationary, not scrolling — adds texture variation)
-          float noiseBreak = _vnoise(vec2(along * 1.5, across * 3.0));
+          // Stationary noise breakup for natural variation
+          float noiseBreak = _vnoise(vec2(along * 8.0, across * 15.0));
           combined = combined * 0.8 + noiseBreak * 0.2;
 
-          // --- Color palette: mountain stream (cyan) ↔ lowland river (steel blue) ---
-          vec3 mtDeep  = vec3(0.04, 0.14, 0.18) * uWaterDarken;
-          vec3 mtMid   = vec3(0.08, 0.28, 0.35) * uWaterDarken;
-          vec3 mtCrest = vec3(0.35, 0.60, 0.65) * uWaterDarken;
-          vec3 mtFoam  = vec3(0.80, 0.90, 0.92) * uWaterDarken;
+          // --- Color palette: reduced contrast, semi-transparent ---
+          // Mountain stream: subtle cyan tint
+          vec3 mtBase  = vec3(0.08, 0.18, 0.24) * uWaterDarken;
+          vec3 mtLight = vec3(0.18, 0.32, 0.38) * uWaterDarken;
+          vec3 mtFoam  = vec3(0.45, 0.55, 0.58) * uWaterDarken;
 
-          vec3 rvDeep  = vec3(0.04, 0.08, 0.14) * uWaterDarken;
-          vec3 rvMid   = vec3(0.10, 0.18, 0.28) * uWaterDarken;
-          vec3 rvCrest = vec3(0.40, 0.50, 0.55) * uWaterDarken;
-          vec3 rvFoam  = vec3(0.65, 0.72, 0.75) * uWaterDarken;
+          // Lowland river: subtle blue-grey
+          vec3 rvBase  = vec3(0.08, 0.12, 0.18) * uWaterDarken;
+          vec3 rvLight = vec3(0.16, 0.22, 0.30) * uWaterDarken;
+          vec3 rvFoam  = vec3(0.35, 0.40, 0.44) * uWaterDarken;
 
-          vec3 deepColor  = mix(rvDeep, mtDeep, turbulence);
-          vec3 midColor   = mix(rvMid, mtMid, turbulence);
-          vec3 crestColor = mix(rvCrest, mtCrest, turbulence);
+          vec3 baseColor  = mix(rvBase, mtBase, turbulence);
+          vec3 lightColor = mix(rvLight, mtLight, turbulence);
           vec3 foamColor  = mix(rvFoam, mtFoam, turbulence);
 
-          // Build color from wave pattern
-          vec3 color = mix(deepColor, midColor, smoothstep(0.25, 0.45, combined));
-          color = mix(color, crestColor, smoothstep(0.50, 0.65, combined));
+          // Gentle color variation from wave pattern (low contrast)
+          vec3 color = mix(baseColor, lightColor, combined);
 
-          // Foam streaks on peaks — more in turbulent mountain streams
-          float foamThreshold = mix(0.72, 0.55, turbulence);
-          float foam = smoothstep(foamThreshold, foamThreshold + 0.12, combined);
-          color = mix(color, foamColor, foam);
+          // Subtle foam highlights on peaks only
+          float foamThreshold = mix(0.72, 0.60, turbulence);
+          float foam = smoothstep(foamThreshold, foamThreshold + 0.15, combined);
+          color = mix(color, foamColor, foam * 0.5);
 
-          // Vertex wave crest/trough interaction
-          float waveCrest = smoothstep(0.02, 0.07, vWaveH);
-          color += waveCrest * 0.15 * uWaterDarken;
-          float waveTrough = smoothstep(0.0, -0.05, vWaveH);
-          color *= 1.0 - waveTrough * 0.3;
+          // Very subtle vertex wave tinting
+          float waveCrest = smoothstep(0.003, 0.008, vWaveH);
+          color += waveCrest * 0.04 * uWaterDarken;
 
-          // Alpha
-          float baseAlpha = mix(0.14, 0.22, turbulence);
-          float alpha = baseAlpha + combined * 0.15 + foam * 0.20 + waveCrest * 0.06;
+          // Alpha: very transparent — overlapping quads accumulate
+          float alpha = 0.06 + combined * 0.06 + foam * 0.04;
 
           gl_FragColor = vec4(color, alpha);
         }
