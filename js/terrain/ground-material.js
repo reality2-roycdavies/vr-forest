@@ -322,6 +322,8 @@ export function getGroundMaterial() {
          float aboveWater = smoothstep(waterLevel - 0.5, waterLevel + 0.3, h);
          streamFactor *= aboveWater;
          bankFactor *= aboveWater;
+         // Bank rock disappears near water level — lake shore takes over
+         bankFactor *= smoothstep(waterLevel - 0.1, waterLevel + 1.0, h);
          // Fade out rivers above snowline (mountain rivers visible in alpine zone)
          float riverAltFade = 1.0 - smoothstep(snowlineH - 2.0, snowlineH + 4.0, h);
          streamFactor *= riverAltFade;
@@ -369,9 +371,11 @@ export function getGroundMaterial() {
          float distAbove = h - dynWater;
          vec3 waterTint = vec3(0.05, 0.15, 0.28);
 
-         // Suppress shore effects in river channels for seamless river→lake join
-         // Use raw vStreamChannel — tight threshold so no shore bleeds into channel
-         float shoreSuppress = 1.0 - smoothstep(0.0, 0.08, vStreamChannel);
+         // Suppress shore effects in river channels, but let them return near water level
+         // so the lake shore transition is natural at the river-lake junction
+         float channelSuppress = smoothstep(0.0, 0.08, vStreamChannel);
+         float aboveWaterSuppress = smoothstep(waterLevel + 0.2, waterLevel + 0.5, h);
+         float shoreSuppress = 1.0 - channelSuppress * aboveWaterSuppress;
 
          // At and below waterline: terrain matches rendered water appearance
          // Wide blending zone so terrain gradually becomes water-colored,

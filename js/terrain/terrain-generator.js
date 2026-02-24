@@ -5,9 +5,8 @@ import { CONFIG } from '../config.js';
 /**
  * Generate height, color, UV, and normal data for a chunk.
  */
-export function generateTerrainData(chunkX, chunkZ) {
+export function generateTerrainData(chunkX, chunkZ, segments = CONFIG.CHUNK_SEGMENTS) {
   const size = CONFIG.CHUNK_SIZE;
-  const segments = CONFIG.CHUNK_SEGMENTS;
   const verticesPerSide = segments + 1;
   const vertexCount = verticesPerSide * verticesPerSide;
 

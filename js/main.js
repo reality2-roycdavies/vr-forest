@@ -51,9 +51,12 @@ const chunkManager = new ChunkManager(scene);
 movement.chunkManager = chunkManager;
 
 // --- Water surface with wave displacement ---
-const waterGeom = new THREE.PlaneGeometry(300, 300, 128, 128);
-const WATER_GRID_STEP = 300 / 128; // snap water position to grid to prevent wave sliding
-waterGeom.rotateX(-Math.PI / 2);
+const waterGeomHi = new THREE.PlaneGeometry(300, 300, 128, 128);
+waterGeomHi.rotateX(-Math.PI / 2);
+const waterGeomLo = new THREE.PlaneGeometry(300, 300, 64, 64);
+waterGeomLo.rotateX(-Math.PI / 2);
+let waterGeom = waterGeomHi;
+let WATER_GRID_STEP = 300 / 128; // snap water position to grid to prevent wave sliding
 const baseWaterColor = new THREE.Color(CONFIG.WATER_COLOR.r, CONFIG.WATER_COLOR.g, CONFIG.WATER_COLOR.b);
 const waterMat = new THREE.MeshPhongMaterial({
   color: baseWaterColor.clone(),
@@ -379,11 +382,19 @@ vr.onSessionStart = () => {
   document.getElementById('info').style.display = 'none';
   // Re-apply 180° rotation so player faces the lake in VR
   vr.dolly.rotation.y = Math.PI;
+  // Swap to lower-resolution water grid for VR
+  waterPlane.geometry = waterGeomLo;
+  waterGeom = waterGeomLo;
+  WATER_GRID_STEP = 300 / 64;
 };
 
 vr.onSessionEnd = () => {
   audio.stop();
   document.getElementById('info').style.display = '';
+  // Restore high-resolution water grid for desktop
+  waterPlane.geometry = waterGeomHi;
+  waterGeom = waterGeomHi;
+  WATER_GRID_STEP = 300 / 128;
 };
 
 // --- Hide info overlay + start audio on first desktop interaction ---
@@ -750,6 +761,7 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
 let timeHudFade = 0;
 let weatherHudFade = 0;
 let _lastWeatherState = '';
+let _frameCount = 0;
 const clock = new THREE.Clock();
 
 // Initial heightmap generation (synchronous full pass for first frame)
@@ -775,8 +787,10 @@ function onFrame() {
 
   // Update chunks around player
   const pos = movement.getPlayerPosition();
+  const inVR = vr.isInVR();
+  const frame = _frameCount++;
   riverTracer.checkRetrace(pos.x, pos.z);
-  chunkManager.update(pos.x, pos.z);
+  chunkManager.update(pos.x, pos.z, inVR);
 
   // Water plane follows player XZ, snapped to grid step so wave vertices
   // always land on the same world-space positions (prevents pattern sliding)
@@ -893,12 +907,14 @@ function onFrame() {
     vrTimeSprite.visible = false;
   }
 
-  // Fireflies (night only, suppressed by rain)
-  fireflies.update(delta, pos, dayNight.sunElevation, weather);
-  birds.update(delta, pos, dayNight.sunElevation);
+  // Fireflies (night only, suppressed by rain) — throttle to every 2 frames in VR
+  if (!inVR || frame % 2 === 0) fireflies.update(delta * (inVR ? 2 : 1), pos, dayNight.sunElevation, weather);
 
-  // Wildlife peek events
-  wildlife.update(delta, pos, dayNight.sunElevation);
+  // Birds — throttle to every 2 frames in VR
+  if (!inVR || frame % 2 === 0) birds.update(delta * (inVR ? 2 : 1), pos, dayNight.sunElevation);
+
+  // Wildlife peek events — throttle to every 3 frames in VR
+  if (!inVR || frame % 3 === 0) wildlife.update(delta * (inVR ? 3 : 1), pos, dayNight.sunElevation);
 
   // Audio (birds, footsteps, crickets, water ambient, spatial)
   vr.camera.getWorldDirection(_cameraDir);
@@ -907,8 +923,9 @@ function onFrame() {
   const waterProximity = terrainAtPlayer < CONFIG.WATER_LEVEL
     ? Math.max(0, 1 - (CONFIG.WATER_LEVEL - terrainAtPlayer) / 8)
     : 0;
-  audio.update(
-    delta,
+  // Throttle spatial audio to every 2 frames in VR
+  if (!inVR || frame % 2 === 0) audio.update(
+    delta * (inVR ? 2 : 1),
     dayNight.sunElevation,
     pos,
     _cameraDir,

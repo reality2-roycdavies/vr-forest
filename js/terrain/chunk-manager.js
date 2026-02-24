@@ -8,28 +8,46 @@ export class ChunkManager {
     this.activeChunks = new Map();   // key "cx,cz" -> Chunk
     this.chunkPool = [];             // recycled chunks
     this.pendingLoads = [];          // chunks to load (staggered)
+    this.pendingLOD = [];            // chunks needing LOD rebuild
     this.lastPlayerChunkX = null;
     this.lastPlayerChunkZ = null;
+    this.isInVR = false;
     this.onChunksChanged = null;     // callback for tree/veg rebuild
+  }
+
+  /**
+   * Determine the appropriate segment count for a chunk at given distance.
+   */
+  _getSegments(chunkDist) {
+    if (this.isInVR && chunkDist > 2) {
+      return CONFIG.CHUNK_SEGMENTS_LOD;
+    }
+    return CONFIG.CHUNK_SEGMENTS;
   }
 
   /**
    * Update chunks based on player world position.
    * Call each frame.
    */
-  update(playerX, playerZ) {
+  update(playerX, playerZ, isInVR = false) {
+    const vrChanged = isInVR !== this.isInVR;
+    this.isInVR = isInVR;
+
     const cx = Math.floor(playerX / CONFIG.CHUNK_SIZE);
     const cz = Math.floor(playerZ / CONFIG.CHUNK_SIZE);
 
-    // Only recalculate when player enters a new chunk
-    if (cx === this.lastPlayerChunkX && cz === this.lastPlayerChunkZ) {
-      // Still process pending loads
+    const chunkChanged = cx !== this.lastPlayerChunkX || cz !== this.lastPlayerChunkZ;
+
+    if (!chunkChanged && !vrChanged) {
+      // Still process pending loads/LOD
       this._processQueue();
       return;
     }
 
-    this.lastPlayerChunkX = cx;
-    this.lastPlayerChunkZ = cz;
+    if (chunkChanged) {
+      this.lastPlayerChunkX = cx;
+      this.lastPlayerChunkZ = cz;
+    }
 
     const loadR = CONFIG.LOAD_RADIUS;
     const unloadR = CONFIG.UNLOAD_RADIUS;
@@ -71,19 +89,37 @@ export class ChunkManager {
       return da - db;
     });
 
+    // Queue LOD changes for existing chunks (on chunk boundary cross or VR toggle)
+    this.pendingLOD.length = 0;
+    for (const [key, chunk] of this.activeChunks) {
+      const dist = Math.max(Math.abs(chunk.cx - cx), Math.abs(chunk.cz - cz));
+      const targetSeg = this._getSegments(dist);
+      if (chunk.segments !== targetSeg) {
+        this.pendingLOD.push({ cx: chunk.cx, cz: chunk.cz, key, segments: targetSeg });
+      }
+    }
+
     this._processQueue();
   }
 
   _processQueue() {
+    const maxPerFrame = this.isInVR ? 1 : CONFIG.MAX_CHUNKS_PER_FRAME;
     let loaded = 0;
-    while (this.pendingLoads.length > 0 && loaded < CONFIG.MAX_CHUNKS_PER_FRAME) {
+
+    // New chunk loads take priority
+    while (this.pendingLoads.length > 0 && loaded < maxPerFrame) {
       const { cx, cz, key } = this.pendingLoads.shift();
 
       // Skip if already loaded (race condition protection)
       if (this.activeChunks.has(key)) continue;
 
+      const pcx = this.lastPlayerChunkX;
+      const pcz = this.lastPlayerChunkZ;
+      const dist = Math.max(Math.abs(cx - pcx), Math.abs(cz - pcz));
+      const segments = this._getSegments(dist);
+
       const chunk = this._getChunk();
-      chunk.build(cx, cz);
+      chunk.build(cx, cz, segments);
       chunk.cx = cx;
       chunk.cz = cz;
 
@@ -93,6 +129,18 @@ export class ChunkManager {
       chunk.mesh.updateMatrix();
 
       this.activeChunks.set(key, chunk);
+      loaded++;
+    }
+
+    // LOD rebuilds use remaining budget
+    while (this.pendingLOD.length > 0 && loaded < maxPerFrame) {
+      const { key, segments } = this.pendingLOD.shift();
+      const chunk = this.activeChunks.get(key);
+      if (!chunk || !chunk.active) continue;
+      if (chunk.segments === segments) continue; // already at target
+
+      chunk.build(chunk.cx, chunk.cz, segments);
+      chunk.mesh.updateMatrix();
       loaded++;
     }
 
@@ -127,7 +175,7 @@ export class ChunkManager {
     // Temporarily increase max chunks per frame
     const original = CONFIG.MAX_CHUNKS_PER_FRAME;
     CONFIG.MAX_CHUNKS_PER_FRAME = 999;
-    this.update(playerX, playerZ);
+    this.update(playerX, playerZ, false);
     CONFIG.MAX_CHUNKS_PER_FRAME = original;
   }
 }

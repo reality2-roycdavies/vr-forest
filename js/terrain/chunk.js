@@ -21,21 +21,33 @@ export class Chunk {
     this.foamSegments = [];         // { x1, z1, x2, z2, nx, nz }
     this.streamRockPositions = [];  // { x, y, z, sizeIdx, rotSeed }
     this.riverWaterMesh = null;
+    this.segments = 0;
     this.active = false;
   }
 
-  build(chunkX, chunkZ) {
+  build(chunkX, chunkZ, segments = CONFIG.CHUNK_SEGMENTS) {
     this.chunkX = chunkX;
     this.chunkZ = chunkZ;
     this.active = true;
 
-    const data = generateTerrainData(chunkX, chunkZ);
+    const data = generateTerrainData(chunkX, chunkZ, segments);
 
-    if (this.mesh) {
+    if (this.mesh && segments === this.segments) {
       this._updateGeometry(data);
     } else {
-      this._createMesh(data);
+      if (this.mesh) {
+        // Segments changed — dispose old geometry before recreating
+        const parent = this.mesh.parent;
+        this.mesh.geometry.dispose();
+        this.mesh.geometry = null;
+        this.mesh = null;
+        this._createMesh(data);
+        if (parent) parent.add(this.mesh);
+      } else {
+        this._createMesh(data);
+      }
     }
+    this.segments = segments;
 
     this.mesh.position.set(
       chunkX * CONFIG.CHUNK_SIZE,
@@ -620,7 +632,7 @@ export class Chunk {
     const attr = geom.getAttribute('cottageDensity');
     const arr = attr.array;
     const size = CONFIG.CHUNK_SIZE;
-    const segments = CONFIG.CHUNK_SEGMENTS;
+    const segments = this.segments || CONFIG.CHUNK_SEGMENTS;
     const verticesPerSide = segments + 1;
     const step = size / segments;
     const worldOffX = this.chunkX * size;
@@ -770,69 +782,96 @@ export class Chunk {
     const flowAmounts = [];
     const indices = [];
 
+    // Group segments into chains by riverId, sorted by segIdx
+    const chains = new Map();
     for (const seg of segments) {
-      const flow0 = seg.flow0;
-      const flow1 = seg.flow1;
-      // Mesh covers full carved channel (matches getRiverCarving formula) + padding
-      const baseHW0 = Math.min(
+      const dx = seg.x1 - seg.x0, dz = seg.z1 - seg.z0;
+      if (dx * dx + dz * dz < 0.0001) continue;
+      if (!chains.has(seg.riverId)) chains.set(seg.riverId, []);
+      chains.get(seg.riverId).push(seg);
+    }
+    for (const [, segs] of chains) {
+      segs.sort((a, b) => a.segIdx - b.segIdx);
+    }
+
+    // Helper: compute half-width for mesh at a given flow value
+    const meshHW = (flow) => {
+      const baseHW = Math.min(
         CONFIG.RIVER_MAX_HALFWIDTH,
-        CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow0)
+        CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow)
       );
-      const baseHW1 = Math.min(
-        CONFIG.RIVER_MAX_HALFWIDTH,
-        CONFIG.RIVER_MIN_HALFWIDTH + CONFIG.RIVER_WIDTH_SCALE * Math.sqrt(flow1)
-      );
-      const depth0 = Math.min(CONFIG.RIVER_MAX_CARVE, CONFIG.RIVER_CARVE_SCALE * Math.sqrt(flow0));
-      const depth1 = Math.min(CONFIG.RIVER_MAX_CARVE, CONFIG.RIVER_CARVE_SCALE * Math.sqrt(flow1));
-      const flat0 = Math.max(baseHW0, depth0 * 1.0);
-      const flat1 = Math.max(baseHW1, depth1 * 1.0);
-      // Mesh stops inside the rock bank edge — only covers the water core
-      // vStreamChannel ≈ 0.7 at dist = flatWidth + bankWidth * 0.2
-      const bank0 = Math.max(CONFIG.RIVER_BANK_WIDTH, depth0 * 1.5);
-      const bank1 = Math.max(CONFIG.RIVER_BANK_WIDTH, depth1 * 1.5);
-      const hw0 = flat0 + bank0 * 0.2 + 0.2;
-      const hw1 = flat1 + bank1 * 0.2 + 0.2;
+      const depth = Math.min(CONFIG.RIVER_MAX_CARVE, CONFIG.RIVER_CARVE_SCALE * Math.sqrt(flow));
+      const flat = Math.max(baseHW, depth * 1.0);
+      const bank = Math.max(CONFIG.RIVER_BANK_WIDTH, depth * 1.5);
+      return flat + bank * 0.2 + 0.2;
+    };
 
-      const dx = seg.x1 - seg.x0;
-      const dz = seg.z1 - seg.z0;
-      const len = Math.sqrt(dx * dx + dz * dz);
-      if (len < 0.01) continue;
+    // Build smooth triangle strip per chain with averaged perpendiculars at junctions
+    for (const [, chain] of chains) {
+      if (chain.length === 0) continue;
 
-      // Flow direction and perpendicular
-      const fdx = dx / len;
-      const fdz = dz / len;
-      const px = -fdz;
-      const pz = fdx;
+      // Compute per-segment flow direction and perpendicular
+      const segDirs = chain.map(seg => {
+        const dx = seg.x1 - seg.x0, dz = seg.z1 - seg.z0;
+        const len = Math.sqrt(dx * dx + dz * dz);
+        return { fdx: dx / len, fdz: dz / len, px: -dz / len, pz: dx / len };
+      });
 
-      // Convert to local chunk coordinates
-      const lx0 = seg.x0 - ox;
-      const lz0 = seg.z0 - oz;
-      const lx1 = seg.x1 - ox;
-      const lz1 = seg.z1 - oz;
+      // Each chain has (chain.length + 1) junction points
+      const numPts = chain.length + 1;
+      const baseVi = positions.length / 3;
 
-      // Y sampled at each vertex's actual world position, slight lift above terrain
-      const wx0L = seg.x0 + px * hw0, wz0L = seg.z0 + pz * hw0;
-      const wx0R = seg.x0 - px * hw0, wz0R = seg.z0 - pz * hw0;
-      const wx1L = seg.x1 + px * hw1, wz1L = seg.z1 + pz * hw1;
-      const wx1R = seg.x1 - px * hw1, wz1R = seg.z1 - pz * hw1;
-      const y0L = getTerrainHeight(wx0L, wz0L) + 0.05;
-      const y0R = getTerrainHeight(wx0R, wz0R) + 0.05;
-      const y1L = getTerrainHeight(wx1L, wz1L) + 0.05;
-      const y1R = getTerrainHeight(wx1R, wz1R) + 0.05;
+      for (let i = 0; i < numPts; i++) {
+        // World position and flow at this junction
+        let wx, wz, flow;
+        if (i === 0) {
+          wx = chain[0].x0; wz = chain[0].z0; flow = chain[0].flow0;
+        } else {
+          wx = chain[i - 1].x1; wz = chain[i - 1].z1; flow = chain[i - 1].flow1;
+        }
 
-      const vi = positions.length / 3;
+        // Averaged perpendicular direction (smooth miter at bends)
+        let px, pz, fdx, fdz;
+        if (i === 0) {
+          px = segDirs[0].px; pz = segDirs[0].pz;
+          fdx = segDirs[0].fdx; fdz = segDirs[0].fdz;
+        } else if (i === chain.length) {
+          px = segDirs[i - 1].px; pz = segDirs[i - 1].pz;
+          fdx = segDirs[i - 1].fdx; fdz = segDirs[i - 1].fdz;
+        } else {
+          // Average and renormalize
+          px = segDirs[i - 1].px + segDirs[i].px;
+          pz = segDirs[i - 1].pz + segDirs[i].pz;
+          const pLen = Math.sqrt(px * px + pz * pz);
+          if (pLen > 0.01) { px /= pLen; pz /= pLen; }
+          else { px = segDirs[i].px; pz = segDirs[i].pz; }
+          fdx = segDirs[i - 1].fdx + segDirs[i].fdx;
+          fdz = segDirs[i - 1].fdz + segDirs[i].fdz;
+          const fLen = Math.sqrt(fdx * fdx + fdz * fdz);
+          if (fLen > 0.01) { fdx /= fLen; fdz /= fLen; }
+          else { fdx = segDirs[i].fdx; fdz = segDirs[i].fdz; }
+        }
 
-      // Quad: start-left, start-right, end-left, end-right
-      positions.push(
-        lx0 + px * hw0, y0L, lz0 + pz * hw0,
-        lx0 - px * hw0, y0R, lz0 - pz * hw0,
-        lx1 + px * hw1, y1L, lz1 + pz * hw1,
-        lx1 - px * hw1, y1R, lz1 - pz * hw1
-      );
+        const hw = meshHW(flow);
+        const wxL = wx + px * hw, wzL = wz + pz * hw;
+        const wxR = wx - px * hw, wzR = wz - pz * hw;
+        const yL = getTerrainHeight(wxL, wzL) + 0.05;
+        const yR = getTerrainHeight(wxR, wzR) + 0.05;
+        const lx = wx - ox, lz = wz - oz;
 
-      flowDirs.push(fdx, fdz, fdx, fdz, fdx, fdz, fdx, fdz);
-      flowAmounts.push(flow0, flow0, flow1, flow1);
-      indices.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3);
+        positions.push(
+          lx + px * hw, yL, lz + pz * hw,
+          lx - px * hw, yR, lz - pz * hw
+        );
+        flowDirs.push(fdx, fdz, fdx, fdz);
+        flowAmounts.push(flow, flow);
+      }
+
+      // Triangle strip indices for this chain
+      for (let i = 0; i < chain.length; i++) {
+        const vi = baseVi + i * 2;
+        indices.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3);
+      }
     }
 
     if (positions.length === 0) return;
