@@ -255,6 +255,10 @@ export class DayNightSystem {
     this.stars = this._createStars();
     scene.add(this.stars);
 
+    // --- Milky Way band ---
+    this.milkyWay = this._createMilkyWay();
+    scene.add(this.milkyWay);
+
     // --- Shooting stars (pooled to avoid geometry allocation/disposal) ---
     this.shootingStars = [];
     this._shootingStarPool = [];
@@ -380,6 +384,189 @@ export class DayNightSystem {
     });
 
     return new THREE.Points(geo, mat);
+  }
+
+  // --- Milky Way band (procedural texture on galactic-plane strip) ---
+
+  _createMilkyWayTexture() {
+    const w = 1024, h = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(w, h);
+    const data = imageData.data;
+    const PI2 = Math.PI * 2;
+
+    for (let py = 0; py < h; py++) {
+      const bNorm = (py / h - 0.5) * 2; // -1 to 1 across galactic latitude
+      const bandProfile = Math.exp(-bNorm * bNorm * 3.0); // Gaussian falloff
+
+      for (let px = 0; px < w; px++) {
+        const lFrac = px / w;
+        const lRad = lFrac * PI2;
+
+        // Circular noise coords — seamless wrap in longitude
+        const cx = Math.cos(lRad) * 2;
+        const cy = Math.sin(lRad) * 2;
+        const by = bNorm * 1.5;
+
+        // Asymmetric brightness: galactic centre (l≈0) brighter than anticenter
+        const centerBright = 0.5 + 0.5 * Math.cos(lRad);
+        const baseBright = 0.3 + 0.7 * centerBright;
+
+        // Cloud structure (5-octave FBM)
+        const cloud = this._cloudFbm(cx, cy + by, 5, 42.0);
+
+        // Dark dust lanes (Great Rift) — tight around galactic plane, near centre
+        const dustProfile = Math.exp(-bNorm * bNorm * 8.0);
+        const dustNoise = this._cloudFbm(cx * 1.5, cy * 1.5 + by, 4, 77.0);
+        const riftFactor = Math.max(0, Math.cos((lFrac * 360 - 10) * Math.PI / 180)) * 0.6;
+        const dust = dustProfile * riftFactor * (0.5 + dustNoise * 0.5);
+
+        // Bright nebula knots
+        const knotNoise = this._cloudFbm(cx * 3, cy * 3 + by * 2, 3, 123.0);
+        const knots = Math.max(0, knotNoise - 0.55) * 2.5 * bandProfile;
+
+        // Combine brightness
+        let bright = baseBright * bandProfile * (0.4 + cloud * 0.6);
+        bright -= dust * 0.35;
+        bright += knots * 0.25;
+        bright = Math.max(0, Math.min(1, bright));
+
+        // Colour: warm toward galactic centre, cool elsewhere
+        const warmth = centerBright * 0.15;
+        const r = Math.min(1, bright * (0.82 + warmth));
+        const g = Math.min(1, bright * (0.82 + warmth * 0.4));
+        const blue = bright * 0.92;
+        const alpha = bright * 0.5;
+
+        const i = (py * w + px) * 4;
+        data[i]     = (r * 255 + 0.5) | 0;
+        data[i + 1] = (g * 255 + 0.5) | 0;
+        data[i + 2] = (blue * 255 + 0.5) | 0;
+        data[i + 3] = Math.max(0, Math.min(255, (alpha * 255 + 0.5) | 0));
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Gaussian blur for soft nebulosity
+    const blurCanvas = document.createElement('canvas');
+    blurCanvas.width = w; blurCanvas.height = h;
+    const blurCtx = blurCanvas.getContext('2d');
+    blurCtx.filter = 'blur(3px)';
+    blurCtx.drawImage(canvas, 0, 0);
+
+    const tex = new THREE.CanvasTexture(blurCanvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  }
+
+  _createMilkyWay() {
+    const texture = this._createMilkyWayTexture();
+    const R = CONFIG.SKY_RADIUS * 0.94;
+    const lonSegs = 64;
+    const latSegs = 8;
+    const bandWidth = 15 * Math.PI / 180; // ±15° galactic latitude
+    const DEG = Math.PI / 180;
+
+    // Galactic coordinate axes in J2000 equatorial (matches _createStars convention)
+    // X = cos(dec)*cos(ra), Y = sin(dec), Z = -cos(dec)*sin(ra)
+
+    // Galactic north pole: RA 192.86°, Dec +27.13°
+    const raP = 192.86 * DEG, decP = 27.13 * DEG;
+    const ngp = new THREE.Vector3(
+      Math.cos(decP) * Math.cos(raP),
+      Math.sin(decP),
+      -Math.cos(decP) * Math.sin(raP)
+    ).normalize();
+
+    // Galactic centre: RA 266.4°, Dec -29.0°
+    const raC = 266.4 * DEG, decC = -29.0 * DEG;
+    const gc = new THREE.Vector3(
+      Math.cos(decC) * Math.cos(raC),
+      Math.sin(decC),
+      -Math.cos(decC) * Math.sin(raC)
+    ).normalize();
+
+    // Third axis: Y_gal = NGP × GC (right-handed)
+    const gy = new THREE.Vector3().crossVectors(ngp, gc).normalize();
+
+    // Build strip geometry
+    const vertices = [];
+    const uvs = [];
+    const indices = [];
+
+    for (let j = 0; j <= latSegs; j++) {
+      const b = -bandWidth + (2 * bandWidth * j / latSegs);
+      const cosB = Math.cos(b), sinB = Math.sin(b);
+      const v = j / latSegs;
+
+      for (let i = 0; i <= lonSegs; i++) {
+        const l = (i / lonSegs) * 2 * Math.PI;
+        const cosL = Math.cos(l), sinL = Math.sin(l);
+
+        // Galactic cartesian → equatorial
+        const gx = cosB * cosL;
+        const gyp = cosB * sinL;
+        const gz = sinB;
+
+        vertices.push(
+          (gx * gc.x + gyp * gy.x + gz * ngp.x) * R,
+          (gx * gc.y + gyp * gy.y + gz * ngp.y) * R,
+          (gx * gc.z + gyp * gy.z + gz * ngp.z) * R
+        );
+        uvs.push(i / lonSegs, v);
+      }
+    }
+
+    for (let j = 0; j < latSegs; j++) {
+      for (let i = 0; i < lonSegs; i++) {
+        const a = j * (lonSegs + 1) + i;
+        const b = a + lonSegs + 1;
+        indices.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTexture: { value: texture },
+        uOpacity: { value: 0.7 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uTexture;
+        uniform float uOpacity;
+        varying vec2 vUv;
+        void main() {
+          vec4 tex = texture2D(uTexture, vUv);
+          gl_FragColor = vec4(tex.rgb, tex.a * uOpacity);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      depthTest: false,
+      fog: false,
+      side: THREE.DoubleSide,
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = -2;
+    mesh.frustumCulled = false;
+    return mesh;
   }
 
   _createClouds() {
@@ -1095,6 +1282,14 @@ export class DayNightSystem {
       const latRad = this.latitude * (Math.PI / 180);
       _starEuler.set(0, Math.PI - lst, -(Math.PI / 2 - latRad));
       this.stars.rotation.copy(_starEuler);
+    }
+
+    // Milky Way band — follows stars
+    this.milkyWay.position.copy(playerPos);
+    this.milkyWay.material.uniforms.uOpacity.value = starOpacity * 0.7;
+    this.milkyWay.visible = this.stars.visible;
+    if (this.milkyWay.visible) {
+      this.milkyWay.rotation.copy(this.stars.rotation);
     }
 
     // --- Sun/moon light + shadow (reuse single DirectionalLight) ---
