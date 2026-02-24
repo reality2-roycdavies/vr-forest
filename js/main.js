@@ -1,4 +1,4 @@
-console.log('%c[VR Forest v13] Loaded', 'color: #66ffcc; font-size: 14px;');
+console.log('%c[VR Forest v14] Loaded', 'color: #66ffcc; font-size: 14px;');
 // Bootstrap: scene, systems, render loop
 import * as THREE from 'three';
 import { VRSetup } from './vr-setup.js';
@@ -79,7 +79,7 @@ const hmapCenter = { x: 0, z: 0 };
 let _hmapPending = false;
 let _hmapNextRow = 0;
 let _hmapTargetX = 0, _hmapTargetZ = 0;
-const HMAP_ROWS_PER_FRAME = 16; // 16 rows × 128 cols = 2048 samples/frame → 8 frames total
+let HMAP_ROWS_PER_FRAME = 16; // 16 rows × 128 cols = 2048 samples/frame → 8 frames total (halved in VR)
 
 function updateHeightmap(cx, cz) {
   _hmapTargetX = cx;
@@ -355,6 +355,16 @@ const collectibles = new CollectibleSystem(scene);
 movement.collectibles = collectibles;
 movement.audio = audio;
 
+// --- Deferred cottage density update (spread across frames) ---
+let _cottageDensityQueue = [];
+let _cottageDensityPositions = [];
+
+function _tickCottageDensity() {
+  if (_cottageDensityQueue.length === 0) return;
+  const chunk = _cottageDensityQueue.shift();
+  if (chunk.active) chunk.updateCottageDensity(_cottageDensityPositions);
+}
+
 // When chunks change, rebuild instanced meshes
 chunkManager.onChunksChanged = () => {
   const px = vr.dolly.position.x, pz = vr.dolly.position.z;
@@ -363,15 +373,16 @@ chunkManager.onChunksChanged = () => {
   cottages.rebuild(chunkManager.getActiveChunks());
   collectibles.rebuild(chunkManager.getActiveChunks());
 
-  // Update cottage ground density across all chunks (cross-chunk blending)
-  const allCottagePos = [];
+  // Queue cottage density for deferred per-frame processing
+  _cottageDensityPositions = [];
   for (const chunk of chunkManager.getActiveChunks()) {
     if (chunk.active && chunk.cottagePositions) {
-      for (const cp of chunk.cottagePositions) allCottagePos.push(cp);
+      for (const cp of chunk.cottagePositions) _cottageDensityPositions.push(cp);
     }
   }
+  _cottageDensityQueue = [];
   for (const chunk of chunkManager.getActiveChunks()) {
-    if (chunk.active) chunk.updateCottageDensity(allCottagePos);
+    if (chunk.active) _cottageDensityQueue.push(chunk);
   }
 };
 
@@ -803,7 +814,10 @@ function onFrame() {
   if (hmDx * hmDx + hmDz * hmDz > 25) { // >5m moved
     updateHeightmap(pos.x, pos.z);
   }
+  HMAP_ROWS_PER_FRAME = inVR ? 8 : 16;
   _tickHeightmap();
+  // Deferred cottage density (1 chunk per frame)
+  _tickCottageDensity();
   // Tarn water plane follows player XZ
   updateGroundTime(waterTimeUniform.value);
   // vegPool.updateFoamTime(waterTimeUniform.value); // foam strip disabled
@@ -961,7 +975,7 @@ function onFrame() {
 
   // Dynamic resolution scaling in VR — reduce when moving, full when still
   if (inVR) {
-    const targetScale = movement.isMoving ? (movement.isSprinting ? 0.65 : 0.75) : 1.0;
+    const targetScale = movement.isMoving ? (movement.isSprinting ? 0.55 : 0.65) : 1.0;
     // Fast drop (0.15s), slow recovery (0.5s) for responsive feel
     const rate = targetScale < _vrResScale ? 7 : 2;
     _vrResScale += (targetScale - _vrResScale) * Math.min(1, delta * rate);

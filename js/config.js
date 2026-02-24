@@ -106,7 +106,7 @@ export const CONFIG = {
   SWIM_EYE_ABOVE_WATER: 0.45, // how far eyes peek above water surface
 
   // Shore foam meshes
-  FOAM_GRID_SPACING: 0.6,         // marching-squares grid step for waterline contour
+  FOAM_GRID_SPACING: 1.5,         // marching-squares grid step for waterline contour
   FOAM_SHORE_WIDTH: 0.6,         // strip offset toward shore
   FOAM_WATER_WIDTH: 0.8,         // strip offset toward water
 

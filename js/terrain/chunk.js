@@ -23,12 +23,14 @@ export class Chunk {
     this.riverWaterMesh = null;
     this.segments = 0;
     this.active = false;
+    this.needsPhase2 = false;  // true after phase 1, cleared after phase 2
   }
 
   build(chunkX, chunkZ, segments = CONFIG.CHUNK_SEGMENTS) {
     this.chunkX = chunkX;
     this.chunkZ = chunkZ;
     this.active = true;
+    this.needsPhase2 = false;
 
     const data = generateTerrainData(chunkX, chunkZ, segments);
 
@@ -56,10 +58,40 @@ export class Chunk {
     );
     this.mesh.visible = true;
 
+    const isLOD = segments === CONFIG.CHUNK_SEGMENTS_LOD;
+
+    // Phase 1: terrain shape + large objects (immediately visible)
     this._generateCottages(chunkX, chunkZ);
-    // cottageDensity updated later in onChunksChanged with all cottage positions
     this._generateTrees(chunkX, chunkZ);
     this._generateTussock(chunkX, chunkZ);
+
+    // Mark phase 2 needed (ground detail deferred to next frame)
+    this.needsPhase2 = !isLOD;
+
+    // LOD chunks: generate minimal detail immediately (no phase 2 needed)
+    if (isLOD) {
+      this._generateVegetation(chunkX, chunkZ);
+      this._generateRocks(chunkX, chunkZ);
+      this._generateLogs(chunkX, chunkZ);
+      this._generateRiverWater(chunkX, chunkZ);
+      // Skip: flowers, foam, stream rocks, collectibles (invisible at LOD distance)
+      this.flowerPositions.length = 0;
+      this.foamSegments.length = 0;
+      this.streamRockPositions.length = 0;
+      this.collectiblePositions.length = 0;
+    }
+  }
+
+  /**
+   * Phase 2: ground-level detail (vegetation, flowers, rocks, logs, collectibles, foam, stream features).
+   * Called on the frame after build() for full-quality chunks.
+   */
+  buildPhase2() {
+    if (!this.active || !this.needsPhase2) return;
+    this.needsPhase2 = false;
+    const chunkX = this.chunkX;
+    const chunkZ = this.chunkZ;
+
     this._generateVegetation(chunkX, chunkZ);
     this._generateFlowers(chunkX, chunkZ);
     this._generateRocks(chunkX, chunkZ);
@@ -290,7 +322,7 @@ export class Chunk {
 
           // Grass clusters: add 2-4 more tufts nearby
           if (type === 0) {
-            const clumpCount = 2 + Math.floor(Math.abs(density) * 4);
+            const clumpCount = Math.min(3, 2 + Math.floor(Math.abs(density) * 4));
             for (let c = 0; c < clumpCount; c++) {
               const cj = getJitter(wx + c * 17, wz + c * 43);
               const cx = jx + cj.x * 0.4;
@@ -358,8 +390,8 @@ export class Chunk {
 
           // Cluster: more flowers near cottages (garden beds), fewer elsewhere
           const clusterCount = nearCottage
-            ? 5 + Math.floor(Math.abs(density) * 6)
-            : 3 + Math.floor(density * 4);
+            ? Math.min(6, 5 + Math.floor(Math.abs(density) * 6))
+            : Math.min(4, 3 + Math.floor(density * 4));
           const spread = nearCottage ? 0.3 : 0.4;
           for (let c = 0; c < clusterCount; c++) {
             const cj = getJitter(wx + c * 41 + 200, wz + c * 67 + 200);
@@ -945,6 +977,7 @@ export class Chunk {
 
   deactivate() {
     this.active = false;
+    this.needsPhase2 = false;
     if (this.mesh) this.mesh.visible = false;
     if (this.riverWaterMesh) {
       this.mesh.remove(this.riverWaterMesh);

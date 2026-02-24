@@ -8,6 +8,7 @@ export class ChunkManager {
     this.activeChunks = new Map();   // key "cx,cz" -> Chunk
     this.chunkPool = [];             // recycled chunks
     this.pendingLoads = [];          // chunks to load (staggered)
+    this.pendingPhase2 = [];         // chunks awaiting phase 2 detail generation
     this.pendingLOD = [];            // chunks needing LOD rebuild
     this.lastPlayerChunkX = null;
     this.lastPlayerChunkZ = null;
@@ -105,8 +106,9 @@ export class ChunkManager {
   _processQueue() {
     const maxPerFrame = this.isInVR ? 1 : CONFIG.MAX_CHUNKS_PER_FRAME;
     let loaded = 0;
+    let newChunkLoaded = false;  // track if any non-LOD chunk was loaded/changed
 
-    // New chunk loads take priority
+    // New chunk loads take priority (phase 1 only — terrain + trees)
     while (this.pendingLoads.length > 0 && loaded < maxPerFrame) {
       const { cx, cz, key } = this.pendingLoads.shift();
 
@@ -130,6 +132,22 @@ export class ChunkManager {
 
       this.activeChunks.set(key, chunk);
       loaded++;
+      newChunkLoaded = true;
+
+      // Queue phase 2 for full-quality chunks
+      if (chunk.needsPhase2) {
+        this.pendingPhase2.push(chunk);
+      }
+    }
+
+    // Phase 2 detail generation: process 1 chunk per frame
+    if (this.pendingPhase2.length > 0 && loaded < maxPerFrame) {
+      const chunk = this.pendingPhase2.shift();
+      if (chunk.active && chunk.needsPhase2) {
+        chunk.buildPhase2();
+        loaded++;
+        newChunkLoaded = true;
+      }
     }
 
     // LOD rebuilds use remaining budget
@@ -142,9 +160,16 @@ export class ChunkManager {
       chunk.build(chunk.cx, chunk.cz, segments);
       chunk.mesh.updateMatrix();
       loaded++;
+
+      // Upgrading from LOD → full quality needs phase 2 + callback
+      if (chunk.needsPhase2) {
+        this.pendingPhase2.push(chunk);
+        newChunkLoaded = true;
+      }
+      // Downgrading to LOD doesn't need callback (fewer objects, pools will catch up)
     }
 
-    if (loaded > 0 && this.onChunksChanged) {
+    if (newChunkLoaded && this.onChunksChanged) {
       this.onChunksChanged();
     }
   }
@@ -176,6 +201,16 @@ export class ChunkManager {
     const original = CONFIG.MAX_CHUNKS_PER_FRAME;
     CONFIG.MAX_CHUNKS_PER_FRAME = 999;
     this.update(playerX, playerZ, false);
+
+    // Also drain phase 2 queue immediately during initial load
+    while (this.pendingPhase2.length > 0) {
+      const chunk = this.pendingPhase2.shift();
+      if (chunk.active && chunk.needsPhase2) {
+        chunk.buildPhase2();
+      }
+    }
+    if (this.onChunksChanged) this.onChunksChanged();
+
     CONFIG.MAX_CHUNKS_PER_FRAME = original;
   }
 }
