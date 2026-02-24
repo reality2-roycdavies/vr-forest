@@ -332,8 +332,8 @@ export class DayNightSystem {
       positions[i * 3 + 1] =  Math.sin(dec) * R;
       positions[i * 3 + 2] = -cosDec * Math.sin(ra) * R;
 
-      sizes[i] = Math.max(0.8, 3.5 - mag * 0.5);
-      brightness[i] = Math.max(0.3, 1.0 - mag * 0.12);
+      sizes[i] = Math.max(1.0, 4.0 - mag * 0.5);
+      brightness[i] = Math.max(0.4, 1.0 - mag * 0.10);
     }
 
     const geo = new THREE.BufferGeometry();
