@@ -1,7 +1,7 @@
 # VF-PERFORMANCE — Performance Budget
 
-**Version:** 0.2 Draft
-**Date:** 2026-02-24
+**Version:** 0.3 Draft
+**Date:** 2026-02-25
 **Status:** Draft
 **Purpose:** Target frame rate, instance caps, draw call budget, key optimisations, staggered loading rationale, chunk recycling, fog-hides-boundaries design, Quest 3 tuning history, and VR-specific invisible optimisations (foveation, LOD terrain, water grid swap, throttled updates).
 **Dependencies:** VF-CONFIG, VF-ARCH, VF-TERRAIN, VF-FOREST, VF-WATER, VF-WEATHER  
@@ -80,6 +80,13 @@ All counts are approximate and represent typical worst-case values.
 | VR water grid swap | 75% fewer water vertex calcs | 64×64 grid in VR vs 128×128; see §9.3 |
 | VR update throttling | ~5% CPU savings | Birds/wildlife/fireflies/audio skip frames; see §9.4 |
 | VR chunk load limiting | Smoother frame times | 1 chunk/frame in VR vs 2; see §9.5 |
+| Two-phase chunk build | Halves peak frame cost | Phase 1 (terrain+trees) immediate, phase 2 (detail) next frame; see §9.7 |
+| LOD detail skipping | ~15k fewer noise samples/distant chunk | LOD chunks skip flowers, foam, stream rocks, collectibles; see §9.8 |
+| Foam grid 1.5m (not 0.6m) | 84% fewer foam noise samples | Marching-squares grid reduced from 2,809 to 462 cells; see §9.9 |
+| Capped vegetation clusters | ~40% fewer height samples | Grass max 3, flowers max 4/6 per grid point; see §9.10 |
+| Deferred cottage density | Eliminates density spike | Triple-nested loop spread 1 chunk/frame; see §9.11 |
+| VR heightmap rows halved | ~1ms/frame savings | 8 rows/frame in VR vs 16; see §9.12 |
+| Dynamic resolution scaling | 35–45% fewer pixels when moving | Walk 0.65×, sprint 0.55× via requestViewportScale; see §9.13 |
 | All textures 64–256px | Minimal GPU memory | Procedural textures generated once at startup |
 
 ---
@@ -92,13 +99,15 @@ Creating a chunk involves thousands of noise evaluations (terrain height for eac
 
 Missing chunks are queued sorted by distance (closest first), so the player's immediate surroundings load first.
 
+Chunk building is further split into two phases (see §9.7) so that even a single chunk build doesn't exceed the frame budget.
+
 ---
 
 ## 6. Staggered Heightmap Update
 
 The water shader uses a 128×128 `DataTexture` of terrain heights for shore fade effects (see VF-WATER). When the player moves more than 5m, this texture MUST be regenerated — but sampling 128 × 128 = 16,384 terrain heights in one frame would spike the frame time.
 
-The update MUST be staggered across 8 frames: 16 rows × 128 columns = 2,048 samples per frame. The visual artifact is minimal — a brief 8-frame wave of shore fade updating — because the player rarely moves fast enough to notice.
+The update MUST be staggered: 16 rows/frame on desktop (8 frames total), 8 rows/frame in VR (16 frames total; see §9.12). The visual artifact is minimal — a brief wave of shore fade updating — because the player rarely moves fast enough to notice.
 
 ---
 
@@ -232,6 +241,88 @@ if (!inVR || frame % 3 === 0) wildlife.update(delta * (inVR ? 3 : 1), ...);
 
 Each chunk build involves thousands of noise evaluations for terrain height + tree/vegetation placement. In VR, limiting to 1 chunk per frame prevents frame spikes during loading. The player rarely notices because fog hides unloaded areas and chunks are loaded closest-first.
 
+### 9.7 Two-Phase Chunk Build (chunk.js, chunk-manager.js)
+
+When a chunk boundary is crossed, `chunk.build()` previously ran all 12 generation methods synchronously — terrain data, cottages, trees, tussock, vegetation, flowers, rocks, logs, collectibles, foam, stream rocks, and river water. The combined cost (30,000–50,000 noise samples + object placement) far exceeded the 14ms VR frame budget.
+
+The build is now split into two phases:
+
+| Phase | Frame | Methods | Cost |
+|-------|-------|---------|------|
+| Phase 1 | Immediate | `generateTerrainData`, `_generateCottages`, `_generateTrees`, `_generateTussock` + mesh create/update | ~15ms |
+| Phase 2 | Next frame | `_generateVegetation`, `_generateFlowers`, `_generateRocks`, `_generateLogs`, `_generateCollectibles`, `_generateFoam`, `_generateStreamRocks`, `_generateRiverWater` | ~10–15ms |
+
+Phase 1 covers what's immediately visible (terrain shape + trees). Phase 2 fills in ground-level detail that won't be noticed for one frame.
+
+**Implementation**:
+- `Chunk.needsPhase2` flag is set after phase 1, cleared after phase 2
+- `ChunkManager.pendingPhase2` queue processes 1 chunk/frame (shares budget with chunk loads)
+- `onChunksChanged` fires after either phase completes (so pools rebuild incrementally)
+- `forceLoadAll()` drains the phase 2 queue immediately during initial load
+
+### 9.8 LOD Detail Skipping (chunk.js)
+
+When `segments === CONFIG.CHUNK_SEGMENTS_LOD` (distant chunks beyond 64m in VR), the following generators are skipped entirely:
+
+| Skipped | Noise samples saved | Why invisible |
+|---------|-------------------|---------------|
+| `_generateFlowers()` | ~1,500/chunk | Flowers are tiny; invisible at 64m+ |
+| `_generateFoam()` | ~11,000–33,000/chunk | Foam strips are thin mesh edges; invisible at distance |
+| `_generateStreamRocks()` | ~200/chunk | Small rocks in stream beds; invisible at distance |
+| `_generateCollectibles()` | ~100/chunk | Too far to collect; orbs are small |
+
+With 88 LOD chunks vs 13 full-quality, this saves ~1.3M noise samples during initial load. LOD chunks still generate vegetation, rocks, logs, and river water for silhouette correctness.
+
+When a LOD chunk upgrades to full quality (player approaches), it gets queued for phase 2 to fill in the skipped detail.
+
+### 9.9 Foam Grid Spacing (config.js)
+
+`FOAM_GRID_SPACING` was increased from 0.6m to 1.5m. This reduces the marching-squares grid from 2,809 cells to 462 — an **84% reduction** in the single most expensive generation method.
+
+Each foam grid cell requires 4 height samples for corner heights plus up to 8 gradient samples for normal computation. At 0.6m spacing, `_generateFoam()` alone consumed 11,000–33,000 noise samples per chunk.
+
+**Why invisible**: Foam strips are thin mesh segments marking the water-terrain boundary. At 1.5m spacing the contour follows the same shoreline shape — the foam shader applies its own smooth animation that masks the coarser sampling.
+
+### 9.10 Capped Vegetation Clusters (chunk.js)
+
+Vegetation and flower cluster counts were capped to reduce height sample overhead:
+
+| Type | Before | After | Samples saved |
+|------|--------|-------|---------------|
+| Grass clusters per grid point | 2–6 (density-dependent) | max 3 | ~40% |
+| Flower clusters (normal) | 3–7 | max 4 | ~40% |
+| Flower clusters (near cottage) | 5–11 | max 6 | ~45% |
+
+Each cluster member requires a `getTerrainHeight()` call. At ~600 vegetation grid points and ~256 flower grid points per chunk, the savings are significant.
+
+**Why invisible**: 3 grass tufts per grid point at 1.3m spacing is visually indistinguishable from 6 at ground level in VR. The eye perceives overall density, not individual tuft count.
+
+### 9.11 Deferred Cottage Density (main.js)
+
+The cottage density attribute update (`updateCottageDensity`) uses a triple-nested loop: all chunks × all vertices per chunk × all cottage positions. Previously this ran synchronously inside `onChunksChanged`, stacking on top of chunk build + pool rebuild in the same frame.
+
+The update is now deferred to a queue that processes **1 chunk per frame**. The `_cottageDensityQueue` is rebuilt each time `onChunksChanged` fires, and `_tickCottageDensity()` runs in the render loop.
+
+**Why invisible**: Cottage density controls a subtle ground-colour blend (garden soil near cottages). A few frames of stale density data is imperceptible, especially since cottages don't move.
+
+### 9.12 VR Heightmap Rows (main.js)
+
+`HMAP_ROWS_PER_FRAME` is set dynamically: **8 in VR**, 16 on desktop. This halves per-frame heightmap cost from 2,048 to 1,024 noise samples. The heightmap completes in 16 frames instead of 8 — still fast enough at walking speed.
+
+### 9.13 Dynamic Resolution Scaling (main.js)
+
+In VR, `requestViewportScale()` reduces render resolution when the player is moving:
+
+| State | Resolution scale | Pixel reduction |
+|-------|-----------------|-----------------|
+| Standing still | 1.0 (native) | 0% |
+| Walking | 0.65 | 35% |
+| Sprinting | 0.55 | 45% |
+
+The scale transitions smoothly: fast drop (rate 7, ~0.15s) when starting to move, slow recovery (rate 2, ~0.5s) when stopping. Combined with Quest 3 hardware foveation at level 1.0, the gaze centre stays sharp while the periphery is aggressively reduced.
+
+**Why invisible**: Motion blur from head/body movement during locomotion masks the resolution reduction. The slow recovery ensures no jarring pop when stopping.
+
 ---
 
 ## 10. Verification
@@ -248,6 +339,12 @@ Each chunk build involves thousands of noise evaluations for terrain height + tr
 - [ ] Distant terrain in VR shows no visible LOD transitions (fog + per-pixel shading masks it)
 - [ ] Birds/fireflies/wildlife still animate smoothly in VR at reduced update rate
 - [ ] No VR crash when walking across chunk boundaries (LOD mesh cleanup)
+- [ ] No frame spike when crossing chunk boundaries (two-phase build spreads work)
+- [ ] Vegetation density looks the same after cluster cap (3 tufts vs 6 indistinguishable in VR)
+- [ ] Foam strips look identical at 1.5m vs 0.6m spacing
+- [ ] Distant LOD chunks still have terrain, trees, rocks, vegetation — just no flowers/foam/stream rocks
+- [ ] Flowers/foam/collectibles appear when approaching chunks (within 64m)
+- [ ] Dynamic resolution scale recovers to 1.0 when standing still
 
 ### What WRONG Looks Like
 
@@ -261,3 +358,7 @@ Each chunk build involves thousands of noise evaluations for terrain height + tr
 | VR crashes when walking around | Orphaned mesh from LOD rebuild; old mesh not removed from scene before geometry dispose |
 | Water looks blocky in VR | Water grid swap not working; check geometry swap on sessionstart |
 | Terrain has visible facets at distance in VR | LOD chunk segments too low or fog not hiding the boundary |
+| Missing vegetation/flowers for 1 frame after chunk load | Expected — phase 2 runs next frame; verify it does appear on frame 2 |
+| Flowers/foam never appear on distant chunks | LOD skip working correctly; verify they appear when chunk upgrades to full quality |
+| Cottage ground colour blending delayed | Deferred cottage density updating 1 chunk/frame; verify it completes within ~2s |
+| Resolution looks low when standing still in VR | Dynamic resolution not recovering; check `_vrResScale` reaches 1.0 |
