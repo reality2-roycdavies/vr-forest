@@ -1017,16 +1017,16 @@ export function getRiverWaterMaterial() {
           float noiseBreak = _vnoise(vec2(along * 8.0, across * 15.0));
           combined = combined * 0.7 + noiseBreak * 0.3;
 
-          // --- Color palette: reduced contrast, semi-transparent ---
+          // --- Color palette: very transparent glassy layer ---
           // Mountain stream: subtle cyan tint
-          vec3 mtBase  = vec3(0.08, 0.18, 0.24) * uWaterDarken;
-          vec3 mtLight = vec3(0.18, 0.32, 0.38) * uWaterDarken;
-          vec3 mtFoam  = vec3(0.45, 0.55, 0.58) * uWaterDarken;
+          vec3 mtBase  = vec3(0.06, 0.14, 0.20) * uWaterDarken;
+          vec3 mtLight = vec3(0.12, 0.22, 0.28) * uWaterDarken;
+          vec3 mtFoam  = vec3(0.30, 0.38, 0.42) * uWaterDarken;
 
           // Lowland river: subtle blue-grey
-          vec3 rvBase  = vec3(0.08, 0.12, 0.18) * uWaterDarken;
-          vec3 rvLight = vec3(0.16, 0.22, 0.30) * uWaterDarken;
-          vec3 rvFoam  = vec3(0.35, 0.40, 0.44) * uWaterDarken;
+          vec3 rvBase  = vec3(0.06, 0.10, 0.15) * uWaterDarken;
+          vec3 rvLight = vec3(0.11, 0.17, 0.23) * uWaterDarken;
+          vec3 rvFoam  = vec3(0.24, 0.28, 0.32) * uWaterDarken;
 
           vec3 baseColor  = mix(rvBase, mtBase, turbulence);
           vec3 lightColor = mix(rvLight, mtLight, turbulence);
@@ -1036,16 +1036,16 @@ export function getRiverWaterMaterial() {
           vec3 color = mix(baseColor, lightColor, combined);
 
           // Subtle foam highlights on peaks only
-          float foamThreshold = mix(0.72, 0.60, turbulence);
-          float foam = smoothstep(foamThreshold, foamThreshold + 0.15, combined);
-          color = mix(color, foamColor, foam * 0.5);
+          float foamThreshold = mix(0.75, 0.65, turbulence);
+          float foam = smoothstep(foamThreshold, foamThreshold + 0.18, combined);
+          color = mix(color, foamColor, foam * 0.35);
 
           // Very subtle vertex wave tinting
           float waveCrest = smoothstep(0.003, 0.008, vWaveH);
-          color += waveCrest * 0.04 * uWaterDarken;
+          color += waveCrest * 0.025 * uWaterDarken;
 
-          // Alpha: very transparent — overlapping quads accumulate
-          float alpha = 0.06 + combined * 0.06 + foam * 0.04;
+          // Alpha: very transparent — terrain river shading does the heavy lifting
+          float alpha = 0.035 + combined * 0.035 + foam * 0.025;
 
           gl_FragColor = vec4(color, alpha);
         }
