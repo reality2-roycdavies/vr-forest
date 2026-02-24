@@ -397,48 +397,75 @@ export class DayNightSystem {
     const data = imageData.data;
     const PI2 = Math.PI * 2;
 
+    // Wrapped angular distance in degrees (handles 0°/360° seam)
+    const wDist = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };
+
     for (let py = 0; py < h; py++) {
       const bNorm = (py / h - 0.5) * 2; // -1 to 1 across galactic latitude
-      const bandProfile = Math.exp(-bNorm * bNorm * 3.0); // Gaussian falloff
+      // Tight bright core + wider dim halo
+      const coreProfile = Math.exp(-bNorm * bNorm * 6.0);
+      const haloProfile = Math.exp(-bNorm * bNorm * 1.5);
+      const bandShape = coreProfile * 0.7 + haloProfile * 0.3;
 
       for (let px = 0; px < w; px++) {
         const lFrac = px / w;
         const lRad = lFrac * PI2;
+        const lDeg = lFrac * 360;
 
         // Circular noise coords — seamless wrap in longitude
-        const cx = Math.cos(lRad) * 2;
-        const cy = Math.sin(lRad) * 2;
-        const by = bNorm * 1.5;
+        const cx = Math.cos(lRad);
+        const cy = Math.sin(lRad);
+        const by = bNorm;
 
-        // Asymmetric brightness: galactic centre (l≈0) brighter than anticenter
-        const centerBright = 0.5 + 0.5 * Math.cos(lRad);
-        const baseBright = 0.3 + 0.7 * centerBright;
+        // --- Longitude brightness profile ---
+        // Galactic centre (l=0/360°, Sagittarius) brightest
+        // Carina/Crux (l≈290°) secondary bright region
+        // Anticenter (l=180°, Auriga) dimmest
+        const centerDist = Math.cos(lRad); // 1 at l=0, -1 at l=180
+        const carinaBump = Math.exp(-(wDist(lDeg, 290) ** 2) / 1800);
+        const longBright = 0.12 + 0.58 * Math.max(0, centerDist) + 0.25 * carinaBump
+                          + 0.05 * (1 + centerDist) * 0.5; // dim floor everywhere
 
-        // Cloud structure (5-octave FBM)
-        const cloud = this._cloudFbm(cx, cy + by, 5, 42.0);
+        // --- Multi-scale cloud structure ---
+        const cloud1 = this._cloudFbm(cx * 2, cy * 2 + by * 1.5, 5, 42.0);
+        const cloud2 = this._cloudFbm(cx * 5 + 10, cy * 5 + by * 3, 4, 91.0);
+        const cloud3 = this._cloudFbm(cx * 9 + 20, cy * 9 + by * 5, 3, 137.0);
+        const cloudStructure = cloud1 * 0.5 + cloud2 * 0.3 + cloud3 * 0.2;
 
-        // Dark dust lanes (Great Rift) — tight around galactic plane, near centre
-        const dustProfile = Math.exp(-bNorm * bNorm * 8.0);
-        const dustNoise = this._cloudFbm(cx * 1.5, cy * 1.5 + by, 4, 77.0);
-        const riftFactor = Math.max(0, Math.cos((lFrac * 360 - 10) * Math.PI / 180)) * 0.6;
-        const dust = dustProfile * riftFactor * (0.5 + dustNoise * 0.5);
+        // --- Dark dust lanes (Great Rift) ---
+        // Runs from Cygnus (l≈75°) through Aquila/Scutum to Sagittarius (l≈0°)
+        const dustProfile = Math.exp(-bNorm * bNorm * 12.0); // very tight to plane
+        const dustNoise = this._cloudFbm(cx * 3, cy * 3 + by * 2, 4, 77.0);
+        // Broad rift from l≈340° through 0° to l≈80°
+        const riftDist = wDist(lDeg, 25);
+        const riftStrength = Math.exp(-(riftDist * riftDist) / 2500) * 0.7;
+        const dust = dustProfile * riftStrength * (0.3 + dustNoise * 0.7);
+        // Coalsack near Southern Cross (l≈303°)
+        const coalsack = Math.exp(-(wDist(lDeg, 303) ** 2) / 120) * dustProfile * 0.5;
 
-        // Bright nebula knots
-        const knotNoise = this._cloudFbm(cx * 3, cy * 3 + by * 2, 3, 123.0);
-        const knots = Math.max(0, knotNoise - 0.55) * 2.5 * bandProfile;
+        // --- Bright star clouds ---
+        const knotNoise = this._cloudFbm(cx * 6, cy * 6 + by * 4, 3, 123.0);
+        const knots = Math.max(0, knotNoise - 0.5) * 2.0 * coreProfile;
+        // Scutum Star Cloud (l≈28°), Sagittarius Star Cloud (l≈355°)
+        const scutumCloud = Math.exp(-(wDist(lDeg, 28) ** 2) / 120) * coreProfile * 0.25;
+        const sagCloud = Math.exp(-(wDist(lDeg, 355) ** 2) / 350) * coreProfile * 0.3;
 
-        // Combine brightness
-        let bright = baseBright * bandProfile * (0.4 + cloud * 0.6);
-        bright -= dust * 0.35;
-        bright += knots * 0.25;
+        // --- Combine ---
+        let bright = longBright * bandShape * (0.25 + cloudStructure * 0.75);
+        bright -= dust * 0.45;
+        bright -= coalsack;
+        bright += knots * 0.15 + scutumCloud + sagCloud;
         bright = Math.max(0, Math.min(1, bright));
 
-        // Colour: warm toward galactic centre, cool elsewhere
-        const warmth = centerBright * 0.15;
-        const r = Math.min(1, bright * (0.82 + warmth));
-        const g = Math.min(1, bright * (0.82 + warmth * 0.4));
-        const blue = bright * 0.92;
-        const alpha = bright * 0.5;
+        // Contrast curve (smoothstep) — dim regions get dimmer, bright stay bright
+        bright = bright * bright * (3 - 2 * bright);
+
+        // --- Colour: subtle warm shift toward centre, silvery elsewhere ---
+        const warmth = Math.max(0, centerDist) * 0.08;
+        const r = Math.min(1, bright * (0.88 + warmth));
+        const g = Math.min(1, bright * (0.88 + warmth * 0.3));
+        const blue = bright * 0.95;
+        const alpha = bright * 0.45;
 
         const i = (py * w + px) * 4;
         data[i]     = (r * 255 + 0.5) | 0;
@@ -454,7 +481,7 @@ export class DayNightSystem {
     const blurCanvas = document.createElement('canvas');
     blurCanvas.width = w; blurCanvas.height = h;
     const blurCtx = blurCanvas.getContext('2d');
-    blurCtx.filter = 'blur(3px)';
+    blurCtx.filter = 'blur(4px)';
     blurCtx.drawImage(canvas, 0, 0);
 
     const tex = new THREE.CanvasTexture(blurCanvas);
@@ -541,8 +568,12 @@ export class DayNightSystem {
       },
       vertexShader: `
         varying vec2 vUv;
+        varying float vElevation;
         void main() {
           vUv = uv;
+          // World-space elevation for horizon fade
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vElevation = normalize(worldPos.xyz - cameraPosition).y;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -550,15 +581,18 @@ export class DayNightSystem {
         uniform sampler2D uTexture;
         uniform float uOpacity;
         varying vec2 vUv;
+        varying float vElevation;
         void main() {
+          // Fade out at/below horizon so band doesn't go through ground
+          float horizonFade = smoothstep(-0.02, 0.12, vElevation);
           vec4 tex = texture2D(uTexture, vUv);
-          gl_FragColor = vec4(tex.rgb, tex.a * uOpacity);
+          gl_FragColor = vec4(tex.rgb, tex.a * uOpacity * horizonFade);
         }
       `,
       transparent: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true,
       fog: false,
       side: THREE.DoubleSide,
     });
