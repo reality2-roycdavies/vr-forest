@@ -806,7 +806,14 @@ export class Chunk {
       return flat + bank * 0.2 + 0.2;
     };
 
-    // Build smooth triangle strip per chain with averaged perpendiculars at junctions
+    // Hash helper for deterministic noise
+    const _frac = (v) => v - Math.floor(v);
+    const _hash = (a, b) => _frac(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);
+
+    // Build subdivided mesh per chain — width subdivisions break flat panels
+    const W = 4; // width subdivisions (5 vertices across)
+    const numAcross = W + 1;
+
     for (const [, chain] of chains) {
       if (chain.length === 0) continue;
 
@@ -855,23 +862,17 @@ export class Chunk {
         const hw = meshHW(flow);
 
         // Organic bank displacement — position-based noise offsets
-        // so edges meander naturally instead of being ruler-straight
         const h1 = Math.sin(wx * 0.37 + wz * 0.53) * 43758.5453;
         const h2 = Math.sin(wx * 0.71 + wz * 0.29) * 43758.5453;
-        const n1 = (h1 - Math.floor(h1)) - 0.5; // -0.5 to 0.5
-        const n2 = (h2 - Math.floor(h2)) - 0.5;
-        // Multi-frequency: broad meander + fine wobble
+        const n1 = _frac(h1) - 0.5, n2 = _frac(h2) - 0.5;
         const h3 = Math.sin(wx * 0.13 + wz * 0.19) * 43758.5453;
         const h4 = Math.sin(wx * 0.23 + wz * 0.11) * 43758.5453;
-        const n3 = (h3 - Math.floor(h3)) - 0.5;
-        const n4 = (h4 - Math.floor(h4)) - 0.5;
-        // Scale displacement: wider rivers get more meander, narrow streams less
+        const n3 = _frac(h3) - 0.5, n4 = _frac(h4) - 0.5;
         const meander = Math.min(hw * 0.35, 1.2);
-        const wobbleP = (n1 * 0.6 + n3 * 0.4) * meander; // perpendicular wobble
-        const wobbleF = (n2 * 0.4 + n4 * 0.3) * meander * 0.5; // along-flow wobble
-        // Asymmetric left/right displacement for natural bank variation
+        const wobbleP = (n1 * 0.6 + n3 * 0.4) * meander;
+        const wobbleF = (n2 * 0.4 + n4 * 0.3) * meander * 0.5;
         const h5 = Math.sin(wx * 0.47 + wz * 0.67) * 43758.5453;
-        const asymm = ((h5 - Math.floor(h5)) - 0.5) * meander * 0.3;
+        const asymm = (_frac(h5) - 0.5) * meander * 0.3;
 
         const hwL = hw + wobbleP + asymm;
         const hwR = hw - wobbleP + asymm;
@@ -880,22 +881,41 @@ export class Chunk {
         const wzL = wz + pz * hwL + fdz * fOffL;
         const wxR = wx - px * hwR + fdx * fOffR;
         const wzR = wz - pz * hwR + fdz * fOffR;
-        const yL = getTerrainHeight(wxL, wzL) + 0.05;
-        const yR = getTerrainHeight(wxR, wzR) + 0.05;
-        const lx = wx - ox, lz = wz - oz;
 
-        positions.push(
-          wxL - ox, yL, wzL - oz,
-          wxR - ox, yR, wzR - oz
-        );
-        flowDirs.push(fdx, fdz, fdx, fdz);
-        flowAmounts.push(flow, flow);
+        // Generate vertices across river width (W+1 vertices per cross-section)
+        for (let w = 0; w <= W; w++) {
+          const t = w / W; // 0 = left bank, 1 = right bank
+          let vx = wxL + (wxR - wxL) * t;
+          let vz = wzL + (wzR - wzL) * t;
+
+          // Interior vertices: stagger along flow + slight lateral perturbation
+          // to break straight cross-section lines and flat panel appearance
+          if (w > 0 && w < W) {
+            const stagger = (_hash(vx * 1.17, vz * 0.89 + w * 7.3) - 0.5) * 0.7;
+            const lateral = (_hash(vx * 0.63 + w * 3.1, vz * 1.41) - 0.5) * 0.15;
+            vx += fdx * stagger + px * lateral;
+            vz += fdz * stagger + pz * lateral;
+          }
+
+          let vy = getTerrainHeight(vx, vz) + 0.05;
+          // Subtle Y perturbation on interior vertices
+          if (w > 0 && w < W) {
+            vy += (_hash(vx * 2.31, vz * 1.73) - 0.5) * 0.03;
+          }
+
+          positions.push(vx - ox, vy, vz - oz);
+          flowDirs.push(fdx, fdz);
+          flowAmounts.push(flow);
+        }
       }
 
-      // Triangle strip indices for this chain
+      // Grid indices: W quads across × chain.length segments along
       for (let i = 0; i < chain.length; i++) {
-        const vi = baseVi + i * 2;
-        indices.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3);
+        for (let w = 0; w < W; w++) {
+          const vi = baseVi + i * numAcross + w;
+          const viNext = vi + numAcross;
+          indices.push(vi, viNext, vi + 1, vi + 1, viNext, viNext + 1);
+        }
       }
     }
 

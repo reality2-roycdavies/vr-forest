@@ -330,8 +330,8 @@ export function getGroundMaterial() {
          bankFactor *= riverAltFade;
 
          // Water core — the flowing center of the channel
-         // No aboveWater fade: water extends seamlessly to the lake
-         float waterCore = smoothstep(0.35, 0.7, vStreamChannel) * riverAltFade;
+         // Tight threshold so animation stays on the riverbed, not up the banks
+         float waterCore = smoothstep(0.55, 0.85, vStreamChannel) * riverAltFade;
 
          // Channel banks — dark wet rock across entire bank (all in water channel)
          if (bankFactor > 0.01) {
@@ -351,10 +351,15 @@ export function getGroundMaterial() {
            float along = dot(vWorldPos.xz, flowDir);
            float across = dot(vWorldPos.xz, perpDir);
 
+           // Noise-warped coordinates to break sine regularity
+           float bpN = _vnoise(vWorldPos.xz * 0.4) * 5.0;
+           float bAlong = along + bpN;
+           float bAcross = across + bpN * 0.3;
+
            // Fine-scale continuous sine-wave scroll for water surface
-           float bedW1 = sin(along * 12.0 - uTime * 6.0 + across * 2.0) * 0.5 + 0.5;
-           float bedW2 = sin(along * 20.0 - uTime * 10.0 - across * 3.0 + 7.0) * 0.5 + 0.5;
-           float bedW3 = sin(along * 35.0 - uTime * 16.0 + across * 5.0 + 13.0) * 0.5 + 0.5;
+           float bedW1 = sin(bAlong * 12.0 - uTime * 6.0 + bAcross * 2.0) * 0.5 + 0.5;
+           float bedW2 = sin(bAlong * 20.0 - uTime * 10.0 - bAcross * 3.0 + 7.0) * 0.5 + 0.5;
+           float bedW3 = sin(bAlong * 35.0 - uTime * 16.0 + bAcross * 5.0 + 13.0) * 0.5 + 0.5;
            float flowPattern = bedW1 * 0.4 + bedW2 * 0.35 + bedW3 * 0.25;
 
            // Dark water with flowing light/dark variation
