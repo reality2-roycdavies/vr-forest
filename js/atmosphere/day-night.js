@@ -1454,18 +1454,18 @@ export class DayNightSystem {
       const dayness = Math.min(1, Math.max(0, (fogLum - 0.05) * 5));
       // Night: start from much darker luminance (preserve dark feel)
       // Day: full luminance → overcast grey
-      const effectiveLum = fogLum * (0.25 + dayness * 0.75);
+      const effectiveLum = fogLum * (0.12 + dayness * 0.88);
       _color.setRGB(effectiveLum, effectiveLum, effectiveLum).lerp(_overcastHorizonGrey, dayness);
-      // At night, push rain fog darker (but not to pure black)
-      const nightDarken = (1 - dayness) * weather.rainIntensity * 0.4;
+      // At night, push rain/cloud fog darker (but not to pure black)
+      const nightDarken = (1 - dayness) * weather.cloudDarkness * 0.5;
       _color.multiplyScalar(1 - nightDarken);
       // Storm dims fog at all times of day (especially noticeable at twilight/dawn)
       _color.multiplyScalar(1 - weather.skyDarkening * 0.4);
       // Floor: never let fog go pure black — keep a faint dark blue-grey
       // so you can still see tree silhouettes and navigate
-      _color.r = Math.max(0.012, _color.r);
-      _color.g = Math.max(0.014, _color.g);
-      _color.b = Math.max(0.020, _color.b);
+      _color.r = Math.max(0.008, _color.r);
+      _color.g = Math.max(0.009, _color.g);
+      _color.b = Math.max(0.014, _color.b);
       this.scene.fog.color.lerp(_color, desatAmount);
       this.scene.background.lerp(_color, desatAmount);
     }
