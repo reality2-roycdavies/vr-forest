@@ -612,19 +612,19 @@ export class DayNightSystem {
           if (vis < 0.002) discard;
 
           // Layer 1: Dense dim stars (thousands of faint points)
-          float s1 = starLayer(vUv, vec2(4096.0, 1024.0), density * 0.45, 0.45, vec2(0.0));
+          float s1 = starLayer(vUv, vec2(4096.0, 1024.0), density * 0.55, 0.45, vec2(0.0));
           // Layer 2: Medium stars (sparser, brighter)
-          float s2 = starLayer(vUv, vec2(2048.0, 512.0), density * 0.22, 0.35, vec2(500.0, 700.0));
+          float s2 = starLayer(vUv, vec2(2048.0, 512.0), density * 0.30, 0.35, vec2(500.0, 700.0));
           // Layer 3: Bright stars (very sparse highlights)
-          float s3 = starLayer(vUv, vec2(1024.0, 256.0), density * 0.08, 0.3, vec2(1300.0, 900.0));
+          float s3 = starLayer(vUv, vec2(1024.0, 256.0), density * 0.12, 0.3, vec2(1300.0, 900.0));
 
-          float stars = s1 * 0.4 + s2 * 0.7 + s3 * 1.0;
+          float stars = s1 * 0.6 + s2 * 1.0 + s3 * 1.4;
 
-          // Minimal diffuse glow underneath (truly unresolved background)
-          float glow = density * 0.06;
+          // Diffuse glow underneath (unresolved background)
+          float glow = density * 0.25;
 
-          vec3 color = tex.rgb * (glow + stars);
-          float alpha = (glow + stars * 0.65) * uOpacity * horizonFade;
+          vec3 color = tex.rgb * (glow + stars * 1.2);
+          float alpha = (glow + stars) * uOpacity * horizonFade;
           gl_FragColor = vec4(color, alpha);
         }
       `,
@@ -1359,7 +1359,7 @@ export class DayNightSystem {
 
     // Milky Way band — follows stars
     this.milkyWay.position.copy(playerPos);
-    this.milkyWay.material.uniforms.uOpacity.value = starOpacity * 0.7;
+    this.milkyWay.material.uniforms.uOpacity.value = starOpacity * 0.9;
     this.milkyWay.visible = this.stars.visible;
     if (this.milkyWay.visible) {
       this.milkyWay.rotation.copy(this.stars.rotation);
