@@ -415,8 +415,8 @@ export class DayNightSystem {
       // Sirius (mag -1.4) → ~5.5, Vega (mag 0) → ~4, mag 3 → ~2, mag 5 → ~1.2
       sizes[i] = 1.0 + lumFactor * 5.0;
 
-      // Brightness: moderate floor so faint stars are still visible
-      brightness[i] = Math.max(0.25, lumFactor * 1.3);
+      // Brightness: raised floor so faint stars are clearly visible
+      brightness[i] = Math.max(0.35, lumFactor * 1.3);
 
       // Per-star color from B-V index
       const [cr, cg, cb] = this._bvToRGB(bv);
