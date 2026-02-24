@@ -979,25 +979,38 @@ export function getRiverWaterMaterial() {
           float speed = mix(3.0, 0.5, smoothstep(2.0, 40.0, vFlow));
           float t = uTime * speed;
 
+          // Noise-based perturbation to break sine regularity
+          // Shifts local phase/frequency so waves look organic, not machined
+          float pN1 = _vnoise(vWorldPos.xz * 0.3) * 6.0;
+          float pN2 = _vnoise(vWorldPos.xz * 0.7 + 50.0) * 4.0;
+          float pN3 = _vnoise(vWorldPos.xz * 1.5 + 100.0) * 2.5;
+          // Warp the coordinates for each scale
+          float a1 = along + pN1;
+          float c1 = across + pN1 * 0.4;
+          float a2 = along + pN2;
+          float c2 = across + pN2 * 0.5;
+          float a3 = along + pN3;
+          float c3 = across + pN3 * 0.6;
+
           // Medium ripples (~30cm wavelength, visible waves)
-          float w1 = sin(along * 18.0 - t * 8.0 + across * 3.0) * 0.5 + 0.5;
-          float w2 = sin(along * 14.0 - t * 6.0 + across * 4.0 + 5.0) * 0.5 + 0.5;
+          float w1 = sin(a1 * 18.0 - t * 8.0 + c1 * 3.0) * 0.5 + 0.5;
+          float w2 = sin(a1 * 14.0 - t * 6.0 + c1 * 4.0 + 5.0) * 0.5 + 0.5;
 
           // Fine ripples (~15cm wavelength)
-          float w3 = sin(along * 35.0 - t * 14.0 - across * 6.0 + 11.0) * 0.5 + 0.5;
-          float w4 = sin(along * 45.0 - t * 18.0 + across * 5.0 + 17.0) * 0.5 + 0.5;
+          float w3 = sin(a2 * 35.0 - t * 14.0 - c2 * 6.0 + 11.0) * 0.5 + 0.5;
+          float w4 = sin(a2 * 45.0 - t * 18.0 + c2 * 5.0 + 17.0) * 0.5 + 0.5;
 
           // Very fine texture (~8cm wavelength, subtle shimmer)
-          float w5 = sin(along * 70.0 - t * 25.0 + across * 12.0 + 23.0) * 0.5 + 0.5;
-          float w6 = sin(along * 90.0 - t * 32.0 - across * 10.0 + 31.0) * 0.5 + 0.5;
+          float w5 = sin(a3 * 70.0 - t * 25.0 + c3 * 12.0 + 23.0) * 0.5 + 0.5;
+          float w6 = sin(a3 * 90.0 - t * 32.0 - c3 * 10.0 + 31.0) * 0.5 + 0.5;
 
           float combined = w1 * 0.22 + w2 * 0.20
                          + w3 * 0.18 + w4 * 0.16
                          + w5 * 0.13 + w6 * 0.11;
 
-          // Stationary noise breakup for natural variation
+          // Stationary noise breakup for additional natural variation
           float noiseBreak = _vnoise(vec2(along * 8.0, across * 15.0));
-          combined = combined * 0.8 + noiseBreak * 0.2;
+          combined = combined * 0.7 + noiseBreak * 0.3;
 
           // --- Color palette: reduced contrast, semi-transparent ---
           // Mountain stream: subtle cyan tint

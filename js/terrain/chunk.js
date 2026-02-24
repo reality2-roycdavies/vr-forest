@@ -853,15 +853,40 @@ export class Chunk {
         }
 
         const hw = meshHW(flow);
-        const wxL = wx + px * hw, wzL = wz + pz * hw;
-        const wxR = wx - px * hw, wzR = wz - pz * hw;
+
+        // Organic bank displacement — position-based noise offsets
+        // so edges meander naturally instead of being ruler-straight
+        const h1 = Math.sin(wx * 0.37 + wz * 0.53) * 43758.5453;
+        const h2 = Math.sin(wx * 0.71 + wz * 0.29) * 43758.5453;
+        const n1 = (h1 - Math.floor(h1)) - 0.5; // -0.5 to 0.5
+        const n2 = (h2 - Math.floor(h2)) - 0.5;
+        // Multi-frequency: broad meander + fine wobble
+        const h3 = Math.sin(wx * 0.13 + wz * 0.19) * 43758.5453;
+        const h4 = Math.sin(wx * 0.23 + wz * 0.11) * 43758.5453;
+        const n3 = (h3 - Math.floor(h3)) - 0.5;
+        const n4 = (h4 - Math.floor(h4)) - 0.5;
+        // Scale displacement: wider rivers get more meander, narrow streams less
+        const meander = Math.min(hw * 0.35, 1.2);
+        const wobbleP = (n1 * 0.6 + n3 * 0.4) * meander; // perpendicular wobble
+        const wobbleF = (n2 * 0.4 + n4 * 0.3) * meander * 0.5; // along-flow wobble
+        // Asymmetric left/right displacement for natural bank variation
+        const h5 = Math.sin(wx * 0.47 + wz * 0.67) * 43758.5453;
+        const asymm = ((h5 - Math.floor(h5)) - 0.5) * meander * 0.3;
+
+        const hwL = hw + wobbleP + asymm;
+        const hwR = hw - wobbleP + asymm;
+        const fOffL = wobbleF, fOffR = wobbleF * 0.7;
+        const wxL = wx + px * hwL + fdx * fOffL;
+        const wzL = wz + pz * hwL + fdz * fOffL;
+        const wxR = wx - px * hwR + fdx * fOffR;
+        const wzR = wz - pz * hwR + fdz * fOffR;
         const yL = getTerrainHeight(wxL, wzL) + 0.05;
         const yR = getTerrainHeight(wxR, wzR) + 0.05;
         const lx = wx - ox, lz = wz - oz;
 
         positions.push(
-          lx + px * hw, yL, lz + pz * hw,
-          lx - px * hw, yR, lz - pz * hw
+          wxL - ox, yL, wzL - oz,
+          wxR - ox, yR, wzR - oz
         );
         flowDirs.push(fdx, fdz, fdx, fdz);
         flowAmounts.push(flow, flow);
