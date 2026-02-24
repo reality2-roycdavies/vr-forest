@@ -762,6 +762,7 @@ let timeHudFade = 0;
 let weatherHudFade = 0;
 let _lastWeatherState = '';
 let _frameCount = 0;
+let _vrResScale = 1.0; // dynamic VR resolution scale (1.0 = full, 0.65 = reduced)
 const clock = new THREE.Clock();
 
 // Initial heightmap generation (synchronous full pass for first frame)
@@ -956,6 +957,29 @@ function onFrame() {
       vrMinimapTex.needsUpdate = true;
     }
     vrMinimapSprite.visible = vr.isInVR();
+  }
+
+  // Dynamic resolution scaling in VR — reduce when moving, full when still
+  if (inVR) {
+    const targetScale = movement.isMoving ? (movement.isSprinting ? 0.65 : 0.75) : 1.0;
+    // Fast drop (0.15s), slow recovery (0.5s) for responsive feel
+    const rate = targetScale < _vrResScale ? 7 : 2;
+    _vrResScale += (targetScale - _vrResScale) * Math.min(1, delta * rate);
+    try {
+      const xr = vr.renderer.xr;
+      const frame = xr.getFrame && xr.getFrame();
+      if (frame) {
+        const refSpace = xr.getReferenceSpace();
+        const pose = frame.getViewerPose(refSpace);
+        if (pose) {
+          for (const view of pose.views) {
+            if (view.requestViewportScale) {
+              view.requestViewportScale(_vrResScale);
+            }
+          }
+        }
+      }
+    } catch (e) { /* requestViewportScale not supported — no-op */ }
   }
 
   // Render
