@@ -36,10 +36,10 @@ export class Chunk {
       this._updateGeometry(data);
     } else {
       if (this.mesh) {
-        // Segments changed — dispose old geometry before recreating
+        // Segments changed — remove old mesh from scene, dispose, recreate
         const parent = this.mesh.parent;
+        if (parent) parent.remove(this.mesh);
         this.mesh.geometry.dispose();
-        this.mesh.geometry = null;
         this.mesh = null;
         this._createMesh(data);
         if (parent) parent.add(this.mesh);
