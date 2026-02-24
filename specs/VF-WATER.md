@@ -1,9 +1,9 @@
 # VF-WATER — Water System
 
-**Version:** 1.0  
-**Date:** 20 February 2026  
-**Status:** Active  
-**Purpose:** Water plane, wave displacement, fragment shader effects, swimming mechanics, shore foam, heightmap texture, and rain ripples.  
+**Version:** 1.1
+**Date:** 24 February 2026
+**Status:** Active
+**Purpose:** Water plane, wave displacement, fragment shader effects, swimming mechanics, shore foam, heightmap texture, rain ripples, and river system (physically-traced downhill rivers with flow animation, water mesh overlay, rock banks, and seamless lake junction).
 **Dependencies:** VF-CONFIG, VF-TERRAIN, VF-WEATHER  
 
 ---
@@ -216,3 +216,211 @@ function generateFoamContour(chunk):
 A 128×128 `DataTexture` (RED channel, Float32) MUST store terrain heights across the water plane extent. Used by the water shader for shore fade. The texture MUST be updated when the player moves more than 5m, staggered across 8 frames (16 rows × 128 columns = 2048 samples per frame).
 
 **Why staggered**: Sampling 128×128 = 16,384 terrain heights in one frame would spike the frame time. Spreading it across 8 frames (2,048 per frame) keeps the cost manageable. The visual artifact is minimal — a brief 8-frame wave of shore fade updating — because the player rarely moves fast enough to notice.
+
+## 8. River System
+
+Rivers are **physically-traced downhill channels** that flow from mountain sources to lakes. Unlike the valley/stream noise carving (§3.2 in VF-TERRAIN), rivers follow actual gradient descent through the terrain, accumulate flow at confluences, and produce visible animated water.
+
+The system spans four files:
+- `river-tracer.js` — source discovery, gradient descent, confluence detection, validation
+- `terrain-generator.js` — per-vertex river attributes (`streamChannel`, `streamFlowDir`)
+- `ground-material.js` — terrain shader river rendering + river water overlay material
+- `chunk.js` — river water mesh generation + stream rock placement
+
+### 8.1 River Tracing Algorithm (river-tracer.js)
+
+#### Source Discovery
+
+River sources are discovered on a deterministic grid:
+
+```
+for each cell at RIVER_SOURCE_SPACING (64m):
+    apply deterministic jitter (35% of spacing, from noise)
+    height = getBaseTerrainHeight(x, z)    // pre-river-carving height
+
+    skip if height < RIVER_SOURCE_MIN_ALT (12m)
+
+    // Valley check: sample 8 cardinal directions at RIVER_SOURCE_VALLEY_RADIUS (24m)
+    avgSurrounding = average of 8 samples
+    skip if height > avgSurrounding + RIVER_SOURCE_VALLEY_DROP (0.0)
+
+    add as candidate source
+```
+
+Sources are sorted by elevation (highest first) so tributaries trace before main rivers.
+
+#### Gradient Descent Tracing
+
+Each river traces downhill using gradient descent with momentum:
+
+```
+function traceOneRiver(startX, startZ):
+    pos = (startX, startZ)
+    dir = (0, 0)     // previous direction (momentum)
+    flow = 1.0        // accumulates at confluences
+
+    for step = 0 to RIVER_MAX_STEPS (500):
+        // Central-difference gradient
+        eps = RIVER_GRAD_EPS (2.0m)
+        gx = (height(x-eps, z) - height(x+eps, z)) / (2*eps)
+        gz = (height(x, z-eps) - height(x, z+eps)) / (2*eps)
+        gradDir = normalize(gx, gz)
+
+        // Momentum blend
+        dir = gradDir * (1 - RIVER_MOMENTUM) + dir * RIVER_MOMENTUM
+        dir = normalize(dir)
+
+        // Step
+        pos += dir * RIVER_STEP_SIZE (4.0m)
+        store point (x, z, flow)
+
+        // Termination checks
+        if height <= WATER_LEVEL + 0.5: mark reachedWater; stop
+        if nearest existing river within RIVER_MERGE_DIST (6.0m): merge; stop
+```
+
+**Why momentum**: Pure gradient descent gets trapped in shallow terrain pits. Blending 30% of the previous direction carries the river through minor depressions, like real water flowing over small bumps.
+
+#### Pit Escape Mechanism
+
+Every `RIVER_PIT_STUCK_INTERVAL` (20) steps, the tracer checks if the river has descended at least `RIVER_PIT_MIN_DESCENT` (0.3m). If stuck:
+
+1. **Search**: Expanding rings from 0 to `RIVER_PIT_SEARCH_RADIUS` (120m), step `RIVER_PIT_SEARCH_STEP` (8m), 8+ samples per ring
+2. **Find**: Lowest terrain point in the search area
+3. **Breach**: Linear interpolation from pit to escape point, with extra carving depth stored per segment
+4. **Limit**: Maximum `RIVER_PIT_MAX_BREAKS` (8) per river
+
+#### Confluence Detection
+
+A `RiverSpatialHash` (cell size `RIVER_HASH_CELL` = 8m) indexes all traced segments. When a new river traces within `RIVER_MERGE_DIST` (6.0m) of an existing segment:
+
+- The tributary merges into the existing river
+- Flow propagates: all downstream segments of the target river gain the tributary's flow
+- The tributary is marked as `mergedInto` the target
+
+#### Validation
+
+After all rivers trace, each is validated:
+- A river is **valid** if it reached water level OR merged into a valid river (recursive, cycle-guarded)
+- Invalid rivers (dead ends) are pruned from the spatial hash
+
+#### Dynamic Retracing
+
+`checkRetrace(playerX, playerZ)` triggers when the player moves more than `RIVER_RETRACE_DIST` (200m). New sources are discovered in the expanded region and traced, integrating into the existing river network.
+
+### 8.2 River Geometry (Width & Carving)
+
+River width follows real hydrology — proportional to √flow:
+
+```
+halfWidth = min(RIVER_MAX_HALFWIDTH, RIVER_MIN_HALFWIDTH + RIVER_WIDTH_SCALE × √flow)
+         = min(2.8, 0.02 + 0.2 × √flow)
+```
+
+River depth follows the same pattern:
+
+```
+maxDepth = min(RIVER_MAX_CARVE, RIVER_CARVE_SCALE × √flow)
+         = min(5.0, 0.4 × √flow)
+```
+
+The cross-section profile is **flat-bottomed with cosine banks**:
+- Flat zone width: `max(halfWidth, depth × 1.0)`
+- Bank transition width: `max(RIVER_BANK_WIDTH, depth × 1.5)` (1.5m default)
+- Within flat zone: full carving depth
+- Bank zone: `depth × 0.5 × (1 + cos(π × bankPosition))` — smooth cosine falloff
+
+This profile is subtracted from terrain height via `getRiverCarving(x, z)`, called from `getTerrainHeight()`.
+
+### 8.3 Terrain Shader River Rendering (ground-material.js)
+
+The terrain shader renders river channels using per-vertex attributes:
+
+- `vStreamChannel` — 0 (no river) to 1.0 (river centre), computed by `getRiverFactor()`
+- `vStreamFlowDir` — vec2 flow direction from traced segment
+
+#### Bank Rendering
+
+```glsl
+float bankFactor = smoothstep(0.0, 0.3, vStreamChannel);
+// Uses rock texture × dark wet tint (0.08, 0.11, 0.16)
+terrainColor = mix(terrainColor, bankRockColor, bankFactor);
+```
+
+Banks fade near water level (`smoothstep(waterLevel - 0.1, waterLevel + 1.0, h)`) so lake shore takes over at the junction.
+
+#### Water Core Rendering (Animated Flow)
+
+```glsl
+float waterCore = smoothstep(0.35, 0.7, vStreamChannel);
+
+// Flow-aligned coordinates
+float along = dot(worldPos.xz, flowDir);
+float across = dot(worldPos.xz, perpDir);
+
+// Three overlapping sine waves at different frequencies
+float bedW1 = sin(along * 12.0 - uTime * 6.0 + across * 2.0) * 0.5 + 0.5;
+float bedW2 = sin(along * 20.0 - uTime * 10.0 - across * 3.0 + 7.0) * 0.5 + 0.5;
+float bedW3 = sin(along * 35.0 - uTime * 16.0 + across * 5.0 + 13.0) * 0.5 + 0.5;
+
+float flowPattern = bedW1 * 0.4 + bedW2 * 0.35 + bedW3 * 0.25;
+```
+
+Base river colour is dark blue-grey `(0.06, 0.12, 0.18)` with ±0.18 modulation from the flow pattern. The animation scrolls along the flow direction, creating visible downstream movement.
+
+Weather effects:
+- `uRainIntensity` expands channel rendering by 15% during storms
+- `uWaterDarken` scales river colours for night/storm darkening
+- Rivers fade above snowline altitude
+
+### 8.4 River Water Mesh Overlay (chunk.js)
+
+A semi-transparent water mesh sits above the terrain-rendered channel, adding depth and surface detail.
+
+#### Geometry Generation (`_generateRiverWater`)
+
+1. Query `getSegmentsInArea()` for river segments overlapping the chunk
+2. Group segments by `riverId`, sort by `segIdx` to reconstruct chains
+3. For each chain, build a triangle strip:
+   - Compute perpendicular at each junction (averaged from adjacent segments for smooth bends)
+   - Create vertex pairs: `centre ± perpendicular × halfWidth` at `terrainHeight + 0.05m`
+   - Per-vertex attributes: `streamFlowDir` (vec2), `flowAmount` (scalar)
+
+#### Material (`getRiverWaterMaterial`)
+
+**Vertex shader**: Applies 3-wave broad undulation aligned to flow direction. Turbulence varies with flow — steep mountain streams are choppier (1.5× amplitude), flat lowland rivers are calmer (0.7×).
+
+**Fragment shader**: Six overlapping sine waves at increasing frequencies (18, 14, 35, 45, 70, 90 cycles/unit) create fine animated ripples. Colour blends between:
+- Mountain stream: Cyan-tinted `(0.08, 0.18, 0.24)` → `(0.18, 0.32, 0.38)`
+- Lowland river: Blue-grey `(0.08, 0.12, 0.18)` → `(0.16, 0.22, 0.30)`
+
+Alpha is very low (`0.06 + combined × 0.06 + foam × 0.04`) so the terrain channel shows through, with the overlay adding shimmer and depth. No depth write; double-sided rendering.
+
+### 8.5 Stream Rocks (chunk.js)
+
+Rocks are placed along river banks with density inversely proportional to flow:
+
+```
+rockChance = 0.4 × (1.0 - min(1.0, flow / 40.0))
+```
+
+- **Narrow mountain streams (flow < 40)**: Many rocks (boulders in rapids)
+- **Wide lowland rivers (flow > 40)**: Few rocks
+
+Rocks are positioned within `flatWidth + bankWidth × 0.3` of the channel centre, using deterministic hash-based placement (spacing 2.5m along the stream). Size distribution varies with channel width:
+
+| Channel Width | Small | Medium | Large |
+|--------------|-------|--------|-------|
+| < 0.8m | 85% | 15% | 0% |
+| 0.8–2.0m | 50% | 40% | 10% |
+| > 2.0m | 30% | 40% | 30% |
+
+### 8.6 Seamless River-to-Lake Junction
+
+Three mechanisms ensure rivers blend seamlessly into lakes with no hard edges:
+
+1. **Channel extension**: The `streamChannel` attribute extends 1m below water level, so the terrain shader renders the river channel right into the lake shallows
+2. **Bank suppression**: `bankFactor` fades via `smoothstep(waterLevel - 0.1, waterLevel + 1.0, h)`, so rocky banks give way to normal lake shore near the water edge
+3. **Colour matching**: River water core colour `(0.06, 0.12, 0.18)` matches the lake water colour, preventing visible colour discontinuity
+
+> **Why seamless junction matters**: Rivers that abruptly stop at the lake edge look artificial. By extending the channel rendering below water level and matching colours, the river appears to flow naturally into the lake body.

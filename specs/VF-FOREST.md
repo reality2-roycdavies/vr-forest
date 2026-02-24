@@ -1,16 +1,16 @@
 # VF-FOREST — Forest System
 
-**Version:** 1.0  
-**Date:** 20 February 2026  
-**Status:** Active  
-**Purpose:** Three tree types with exact geometry, tree placement algorithm, vegetation (grass/ferns/flowers/rocks/logs/stumps), ramshackle log cabins with smoke and garden ground effects, and wind animation.  
+**Version:** 1.1
+**Date:** 24 February 2026
+**Status:** Active
+**Purpose:** Four tree types (pine, oak, birch, tussock) with exact geometry, tree placement algorithm, vegetation (grass/ferns/flowers/rocks/logs/stumps), ramshackle log cabins with smoke and garden ground effects, and wind animation.
 **Dependencies:** VF-CONFIG, VF-TERRAIN, VF-WEATHER  
 
 ---
 
-## 1. Three Tree Types
+## 1. Four Tree Types
 
-Each tree type has a **trunk** (merged cylinder + branch stubs) and a **canopy** (merged lobes). All geometry MUST be built from primitives at startup.
+Each tree type has a **trunk** (merged cylinder + branch stubs) and a **canopy** (merged lobes). All geometry MUST be built from primitives at startup. Types 0–2 are full trees; Type 3 (tussock) is alpine ground cover that uses the tree instancing system.
 
 ### 1.1 Pine (Type 0)
 - **Trunk**: Cylinder, top radius 0.06, bottom radius 0.13, height 1.1, 8 radial segments, 4 height segments
@@ -40,13 +40,32 @@ Each tree type has a **trunk** (merged cylinder + branch stubs) and a **canopy**
 - **Canopy colour**: Bright yellow-green (0x5a9035), vertex variation ±0.30
 - **Texture**: Small round dots with yellow-green tint
 
-### 1.4 Shared Trunk Features
+### 1.4 Tussock (Type 3 — Alpine Zone Only)
+
+NZ red tussock (*Chionochloa rubra*): dense dome of golden-straw blades placed in alpine terrain above the treeline.
+
+- **Trunk**: Vestigial cylinder (0.02 top, 0.03 bottom, height 0.05) — invisible, exists only because the tree instancing system requires one
+- **Canopy**: 56 `PlaneGeometry` blade strips merged into a dome:
+  - **Inner blades**: Short (0.20–0.25m), wide, various angles — creates solid visual mass
+  - **Outer blades**: Longer (0.30–0.38m), thinner, fountain-arching with tip droop — characteristic silhouette
+  - Per-blade outward lean: `0.15–0.35 × height² × outward_direction` (parabolic arch)
+  - Tip droop above 70% height: `droopT² × height × 0.10`
+  - Blade tapering: width reduces by 92% from base to tip
+- **Canopy colour**: Golden-straw vertex colours (warm tussock tones) with per-vertex variation
+- **Placement**: Above `TREELINE_START` (16m) only; assigned as type 3 when altitude > treeline
+- **Terrain tilt**: Tussock instances tilt to follow terrain slope (unlike trees which always stand vertical)
+- **No collision**: Player can walk through tussock (type 3 skipped in collision checks)
+- **No wildlife hiding**: Too small for wildlife peek encounters (type 3 excluded)
+
+> **Why tussock uses the tree system**: Rather than creating a separate instancing pool for alpine ground cover, tussock reuses the existing tree `InstancedMesh` infrastructure. The vestigial trunk is invisible at the tussock's small scale. This adds alpine detail with zero additional draw calls.
+
+### 1.5 Shared Trunk Features
 - **S-curve bend**: `x += sin(t × π) × 0.06 + sin(t × π × 2.5) × 0.02` where t = y/height
 - **Vertex colour gradient**: Dark brown (0x3d2510) at base → lighter brown (0x6b4828) at top
 - **Cylindrical UVs**: U = angle around trunk, V = height
 - **Procedural bark textures**: 128×128 canvas with vertical wavy lines and knots
 
-### 1.5 Shared Canopy Features
+### 1.6 Shared Canopy Features
 - **Vertex jitter**: Each vertex MUST be displaced by ±0.08–0.10 × normalised position hash for organic irregularity
 - **Vertex colours**: Bottom/interior darker, top/exterior lighter, plus random per-vertex variation
 - **Spherical UVs**: Generated from canopy geometry bounds
@@ -79,7 +98,7 @@ for each grid cell at spacing 3.0m within chunk:
         push tree at (finalX, height - 0.15, finalZ, type, scale)
 ```
 
-Trees MUST be rendered as `InstancedMesh` — 3 types × 2 parts (trunk + canopy) = 6 draw calls. Maximum 2000 instances per type (see VF-PERFORMANCE).
+Trees MUST be rendered as `InstancedMesh` — 4 types × 2 parts (trunk + canopy) = 8 draw calls. Maximum 2000 instances per type for types 0–2; tussock (type 3) has a separate cap (see VF-PERFORMANCE).
 
 Trees MUST be planted 0.15m below terrain height so trunks emerge naturally with no floating.
 

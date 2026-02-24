@@ -1,9 +1,9 @@
 # VF-CONFIG — Configuration Reference
 
-**Version:** 0.1 Draft  
-**Date:** 2026-02-20  
-**Status:** Draft  
-**Purpose:** Complete table of ALL tunable configuration parameters (~190), organised by system. Every magic number in the experience lives here.  
+**Version:** 0.2 Draft
+**Date:** 2026-02-24
+**Status:** Draft
+**Purpose:** Complete table of ALL tunable configuration parameters (~220), organised by system. Every magic number in the experience lives here.
 **Dependencies:** None (this spec is referenced by all others)  
 
 ---
@@ -23,10 +23,11 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | `CHUNK_SIZE` | 32 | Meters per chunk side |
-| `CHUNK_SEGMENTS` | 31 | Vertices per side (32×32 grid = 31×31 quads ≈ 2k triangles) |
+| `CHUNK_SEGMENTS` | 63 | Vertices per side (64×64 grid = 63×63 quads ≈ 8k triangles) |
+| `CHUNK_SEGMENTS_LOD` | 31 | Reduced segments for distant chunks in VR (32×32 grid ≈ 2k triangles) |
 | `LOAD_RADIUS` | 5 | Chunks to load in each direction around player |
 | `UNLOAD_RADIUS` | 7 | Chunks beyond this distance get recycled |
-| `MAX_CHUNKS_PER_FRAME` | 2 | Staggered loading cap per frame |
+| `MAX_CHUNKS_PER_FRAME` | 2 | Staggered loading cap per frame (1 in VR) |
 | `TERRAIN_SCALE` | 0.008 | Base noise frequency for fBm |
 | `TERRAIN_OCTAVES` | 4 | Number of fBm octave layers |
 | `TERRAIN_PERSISTENCE` | 0.45 | Amplitude decay per octave |
@@ -50,6 +51,34 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `MOUNTAIN_VALLEY_DEPTH` | 5 | Valley depression depth (m) |
 | `FOOTHILL_HEIGHT` | 6 | Max foothill height (m) |
 | `FOOTHILL_SCALE` | 0.008 | Foothill noise frequency |
+
+## 2b. Rivers (Physically-Traced)
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `RIVER_SOURCE_SPACING` | 64 | Source candidate grid spacing (m) |
+| `RIVER_SOURCE_MIN_ALT` | 12 | Minimum base terrain height for sources (m) |
+| `RIVER_SOURCE_VALLEY_RADIUS` | 24 | Valley detection ring sample radius (m) |
+| `RIVER_SOURCE_VALLEY_DROP` | 0.0 | Source must be at/below surrounding average |
+| `RIVER_STEP_SIZE` | 4.0 | Trace step distance (m) |
+| `RIVER_GRAD_EPS` | 2.0 | Gradient central-difference epsilon (m) |
+| `RIVER_MAX_STEPS` | 500 | Maximum trace steps per river |
+| `RIVER_MOMENTUM` | 0.3 | Direction blend with previous (0=greedy, 1=straight) |
+| `RIVER_MERGE_DIST` | 6.0 | Confluence detection radius (m) |
+| `RIVER_HASH_CELL` | 8 | Spatial hash cell size (m) |
+| `RIVER_MIN_HALFWIDTH` | 0.02 | Narrowest stream half-width (m) |
+| `RIVER_WIDTH_SCALE` | 0.2 | Half-width = MIN + SCALE × √flow |
+| `RIVER_MAX_HALFWIDTH` | 2.8 | Widest river half-width (m) |
+| `RIVER_CARVE_SCALE` | 0.4 | Carve depth = SCALE × √flow |
+| `RIVER_MAX_CARVE` | 5.0 | Maximum carving depth (m) |
+| `RIVER_BANK_WIDTH` | 1.5 | Soft bank transition width (m) |
+| `RIVER_TRACE_RADIUS` | 800 | Initial trace radius from player (m) |
+| `RIVER_RETRACE_DIST` | 200 | Re-trace trigger distance (m) |
+| `RIVER_PIT_SEARCH_RADIUS` | 120 | Max escape point search radius (m) |
+| `RIVER_PIT_SEARCH_STEP` | 8 | Ring spacing in escape search (m) |
+| `RIVER_PIT_MAX_BREAKS` | 8 | Max pit-escape attempts per river |
+| `RIVER_PIT_STUCK_INTERVAL` | 20 | Check descent every N steps |
+| `RIVER_PIT_MIN_DESCENT` | 0.3 | Minimum height drop over stuck interval (m) |
 
 ## 3. Altitude Zones
 
@@ -269,7 +298,8 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | Camera near plane | 0.1m | Close enough for vegetation detail |
 | Camera far plane | 250m | Matches fog far distance |
 | XR reference space | `local-floor` | Player starts standing at ground level |
-| Foveated rendering | Level 1 | Saves GPU on peripheral vision (Quest) |
+| Foveated rendering | Level 1.0 (maximum) | Eye-tracked; saves 25–40% fill on Quest 3 |
+| XR framebuffer scale | 1.0 (native) | No supersampling; foveation keeps centre sharp |
 
 ## 16. Render Order
 

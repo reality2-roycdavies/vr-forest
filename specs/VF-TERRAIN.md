@@ -1,9 +1,9 @@
 # VF-TERRAIN — Terrain System
 
-**Version:** 1.0  
-**Date:** 20 February 2026  
-**Status:** Active  
-**Purpose:** Chunked infinite terrain generation, noise system, height calculation, altitude biomes, ground material shader, normal computation, and procedural textures.  
+**Version:** 1.1
+**Date:** 24 February 2026
+**Status:** Active
+**Purpose:** Chunked infinite terrain generation, noise system, height calculation (including river carving), altitude biomes, ground material shader, normal computation, procedural textures, and VR LOD system.
 **Dependencies:** VF-CONFIG, VF-ARCH  
 
 ---
@@ -15,10 +15,11 @@ The world is divided into square chunks, each 32m × 32m. Only chunks within a l
 | Parameter | Value |
 |-----------|-------|
 | `CHUNK_SIZE` | 32 meters |
-| `CHUNK_SEGMENTS` | 31 (32×32 vertex grid = 31×31 quads ≈ 2k triangles) |
+| `CHUNK_SEGMENTS` | 63 (64×64 vertex grid = 63×63 quads ≈ 8k triangles) |
+| `CHUNK_SEGMENTS_LOD` | 31 (32×32 vertex grid ≈ 2k triangles; VR distant chunks only) |
 | `LOAD_RADIUS` | 5 chunks in each direction |
 | `UNLOAD_RADIUS` | 7 chunks (recycled beyond this) |
-| `MAX_CHUNKS_PER_FRAME` | 2 (staggered loading) |
+| `MAX_CHUNKS_PER_FRAME` | 2 (staggered loading; 1 in VR) |
 
 When the player enters a new chunk, the system:
 1. MUST determine which chunks should be active (Manhattan distance ≤ LOAD_RADIUS)
@@ -31,6 +32,18 @@ When the player enters a new chunk, the system:
 **Why staggered loading**: Creating a chunk involves thousands of noise evaluations (terrain height for each vertex + tree/vegetation placement). Doing this for multiple chunks in one frame causes visible frame hitches. Limiting to 2 per frame keeps the per-frame cost predictable. The player rarely notices because fog hides unloaded areas.
 
 **Why recycle, not destroy**: In garbage-collected languages (JavaScript), destroying objects creates work for the garbage collector, which can cause unpredictable frame-time spikes. Pooling avoids this entirely.
+
+### 1.1 VR Level-of-Detail (LOD)
+
+In VR, chunks beyond 2 chunk-widths (~64m) from the player MUST use `CHUNK_SEGMENTS_LOD = 31` instead of `CHUNK_SEGMENTS = 63`. This reduces distant terrain triangles by 75%.
+
+The chunk manager tracks the player's chunk position and queues LOD rebuilds when the player crosses chunk boundaries. Rebuilds share the per-frame loading budget (1 chunk/frame in VR).
+
+The `build(chunkX, chunkZ, segments)` method accepts the target segment count. When the segment count changes, the chunk's entire geometry MUST be rebuilt — the old mesh removed from the scene, its geometry disposed, and a new mesh created.
+
+> ⚠️ **Gotcha: Orphaned meshes.** During LOD rebuild, the old mesh MUST be removed from its scene parent before its geometry is disposed. If not, Three.js will attempt to render a mesh with null geometry, crashing the WebXR render loop. See VF-PERFORMANCE §9.3 for details.
+
+**Why invisible**: The terrain shader does all visual detail per-pixel (altitude zone blending, river textures, grass/rock/snow transitions). At 64m+ with fog starting at 50m, the vertex grid resolution has no perceptible effect.
 
 ## 2. Noise System
 
@@ -74,7 +87,7 @@ return ((t ^ (t >>> 14)) >>> 0) / 4294967296
 
 ## 3. Height Calculation
 
-The terrain height at any world coordinate (x, z) MUST be computed by combining three systems:
+The terrain height at any world coordinate (x, z) MUST be computed by combining four systems:
 
 ### 3.1 Base Terrain (Fractal Brownian Motion)
 
@@ -140,6 +153,32 @@ finalHeight = streamH + (mMask × ampMod × 45 + foothillH - valleyDip) × spawn
 > ⚠️ **Gotcha: Parabolic vs Absolute Value Peaks.** The mountain ridge function MUST use `1 - raw²` for smooth parabolic peaks. Using `1 - |raw|` creates knife-edge ridges. This is a critical visual difference — knife edges look artificial.
 
 > ⚠️ **Gotcha: Spawn Suppression.** Mountains MUST fade in 60–100m from the origin so the player always starts in a forest clearing, not buried in a mountainside.
+
+### 3.4 River Carving (Physically-Traced Channels)
+
+After base terrain, streams, and mountains are computed, physically-traced river channels are subtracted:
+
+```
+finalHeight = mountainHeight - getRiverCarving(x, z)
+```
+
+River carving is computed from the nearest traced river segment (see VF-WATER §8). The carving profile is flat-bottomed with cosine banks:
+
+```
+halfWidth = min(RIVER_MAX_HALFWIDTH, RIVER_MIN_HALFWIDTH + RIVER_WIDTH_SCALE × √flow)
+maxDepth  = min(RIVER_MAX_CARVE, RIVER_CARVE_SCALE × √flow)
+flatWidth = max(halfWidth, maxDepth × 1.0)
+bankWidth = max(RIVER_BANK_WIDTH, maxDepth × 1.5)
+
+if distance < flatWidth:   profile = 1.0
+else:                       profile = 0.5 × (1 + cos(π × bankPosition))
+
+carving = (maxDepth + extraCarve) × profile
+```
+
+River carving differs from the noise-based stream channels (§3.2) in that it follows actual gradient-descent paths traced from mountain sources, accumulates flow at confluences, and produces wider, deeper channels where multiple tributaries merge. The stream channels provide the base valley structure; river carving adds specific watercourses within those valleys.
+
+See VF-WATER §8 for the complete river system specification including tracing algorithm, flow animation, water mesh overlay, and stream rocks.
 
 ## 4. Altitude Biomes
 

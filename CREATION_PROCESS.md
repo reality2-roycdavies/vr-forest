@@ -2,9 +2,9 @@
 
 ## How This Project Was Built
 
-This project was built over seven days (10–20 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
+This project was built over eleven days (10–24 February 2026) through conversational iteration between a human creator and Claude Code (Anthropic's AI coding assistant). No game engine, no build system, no pre-made assets, and no code was written directly by the human. Every texture, mesh, sound, and shader was generated procedurally through conversation.
 
-The full conversation transcripts (Claude Code JSONL format) are available in the [`transcripts/`](transcripts/) directory — 13 sessions totalling ~53 MB of raw human-AI dialogue.
+The full conversation transcripts (Claude Code JSONL format) are available in the [`transcripts/`](transcripts/) directory and in `.claude/projects/` — 25+ sessions totalling ~100 MB of raw human-AI dialogue.
 
 The human's role was creative director: providing high-level vision, testing in the VR headset, and giving experiential feedback. Claude's role was the entire development studio: architecture, implementation, debugging, and iteration.
 
@@ -527,6 +527,170 @@ Bird flocks were lowered from 55–80m to 15–35m altitude and given terrain aw
 
 ---
 
+## Day 8: Presentation (21 February 2026)
+
+Day 8 was primarily meta-work: building an HTML presentation for the Auckland AR/VR Meetup (25 February 2026). A 13-slide deck was created covering the project's creation story, the human-AI collaboration model, and the Story of Hine (a Maori narrative about knowledge and creativity). Screenshots from the VR forest were used as slide backgrounds.
+
+Several minor forest fixes were made alongside the presentation work:
+
+### Phase 43: Wind and Atmosphere Polish
+
+Clear-weather wind noise was reduced — "when the weather is clear, the wind noise is too much." The wind gain now scales with weather intensity, quiet in clear conditions and building through cloudy to stormy.
+
+Lightning bolt timing was improved: the sky flash now arrives slightly after the bolt so the bolt is visible against the dark sky before the flash washes everything out. The flash itself was intensified — "the sky remains completely black at night time" during storms — by adding flash contribution to fog colour and scene ambient light, not just the sky dome.
+
+### Phase 44: Moon Shadow Transparency
+
+The moon's dark-side shading produced an opaque disc against bright sky at dawn/dusk. The fix fades the moon's unlit side to transparent based on sky brightness, so the phase shadow is visible at night but doesn't create an obvious dark circle against daytime sky.
+
+---
+
+## Day 9: Cottages and Terrain Mastery (22 February 2026)
+
+Day 9 was the project's most intense single day — six context resets across three sessions, touching nearly every rendering system. It began with cottages and evolved into a deep terrain rendering overhaul.
+
+### Phase 45: Log Cabin Cottages
+
+The forest gained procedural ramshackle log cabins in forest clearings:
+
+**Architecture iteration**: The first cottage attempt used flat planes — "OK, now I see several. But they don't look right, kind of disjointed." Boxes were tried next, then the user directed: "they should look like they are made of logs, like log cabins." The final version uses stacked cylinders (6-8 rows per wall) with `splitLog()` algorithms to cut openings around doors and windows.
+
+**Details**: Norwegian-style thatch/grass roofs with subtle sway in wind, dirty-glass windows (4-pane with cross-bars), inset doors with frames, and chimney smoke (Sprite-based particles rising and drifting). Windows glow warmly at night via emissive material — "the window at night looks cool." The door has subtle light seep around the latch side and keyhole — "the glow around the door makes it look a portal into another world."
+
+**Placement**: Cottages only spawn on flat forested ground (slope < 0.3, tree density > 0), suppress nearby trees/vegetation to form clearings, cast shadows, have collision, and appear as orange house icons on the minimap. A `cottageDensity` vertex attribute with cubic hermite falloff drives warm earthy garden ground in the fragment shader, with cross-chunk blending for seamless transitions.
+
+**Debugging**: Cottages initially never appeared — the grid spacing (48m) exceeded the chunk size (32m). Smoke particles failed silently with a custom ShaderMaterial; rewritten to Sprite-based particles. The chimney position had a rotation sign error placing smoke at the wrong end of the roof.
+
+### Phase 46: Ground Texture Overhaul
+
+The terrain rendering underwent its most comprehensive rewrite, driven by persistent VR artifacts.
+
+**Bare rock on steep slopes**: A new procedural rock texture applied via slope-based shader factor, with snow overriding rock at high altitude. Rock objects were made 2.5× larger with darker colours matching the ground texture, tilted and sunk to sit flush on slopes.
+
+**Anti-tiling revolution**: The existing 3-layer multi-scale texture sampling caused beat-frequency moiré patterns visible in the headset. Replaced with 2-layer same-scale rotated-30-degree sampling — two samples of the same texture at different rotations blend together, breaking repetition without introducing new frequency artifacts.
+
+**The VR banding saga**: This was the most persistent rendering issue of the entire project. Hard lines were visible between grass/dirt/snow/rock transitions on the Quest headset, even when the desktop looked perfect.
+
+The iteration arc:
+1. Added high-frequency noise octaves to zone transitions — still visible
+2. Centered noise with `(noise - 0.5)` for symmetric perturbation — better but still there on steep slopes
+3. Perturbed the lighting normal in the tangent plane — fixed desktop entirely, VR still showing artifacts
+4. **Root cause discovered**: The `sin()`-based hash function loses precision on Quest's Adreno GPU when given large input values, producing correlated garbage instead of random noise. Switching to a Dave Hoskins multiply/fract hash (`p = fract(p * 0.1031); p *= p + 33.33; ...`) fixed it everywhere.
+
+This hash bug affected rain ripples, surface flecks, and all noise-driven shader effects — a single root cause for multiple visual anomalies.
+
+**Terrain resolution doubling**: Segments increased from 31 to 63 per chunk, requiring Uint16Array indices and doubling vertex count but eliminating visible vertex-to-vertex interpolation artifacts. Per-pixel Phong lighting replaced Lambert, with noise perturbation on lighting normals to mask remaining Mach bands.
+
+### Phase 47: Tree and Vegetation Improvements
+
+**Subsurface scattering (SSS)**: Leaves now glow when backlit by the sun — described as "the biggest visual win." Per-instance colour variation, baked ambient occlusion, hemisphere normals, and enhanced vertex jitter were added as zero-cost vertex-level improvements.
+
+**NZ Tussock grass**: The alpine tree type was replaced with New Zealand-style Chionochloa rubra tussock. Multiple iterations — first "looks like a spiky cactus," then "a clump of sticks stuck into a blob of clay." The user sent a reference photo. Final version: 56 flat PlaneGeometry blades with fountain-shape curvature, golden straw colour, vegetation wind animation, size/colour variety, on a 2m grid with 800 instances. "OK, tussock on hills looking good."
+
+**Tree brightening**: AO minimum raised from 0.35 to 0.80, HSL lightness values increased across all types so trees are visible in VR's lower dynamic range.
+
+### Phase 48: Water Realism
+
+The lake water surface received a major visual upgrade:
+
+**Fresnel reflections**: Schlick approximation (F0=0.02 for water) blends between the water colour and reflected sky colour based on viewing angle. Grazing angles become reflective and more opaque; looking straight down shows depth.
+
+**Depth-based colour**: A terrain heightmap texture (128×128) is passed to the water shader. Shallow areas tint toward a light cyan; deep areas show the full dark water colour. Opacity also varies with depth (60% shallow, 100% deep).
+
+**Subsurface scattering**: Wave crests (thin water) transmit light with a green-cyan glow, simulating light passing through the wave.
+
+**Shore lapping waves**: Curved wave fronts advance and retreat with wet-sand-coloured trails, replacing the static shore edge. Per-band domain warping gives each wave scale curved fronts rather than parallel lines.
+
+### Phase 49: Cloud Noise Textures
+
+Cloud textures were upgraded from simple radial gradients to procedural noise-based textures with natural fluffy edges. Sun-aware per-puff tinting adds golden hour glow, twilight underlighting, and silver linings. Count adjusted to 20 for performance.
+
+### Phase 50: VR Performance Recovery
+
+The cumulative complexity required a performance pass: oak canopy detail reduced (saving ~4,500 tris/instance), trunk branches 5→3, tussock capped at 800 instances, and ~15 fewer `_vnoise` calls per terrain pixel. Rain fog was changed from a hard wall to gradual haze. Ski physics gained proper directional friction decomposition.
+
+---
+
+## Day 10: Rivers from the Mountains (23 February 2026)
+
+Day 10 was dedicated entirely to adding flowing rivers — the most architecturally complex feature since the weather system.
+
+### Phase 51: River Tracing Algorithm
+
+The user's vision was clear: "I feel the way to build the rivers is to start from valleys up in the mountains, then trace downhill always in valleys, meeting other streams on the way and combining." This led to `river-tracer.js` (~270 lines), a physically-based system:
+
+**Source discovery**: Candidate positions are evaluated on a grid at mountain altitudes. Each source must sit in a valley (lower than surrounding terrain at a 24m sample radius).
+
+**Downhill tracing**: From each source, the tracer follows the terrain gradient downhill in 4m steps, with momentum blending (30% previous direction) to escape shallow depressions. Rivers that stall in local minima trigger a pit-breaking algorithm: an outward spiral search finds lower terrain and breaches the rim.
+
+**Confluence detection**: A spatial hash (8m cells) detects when rivers come within 6m of each other. When rivers merge, the downstream continuation carries the combined flow, widening proportionally.
+
+**Pruning**: "Rivers should end in lakes. If a river doesn't lead to a lake, then it should not exist." Rivers that fail to reach water level after 500 steps are discarded.
+
+**Terrain carving**: Rivers carve channels into the terrain with depth proportional to √flow, with soft bank transitions. The carving is applied in the noise function so it's seamless — no chunk-boundary artifacts.
+
+### Phase 52: River Rendering (Terrain Shader)
+
+Stream channels received flow animation in the ground material shader. The initial approach used mesh normals for flow direction, but mesh normals point across channels, not along them. The flow direction from the tracer was passed as a vertex attribute.
+
+Multiple animation approaches were tried and abandoned:
+1. **World-space ripples**: Drifted sideways instead of downstream
+2. **Directional noise**: Created "dark and light circles going upstream"
+3. **Normal-based flow**: Pointed across the channel
+
+The session ended with a web search surfacing the industry-standard **two-phase flow map blend** technique, which was implemented the following day.
+
+### Phase 53: Stream Bed Rocks
+
+Three sizes of smooth rounded rocks were placed along river segments as instanced meshes, with density inversely proportional to river width (more rocks in narrow mountain streams, fewer in wide rivers). Rocks are positioned across the full channel width plus a fraction of the bank.
+
+### Phase 54: Tarn Pivot
+
+An elevated mountain tarn (pool) at Y=8 was attempted but immediately flooded the entire forest. Even mountain-masked versions created problems. The user abandoned the concept: "remove the tarns, we shall just make it that water comes from the snow, down to the lakes."
+
+---
+
+## Day 11: River Polish and VR Performance (24 February 2026)
+
+Day 11 refined the river visuals into a convincing flowing-water effect and addressed the accumulated VR performance debt.
+
+### Phase 55: Flow Animation Resolution
+
+The two-phase flow map blend from Day 10's research was implemented but produced persistent pulsation — the crossfade between phases created a visible breathing effect rather than continuous motion. After multiple iterations adjusting cycle speeds, crossfade curves, and foam thresholds, the approach was abandoned in favour of **continuous sine-wave scrolling**: travelling waves displaced along the flow direction with per-band domain warping for natural curvature. This eliminated all pulsation and produced convincingly directional flow.
+
+### Phase 56: Semi-Transparent Water Mesh
+
+A separate ShaderMaterial mesh strip was generated per-chunk along traced river segments, sitting 0.05m above the carved terrain. The mesh features:
+- Vertex-displaced sine waves travelling downstream
+- Per-vertex terrain-height sampling for correct bank contour
+- **Smooth mitered corners**: Perpendicular directions are averaged at segment junctions, preventing gap/overlap artifacts at river bends
+- Fragment-shader fine ripples beyond the mesh's vertex resolution
+- Semi-transparent blending with the terrain beneath
+
+### Phase 57: Rock-Textured Channel Banks
+
+Channel sides received a rock texture (reusing the existing `rockMap`) with a wet-to-dry gradient — dark near water, lighter at the rim. A lengthy iteration eliminated visible light gaps between rock and water. The fundamental fix: apply rock at full `bankFactor` first, then layer semi-transparent water on top, rather than multiplying them against each other.
+
+### Phase 58: Seamless River-to-Lake Junction
+
+Shore effects (lapping waves, foam froth, wet sand) were suppressed inside river channels so rivers flow cleanly into lakes. Bank rock fades out near water level so the lake shore transition is natural at the junction. This required careful tuning of `shoreSuppress` thresholds and `aboveWaterSuppress` factors.
+
+### Phase 59: VR Performance Optimisations
+
+"It will do for now. The performance in the VR headset is not so good now. Can we do some optimisations only for immersive VR?" — this triggered a comprehensive VR-specific performance pass:
+
+Six optimisations, all invisible to the user:
+1. **Foveation 0.5→1.0**: Maximum eye-tracked peripheral resolution reduction (~25-40% GPU savings)
+2. **Framebuffer 1.1×→1.0×**: Remove supersampling (~20% fewer pixels)
+3. **Water grid 128→64**: 75% fewer wave calculations, fragment shader unchanged
+4. **Terrain LOD**: Distant chunks (>2 away) use 31 segments instead of 63 (~50% terrain triangle reduction)
+5. **Throttled updates**: Birds/fireflies every 2 frames, wildlife every 3 frames, audio every 2 frames (with delta compensation)
+6. **Chunk load limit**: 1 per frame in VR (vs 2 on desktop) to prevent loading spikes
+
+The terrain LOD system introduced a bug where the old mesh wasn't removed from the scene before geometry recreation, leaving orphaned meshes with disposed geometry in the render list. This crashed the WebXR render loop on the next frame, killing the VR session. The fix was a single line: `parent.remove(this.mesh)` before disposal.
+
+---
+
 ## Thematic Analysis (continued)
 
 ### The Vertical Dimension
@@ -547,28 +711,64 @@ The compass alignment bug (celestial pole tilting East instead of North) reveale
 
 Rain canopy sheltering represents a shift from passive atmosphere to interactive environment. Previously, weather was something that happened *to* the player uniformly. Now the forest itself provides shelter — walking under trees during rain is noticeably different from walking in the open. This creates emergent gameplay: seeking shelter under trees during a storm, finding exposed ridgelines windier and snowier, discovering that mountain valleys trap water. The world isn't just scenery; it responds to where you are in it.
 
+## Thematic Analysis (continued — Days 8–11)
+
+### The GPU as Unforgiving Truth Machine
+
+Day 9's terrain banding saga revealed a fundamental truth about cross-platform GPU development: `sin(large_number)` produces different results on different hardware. Desktop GPUs (NVIDIA/AMD) maintain enough floating-point precision that `sin(x * 43758.5453)` returns usable pseudo-random values. Quest's Adreno GPU loses precision with large inputs, producing correlated garbage — visually manifesting as triangle-aligned banding that defied five rounds of fixes targeting the wrong cause. The root fix was trivial (a different hash function), but the diagnosis required understanding the interaction between shader math, GPU architecture, and visual perception.
+
+This extends the "VR Changes Everything" theme from Day 1: VR headsets don't just demand spatial correctness — they demand numerical correctness across GPU vendors.
+
+### The Tussock Problem (or: Reference Photos Beat Words)
+
+Tussock grass went through the same iteration pattern as ferns and flowers — "spiky cactus," "clump of sticks stuck into a blob of clay" — until the user sent a reference photo of real Chionochloa rubra. The photo communicated geometry, proportions, colour, and density more precisely than any verbal description. This suggests a refinement to the "user as director" model: for natural forms, photographic reference is more effective than verbal feedback.
+
+### Cottages as Cultural Anchors
+
+Like the morepork owl before them, the log cabins with Norwegian-style thatch roofs add cultural specificity to a generic procedural world. The warm window glow at night, the chimney smoke drifting in the wind, and the garden ground around each cottage create focal points of human presence in an otherwise wild landscape. The user's response to the night window — "the window at night looks cool" — and the door glow — "makes it look like a portal into another world" — show how small architectural details can carry disproportionate emotional weight.
+
+### Rivers as a System Integration Challenge
+
+The river system touched more codebases than any previous feature: noise.js (stream factor), terrain-generator.js (vertex attributes), ground-material.js (rendering), river-tracer.js (new file), chunk.js (rock placement, water mesh), movement.js (swimming detection), and the minimap. Each integration point required careful consideration of how rivers interact with existing systems — trees don't grow in channels, rocks don't spawn in streams, shore effects suppress near river-lake junctions, the minimap shows blue overlays.
+
+The pivot from noise-based channels to traced rivers is the project's most significant architectural change. Noise-based rivers were either too wide or invisible; traced rivers follow the actual terrain downhill, merge at confluences, and connect mountains to lakes. The tracing algorithm embodies a physical process rather than a visual approximation, and the result is more convincing because it *is* more correct.
+
+### The Flow Animation Search
+
+River flow animation was the hardest single visual problem of the project. Five different approaches were tried and abandoned before settling on continuous sine-wave scrolling. The two-phase flow map blend — the industry-standard technique — was researched via web search but ultimately rejected because its crossfade produced visible pulsation. The final solution is simpler: directional sine waves with per-band domain warping. Sometimes the standard technique isn't the right one, and simpler is better.
+
+### Invisible Optimisations as a Design Philosophy
+
+Day 11's VR performance pass established an important principle: every optimisation must be invisible. Foveation leverages the eye tracker to reduce peripheral rendering that the optics already blur. Terrain LOD only reduces distant chunks that fog obscures. Water grid reduction preserves all fragment shader detail. Update throttling compensates with delta multiplication. The user should enter VR and see an identical scene at higher framerate — if any optimisation is perceptible, it failed.
+
+The LOD orphaned-mesh crash is instructive: the fix was a single line (`parent.remove(this.mesh)`), but the bug was created by a complex interaction between geometry disposal, scene graph management, and the WebXR render loop. Performance optimisation code must be even more carefully written than feature code, because it runs silently and its failures are non-obvious.
+
 ---
 
 ## By the Numbers
 
-- **Development time**: ~50 hours over seven days
-- **Conversation sessions**: 17+ active sessions (transcripts in [`transcripts/`](transcripts/))
-- **User feedback messages**: ~450+
-- **Major features**: 20+ distinct systems
-- **Lines of JavaScript**: ~12,100
-- **JavaScript modules**: 26
+- **Development time**: ~80 hours over eleven days
+- **Conversation sessions**: 25+ active sessions (transcripts in [`transcripts/`](transcripts/))
+- **User feedback messages**: ~700+
+- **Major features**: 30+ distinct systems
+- **Lines of JavaScript**: ~13,900
+- **JavaScript modules**: 29
 - **External dependencies**: 2 (Three.js, simplex-noise, both from CDN)
 - **External art assets**: 1 (moon photograph from Wikipedia, with procedural fallback)
 - **External audio assets**: 1 (morepork.mp3, trimmed from a recording)
 - **Performance issues fixed (Day 2)**: 27 across all modules
-- **Features abandoned**: 1 (leaf rustling -- "just sounds completely wrong")
-- **Most-iterated feature**: Sky/fog rendering (~8 iterations)
+- **Features abandoned**: 2 (leaf rustling -- "just sounds completely wrong"; elevated tarns -- flooded the forest)
+- **Most-iterated feature**: VR terrain banding (~10 iterations, root cause: GPU hash function precision)
 - **Most-rewritten feature**: Footstep audio (~5 complete rewrites)
 - **Day 2 most-iterated**: Vegetation lighting (~8 iterations across shader patches, emissive tuning, and material changes)
 - **Day 3 most-iterated**: Water edge effects (~12 iterations across caustics, foam, transparency, and heightmap communication)
 - **Day 4 most-iterated**: Cloud diversity (~10 iterations across textures, scaling, billboard vs plane, and the Z-scale bug)
 - **Day 4 most-iterated**: Sky/fog colour convergence (~7 iterations across weather×time-of-day matrix)
 - **Day 7 most-iterated**: Star compass alignment (~4 iterations tracing coordinate conventions across astronomical, scene, and UI systems)
+- **Day 9 most-iterated**: VR terrain banding (~10 iterations: noise octaves, centering, normal perturbation, hash function)
+- **Day 9 most-iterated**: Tussock grass geometry (~6 iterations from "spiky cactus" to reference-photo-matched Chionochloa)
+- **Day 10 most-iterated**: River flow animation (~5 approaches: world-space ripples, directional noise, two-phase flow map, sine-wave scrolling)
+- **Day 11 most-iterated**: River-to-lake junction (~6 iterations across shore suppression, bank rock fade, and water depth blending)
 
 ---
 
@@ -591,4 +791,8 @@ The raw Claude Code conversation transcripts are in [`transcripts/`](transcripts
 | `day4-01-cloud-diversity.jsonl` | 4 | Cloud archetypes, textures, billowing animation |
 | `day4-02-weather-system.jsonl` | 4 | Weather architecture, rain particles, thunder, lightning |
 | `day4-03-weather-polish-stormy-water.jsonl` | 4 | Stormy water, rain audio, twilight fog, sun/moon cloud fade |
-| *(Day 5–7 transcripts pending conversion)* | 5–7 | Mountains, snow, fallen logs, altitude audio, rain sheltering, real stars, polish |
+| *(Day 5–7 raw transcripts in `.claude/projects/`)* | 5–7 | Mountains, snow, fallen logs, altitude audio, rain sheltering, real stars, polish |
+| *(Day 8 raw transcript in `.claude/projects/`)* | 8 | AR/VR meetup presentation, wind/lightning/moon polish |
+| *(Day 9 raw transcripts in `.claude/projects/`)* | 9 | Log cabins, ground textures, rocks, steep slopes, tussock, tree SSS, water realism, clouds, VR terrain banding, anti-tiling |
+| *(Day 10 raw transcript in `.claude/projects/`)* | 10 | River tracing algorithm, terrain carving, stream rocks, flow animation R&D |
+| *(Day 11 raw transcripts in `.claude/projects/`)* | 11 | River water mesh, rock banks, flow animation, seamless lake join, VR performance optimisations |
