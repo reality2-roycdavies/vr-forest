@@ -411,9 +411,9 @@ export class DayNightSystem {
       const normMag = (mag + 1.5) / 7.0; // 0..1 range
       const lumFactor = Math.pow(1.0 - normMag, 2.5);
 
-      // Size: faint stars small but visible, bright stars clearly stand out
-      // Sirius (mag -1.4) → ~5.5, Vega (mag 0) → ~4, mag 3 → ~2, mag 5 → ~1.2
-      sizes[i] = 1.0 + lumFactor * 5.0;
+      // Size: faint stars small but visible, bright stars a bit larger but still points
+      // Sirius (mag -1.4) → ~4, Vega (mag 0) → ~3, mag 3 → ~1.7, mag 5 → ~1.1
+      sizes[i] = 1.0 + lumFactor * 3.5;
 
       // Brightness: raised floor so faint stars are clearly visible
       brightness[i] = Math.max(0.35, lumFactor * 1.3);
