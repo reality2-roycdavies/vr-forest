@@ -314,6 +314,50 @@ export class DayNightSystem {
     }
   }
 
+  /**
+   * Convert B-V color index to RGB using Ballesteros (2012) blackbody approximation.
+   * Maps spectral type colors: blue O/B → white A → yellow G → orange K → red M
+   */
+  _bvToRGB(bv) {
+    // Clamp B-V to valid range
+    bv = Math.max(-0.4, Math.min(2.0, bv));
+    // Approximate color temperature from B-V (Ballesteros 2012)
+    const T = 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62));
+    // Planckian locus to sRGB (simplified from CIE 1931 via Charity)
+    let r, g, b;
+    // Red channel
+    if (T >= 6600) {
+      r = 1.29293 * Math.pow(T / 100 - 60, -0.1332);
+    } else {
+      r = 1.0;
+    }
+    // Green channel
+    if (T >= 6600) {
+      g = 1.12989 * Math.pow(T / 100 - 60, -0.0755);
+    } else {
+      g = 0.39008 * Math.log(T / 100) - 0.631;
+    }
+    // Blue channel
+    if (T >= 6600) {
+      b = 1.0;
+    } else if (T >= 2000) {
+      b = 0.54320 * Math.log(T / 100 - 10) - 1.19625;
+    } else {
+      b = 0;
+    }
+    r = Math.max(0, Math.min(1, r));
+    g = Math.max(0, Math.min(1, g));
+    b = Math.max(0, Math.min(1, b));
+    // Desaturate slightly — pure spectral colors look garish on screen
+    const lum = r * 0.3 + g * 0.6 + b * 0.1;
+    const sat = 0.55; // 0 = all white, 1 = full spectral color
+    return [
+      lum + (r - lum) * sat,
+      lum + (g - lum) * sat,
+      lum + (b - lum) * sat,
+    ];
+  }
+
   _createStars() {
     const catalog = getStarCatalog();
     const count = catalog.length;
@@ -322,9 +366,10 @@ export class DayNightSystem {
     const positions = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const brightness = new Float32Array(count);
+    const colors = new Float32Array(count * 3);
 
     for (let i = 0; i < count; i++) {
-      const { ra, dec, mag } = catalog[i];
+      const { ra, dec, mag, bv } = catalog[i];
       // Place in J2000 equatorial coordinates on sphere
       // X = towards vernal equinox, Y = north pole, Z = completes right-hand
       const cosDec = Math.cos(dec);
@@ -332,14 +377,29 @@ export class DayNightSystem {
       positions[i * 3 + 1] =  Math.sin(dec) * R;
       positions[i * 3 + 2] = -cosDec * Math.sin(ra) * R;
 
-      sizes[i] = Math.max(1.0, 4.0 - mag * 0.5);
-      brightness[i] = Math.max(0.4, 1.0 - mag * 0.10);
+      // Logarithmic brightness — magnitude is log scale, so use pow for perceptual accuracy
+      // mag -1.4 (Sirius) → 1.0, mag 3.0 → ~0.25, mag 5.5 → ~0.08
+      const normMag = (mag + 1.5) / 7.0; // 0..1 range
+      const lumFactor = Math.pow(1.0 - normMag, 2.5);
+
+      // Size: brightest stars are dramatically larger
+      // Sirius (mag -1.4) → ~8, Vega (mag 0) → ~6, mag 3 → ~2.5, mag 5 → ~1.2
+      sizes[i] = Math.max(1.0, 2.0 + lumFactor * 7.0);
+
+      brightness[i] = Math.max(0.15, lumFactor);
+
+      // Per-star color from B-V index
+      const [cr, cg, cb] = this._bvToRGB(bv);
+      colors[i * 3]     = cr;
+      colors[i * 3 + 1] = cg;
+      colors[i * 3 + 2] = cb;
     }
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     geo.setAttribute('aSize', new THREE.Float32BufferAttribute(sizes, 1));
     geo.setAttribute('aBrightness', new THREE.Float32BufferAttribute(brightness, 1));
+    geo.setAttribute('aColor', new THREE.Float32BufferAttribute(colors, 3));
 
     const mat = new THREE.ShaderMaterial({
       uniforms: {
@@ -349,10 +409,13 @@ export class DayNightSystem {
       vertexShader: `
         attribute float aSize;
         attribute float aBrightness;
+        attribute vec3 aColor;
         varying float vBrightness;
         varying float vPhase;
+        varying vec3 vColor;
         void main() {
           vBrightness = aBrightness;
+          vColor = aColor;
           // Unique phase per star for twinkling (position-derived)
           vPhase = position.x * 37.7 + position.z * 59.3;
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
@@ -365,16 +428,23 @@ export class DayNightSystem {
         uniform float uTime;
         varying float vBrightness;
         varying float vPhase;
+        varying vec3 vColor;
         void main() {
-          // Soft circular point
           vec2 c = gl_PointCoord - 0.5;
           float d = dot(c, c);
           if (d > 0.25) discard;
-          float alpha = smoothstep(0.25, 0.06, d);
-          // Subtle twinkling
-          float twinkle = 0.85 + 0.15 * sin(uTime * 2.7 + vPhase)
-                                     * sin(uTime * 1.3 + vPhase * 0.7);
-          gl_FragColor = vec4(vec3(0.95, 0.95, 1.0) * vBrightness * twinkle,
+          // Bright core + soft halo for a natural star appearance
+          float core = smoothstep(0.25, 0.02, d);
+          float halo = smoothstep(0.25, 0.10, d) * 0.4;
+          float alpha = core + halo;
+          // Twinkling — brighter stars twinkle less (atmospheric scintillation)
+          float twinkleAmount = 0.08 + (1.0 - vBrightness) * 0.15;
+          float twinkle = 1.0 - twinkleAmount
+                        + twinkleAmount * sin(uTime * 2.7 + vPhase)
+                                        * sin(uTime * 1.3 + vPhase * 0.7);
+          // Color saturation increases toward the bright core
+          vec3 col = mix(vec3(0.92, 0.92, 1.0), vColor, smoothstep(0.20, 0.04, d));
+          gl_FragColor = vec4(col * vBrightness * twinkle,
                               alpha * uOpacity);
         }
       `,
