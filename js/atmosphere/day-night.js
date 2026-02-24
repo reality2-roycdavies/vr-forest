@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { getStarCatalog } from './star-catalog.js';
+import { getPlanetPositions } from './planet-ephemeris.js';
 import { windUniforms } from './wind.js';
 
 const _color = new THREE.Color();
@@ -251,6 +252,9 @@ export class DayNightSystem {
     this.moonMesh.renderOrder = -1;
     scene.add(this.moonMesh);
 
+    // --- Planets (naked-eye: Mercury, Venus, Mars, Jupiter, Saturn) ---
+    this._createPlanets();
+
     // --- Stars (for night) — real constellation positions ---
     this.stars = this._createStars();
     scene.add(this.stars);
@@ -312,6 +316,31 @@ export class DayNightSystem {
         { timeout: 5000 }
       );
     }
+  }
+
+  /**
+   * Compute JD, T (centuries since J2000), and LST from current time.
+   * Shared by moon, planet, and star rotation code.
+   */
+  _getEffectiveJD(now) {
+    let hours;
+    if (_fakeTimeHours !== null) {
+      hours = _fakeTimeHours;
+    } else {
+      hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
+    }
+    hours += this.timeOffset;
+
+    const tzOffsetMs = now.getTimezoneOffset() * 60000;
+    const midnightUtcMs = now.getTime() - (now.getTime() % 86400000);
+    const effectiveMs = midnightUtcMs + hours * 3600000 + tzOffsetMs;
+    const JD = effectiveMs / 86400000 + 2440587.5;
+    const T = (JD - 2451545.0) / 36525.0;
+
+    const GMST = (280.46061837 + 360.98564736629 * (JD - 2451545.0)) % 360;
+    const LST = (GMST + this.longitude) * (Math.PI / 180);
+
+    return { JD, T, LST };
   }
 
   /**
@@ -378,15 +407,16 @@ export class DayNightSystem {
       positions[i * 3 + 2] = -cosDec * Math.sin(ra) * R;
 
       // Logarithmic brightness — magnitude is log scale, so use pow for perceptual accuracy
-      // mag -1.4 (Sirius) → 1.0, mag 3.0 → ~0.25, mag 5.5 → ~0.08
+      // mag -1.4 (Sirius) → 1.0, mag 3.0 → ~0.35, mag 5.5 → ~0.15
       const normMag = (mag + 1.5) / 7.0; // 0..1 range
-      const lumFactor = Math.pow(1.0 - normMag, 2.5);
+      const lumFactor = Math.pow(1.0 - normMag, 2.0);
 
-      // Size: brightest stars are dramatically larger
-      // Sirius (mag -1.4) → ~8, Vega (mag 0) → ~6, mag 3 → ~2.5, mag 5 → ~1.2
-      sizes[i] = Math.max(1.0, 2.0 + lumFactor * 7.0);
+      // Size: modest range — stars are points, not blobs
+      // Sirius (mag -1.4) → ~5.5, Vega (mag 0) → ~4.5, mag 3 → ~2.8, mag 5 → ~1.8
+      sizes[i] = Math.max(1.5, 2.0 + lumFactor * 4.0);
 
-      brightness[i] = Math.max(0.15, lumFactor);
+      // Brightness: boosted floor + steep curve so even faint stars are visible
+      brightness[i] = Math.max(0.35, lumFactor * 1.4);
 
       // Per-star color from B-V index
       const [cr, cg, cb] = this._bvToRGB(bv);
@@ -434,8 +464,8 @@ export class DayNightSystem {
           float d = dot(c, c);
           if (d > 0.25) discard;
           // Bright core + soft halo for a natural star appearance
-          float core = smoothstep(0.25, 0.02, d);
-          float halo = smoothstep(0.25, 0.10, d) * 0.4;
+          float core = smoothstep(0.25, 0.01, d);
+          float halo = smoothstep(0.25, 0.08, d) * 0.5;
           float alpha = core + halo;
           // Twinkling — brighter stars twinkle less (atmospheric scintillation)
           float twinkleAmount = 0.08 + (1.0 - vBrightness) * 0.15;
@@ -444,7 +474,8 @@ export class DayNightSystem {
                                         * sin(uTime * 1.3 + vPhase * 0.7);
           // Color saturation increases toward the bright core
           vec3 col = mix(vec3(0.92, 0.92, 1.0), vColor, smoothstep(0.20, 0.04, d));
-          gl_FragColor = vec4(col * vBrightness * twinkle,
+          // Boost brightness — intense points rather than large blobs
+          gl_FragColor = vec4(col * vBrightness * twinkle * 1.5,
                               alpha * uOpacity);
         }
       `,
@@ -1104,32 +1135,120 @@ export class DayNightSystem {
     return tex;
   }
 
+  _createPlanetTexture() {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const half = size / 2;
+    const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+    gradient.addColorStop(0, 'rgba(255,255,255,1.0)');
+    gradient.addColorStop(0.08, 'rgba(255,255,255,0.85)');
+    gradient.addColorStop(0.20, 'rgba(255,255,240,0.35)');
+    gradient.addColorStop(0.45, 'rgba(255,250,230,0.08)');
+    gradient.addColorStop(1, 'rgba(255,245,220,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  _createPlanets() {
+    const PLANET_COLORS = [
+      new THREE.Color('#d4c5b9'), // Mercury — grey-pink
+      new THREE.Color('#fff8e0'), // Venus — white-yellow
+      new THREE.Color('#ff8844'), // Mars — orange-red
+      new THREE.Color('#fff0d0'), // Jupiter — cream
+      new THREE.Color('#ffe8a0'), // Saturn — pale gold
+    ];
+
+    this.planetTexture = this._createPlanetTexture();
+    this.planetSprites = [];
+
+    for (let i = 0; i < 5; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map: this.planetTexture,
+        color: PLANET_COLORS[i],
+        fog: false,
+        transparent: true,
+        depthWrite: false,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.renderOrder = -1;
+      sprite.visible = false;
+      this.scene.add(sprite);
+      this.planetSprites.push(sprite);
+    }
+  }
+
+  _updatePlanets(playerPos, elevation, weather, JD, T, lst) {
+    const planets = getPlanetPositions(JD, T, this.latitude, this.longitude, lst);
+
+    for (let i = 0; i < 5; i++) {
+      const p = planets[i];
+      const sprite = this.planetSprites[i];
+
+      // Above horizon check
+      if (p.altitude < 0.02) {
+        sprite.visible = false;
+        continue;
+      }
+
+      // Visibility by sky brightness — brighter planets visible deeper into twilight
+      // Venus (mag ~ -4) visible at elevation < 0.20
+      // Jupiter (mag ~ -2) visible at elevation < 0.12
+      // Faint planets only at night (elevation < 0.02)
+      const maxElevation = p.magnitude < -3 ? 0.20
+                         : p.magnitude < -1 ? 0.12
+                         : p.magnitude < 1  ? 0.05
+                         : 0.02;
+
+      if (elevation > maxElevation) {
+        sprite.visible = false;
+        continue;
+      }
+
+      sprite.visible = true;
+
+      // Position: same alt/az → 3D formula as moon
+      const altAngle = Math.asin(Math.max(-0.3, Math.min(1, p.altitude)));
+      const cosAlt = Math.cos(altAngle);
+      const dist = CONFIG.PLANET_DISTANCE;
+      sprite.position.set(
+        playerPos.x + Math.cos(p.azimuth) * cosAlt * dist,
+        playerPos.y + Math.sin(altAngle) * dist,
+        playerPos.z + Math.sin(p.azimuth) * cosAlt * dist,
+      );
+
+      // Scale from magnitude: brighter = larger sprite
+      // Venus (mag -4.4) → ~2.4x base, Jupiter (-2.5) → ~1.6x, Saturn (0.5) → ~0.7x
+      const magScale = Math.max(0.3, 1.0 + (0 - p.magnitude) * 0.25);
+      const baseR = CONFIG.PLANET_VISUAL_RADIUS * magScale;
+      sprite.scale.set(baseR, baseR, 1);
+
+      // Opacity: combine horizon fade, twilight fade, weather fade
+      let opacity = 1.0;
+      // Horizon fade
+      opacity *= Math.min(1, (p.altitude - 0.02) / 0.08);
+      // Twilight fade — planets fade as sky brightens toward their magnitude limit
+      if (elevation > 0) {
+        opacity *= Math.max(0, 1 - elevation / maxElevation);
+      }
+      // Weather dimming
+      if (weather) {
+        opacity *= (1 - weather.starDimming);
+      }
+
+      sprite.material.opacity = Math.max(0, opacity);
+      sprite.visible = opacity > 0.01;
+    }
+  }
+
   /**
    * Simplified Meeus lunar ephemeris — ~1 degree accuracy.
    * Returns { altitude, azimuth, phase } in the observer's sky.
    */
-  _getMoonPosition(now) {
-    // Get the effective time (respecting ?time= override and timeOffset)
-    let hours;
-    if (_fakeTimeHours !== null) {
-      hours = _fakeTimeHours;
-    } else {
-      hours = now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600;
-    }
-    hours += this.timeOffset;
-
-    // Compute Julian date from epoch ms + hour offset (no Date mutation needed)
-    // Start from midnight of the current date, then add offset hours
-    const tzOffsetMs = now.getTimezoneOffset() * 60000;
-    const midnightUtcMs = now.getTime() - (now.getTime() % 86400000);
-    // Effective UTC time in ms
-    const effectiveMs = midnightUtcMs + hours * 3600000 + tzOffsetMs;
-    // Julian date: JD = ms / 86400000 + 2440587.5
-    const JD = effectiveMs / 86400000 + 2440587.5;
-
-    // Centuries since J2000.0
-    const T = (JD - 2451545.0) / 36525.0;
-
+  _getMoonPosition(JD, T, LST) {
     // Fundamental arguments (degrees)
     const Lp = (218.3165 + 481267.8813 * T) % 360;  // Mean longitude
     const D  = (297.8502 + 445267.1115 * T) % 360;   // Mean elongation
@@ -1170,9 +1289,6 @@ export class DayNightSystem {
     const RA = Math.atan2(sinLon * cosObl - Math.tan(latRad) * sinObl, cosLon);
     const dec = Math.asin(sinLat * cosObl + cosLat * sinObl * sinLon);
 
-    // Local sidereal time
-    const GMST = (280.46061837 + 360.98564736629 * (JD - 2451545.0)) % 360;
-    const LST = (GMST + this.longitude) * rad;
     const HA = LST - RA;
 
     // Equatorial → horizontal
@@ -1322,6 +1438,9 @@ export class DayNightSystem {
     this.sunElevation = elevation;
     const palette = this._getPalette(elevation);
 
+    // Compute JD/T/LST once — shared by moon, planets, and star rotation
+    const { JD, T, LST: lst } = this._getEffectiveJD(now);
+
     // --- Sun position in 3D ---
     const altAngle = Math.asin(Math.max(-0.3, Math.min(1, elevation)));
     _sunPos.set(
@@ -1348,7 +1467,7 @@ export class DayNightSystem {
     }
 
     // Moon — astronomically positioned with phase
-    const moon = this._getMoonPosition(now);
+    const moon = this._getMoonPosition(JD, T, lst);
     this.moonPhase = moon.phase;
     this.moonAltitude = moon.altitude;
     const moonAltAngle = Math.asin(Math.max(-0.3, Math.min(1, moon.altitude)));
@@ -1421,7 +1540,6 @@ export class DayNightSystem {
     this.stars.material.uniforms.uTime.value += (delta || 0.016);
     this.stars.visible = elevation < 0.1 && starOpacity > 0.01;
     if (this.stars.visible) {
-      const lst = this._getLocalSiderealTime(now);
       const latRad = this.latitude * (Math.PI / 180);
       _starEuler.set(0, Math.PI - lst, -(Math.PI / 2 - latRad));
       this.stars.rotation.copy(_starEuler);
@@ -1434,6 +1552,9 @@ export class DayNightSystem {
     if (this.milkyWay.visible) {
       this.milkyWay.rotation.copy(this.stars.rotation);
     }
+
+    // --- Planets (naked-eye) ---
+    this._updatePlanets(playerPos, elevation, weather, JD, T, lst);
 
     // --- Sun/moon light + shadow (reuse single DirectionalLight) ---
     _sunDir.copy(_sunPos).normalize();

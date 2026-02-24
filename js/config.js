@@ -70,6 +70,8 @@ export const CONFIG = {
   // Moon
   MOON_VISUAL_RADIUS: 1.75,   // half previous size
   MOON_DISTANCE: 135,         // SUN_DISTANCE * 0.9
+  PLANET_DISTANCE: 140,       // between moon (135) and sun (150)
+  PLANET_VISUAL_RADIUS: 0.6,  // base size, scaled by magnitude
 
   // Ground surface
   GROUND_DIRT_SCALE: 0.03,       // noise frequency for dirt patches
