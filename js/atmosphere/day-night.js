@@ -477,12 +477,53 @@ export class DayNightSystem {
 
     ctx.putImageData(imageData, 0, 0);
 
-    // Gaussian blur for soft nebulosity
+    // Gaussian blur for soft nebulosity (smooth diffuse glow)
     const blurCanvas = document.createElement('canvas');
     blurCanvas.width = w; blurCanvas.height = h;
     const blurCtx = blurCanvas.getContext('2d');
     blurCtx.filter = 'blur(4px)';
     blurCtx.drawImage(canvas, 0, 0);
+
+    // Overlay unresolved starfield graininess on top of the blurred glow
+    // (applied AFTER blur so individual star points stay crisp)
+    const blurredData = blurCtx.getImageData(0, 0, w, h);
+    const bd = blurredData.data;
+    const hash = (a, b) => {
+      const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+      return v - Math.floor(v);
+    };
+
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const i = (py * w + px) * 4;
+        const existingA = bd[i + 3] / 255;
+        if (existingA < 0.005) continue;
+
+        // Two independent hashes for layered star distribution
+        const grain  = hash(px + 0.5, py + 0.5);
+        const grain2 = hash(px * 1.7 + 100, py * 1.3 + 200);
+
+        // Dense faint stars: subtle per-pixel graininess everywhere in band
+        const faintGrain = (grain - 0.5) * existingA * 0.2;
+
+        // Medium stars: moderately sparse bright points
+        const medThreshold = 0.85 - existingA * 0.2;
+        const medStar = grain2 > medThreshold
+          ? ((grain2 - medThreshold) / (1 - medThreshold)) * existingA * 0.35 : 0;
+
+        // Bright star points: very sparse, more frequent in bright regions
+        const brightThreshold = 0.95 - existingA * 0.12;
+        const brightStar = grain > brightThreshold
+          ? ((grain - brightThreshold) / (1 - brightThreshold)) * existingA * 0.6 : 0;
+
+        const boost = faintGrain + medStar + brightStar;
+        bd[i]     = Math.max(0, Math.min(255, bd[i]     + boost * 255));
+        bd[i + 1] = Math.max(0, Math.min(255, bd[i + 1] + boost * 255));
+        bd[i + 2] = Math.max(0, Math.min(255, bd[i + 2] + boost * 255));
+        bd[i + 3] = Math.min(255, bd[i + 3] + (medStar + brightStar) * 80);
+      }
+    }
+    blurCtx.putImageData(blurredData, 0, 0);
 
     const tex = new THREE.CanvasTexture(blurCanvas);
     tex.wrapS = THREE.RepeatWrapping;
