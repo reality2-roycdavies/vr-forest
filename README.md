@@ -34,12 +34,19 @@ Human-AI conversation logs from each development session (readable markdown, con
 | [Day 4, Session 1](transcripts/day4-01-cloud-diversity.md) | Cloud diversity, terrain shader refactor, wildlife legs |
 | [Day 4, Session 2](transcripts/day4-02-weather-system.md) | Weather system — architecture, rain particles, thunder, sky/fog tuning |
 | [Day 4, Session 3](transcripts/day4-03-weather-polish-stormy-water.md) | Weather polish — stormy water, rain audio, twilight fog, sun/moon cloud fade |
-| Day 5 | Mountain chains, snow/ski physics, altitude weather, VR performance optimisations |
-| Day 6 | Fallen logs/stumps, altitude audio, blizzard snow, real constellation stars, lightning bolts, altitude biome transitions |
-| Day 7 | Wind tuning, Auckland AR/VR meetup presentation |
-| Day 8 | VR terrain quality (anti-tile, boundary noise), water realism, cloud lighting, NZ tussock grass, VR performance |
-| Day 9 | Physically-traced river system, Milky Way band, VR foveation and LOD |
-| Day 10 | 2,865-star catalog with spectral colours, naked-eye planets (Keplerian ephemeris), river polish, VR dynamic resolution scaling |
+| [Day 5](transcripts/day5-01-mountains-snow-ski.md) | Mountain chains, snow/ski physics, altitude weather, VR performance optimisations |
+| [Day 6, Session 1](transcripts/day6-01-logs-stars-lightning-biomes.md) | Fallen logs/stumps, real constellation stars, lightning bolts, altitude biome transitions |
+| [Day 6, Session 2](transcripts/day6-02-rain-canopy-sheltering.md) | Rain canopy sheltering — rain blocked under trees with occasional drips |
+| [Day 7](transcripts/day7-01-wind-presentation.md) | Wind tuning, Auckland AR/VR meetup presentation |
+| [Day 8, Session 1](transcripts/day8-01-terrain-quality-cottages.md) | VR terrain quality (anti-tile, boundary noise), cottages |
+| [Day 8, Session 2](transcripts/day8-02-water-clouds-tussock.md) | Water realism, cloud lighting, NZ tussock grass |
+| [Day 8, Session 3](transcripts/day8-03-trees-vr-perf.md) | Tree investigation, VR performance |
+| [Day 9, Session 1](transcripts/day9-01-rivers.md) | Physically-traced river system |
+| [Day 9, Session 2](transcripts/day9-02-river-polish-vr-perf.md) | River polish, VR foveation and LOD |
+| [Day 9, Session 3](transcripts/day9-03-milky-way.md) | Milky Way band |
+| [Day 10, Session 1](transcripts/day10-01-star-catalog-rivers.md) | 2,865-star catalog with spectral colours, river polish |
+| [Day 10, Session 2](transcripts/day10-02-planets.md) | Naked-eye planet ephemeris planning |
+| [Day 10, Session 3](transcripts/day10-03-planets-stars-moon.md) | Planet implementation, star tuning, moon shadow fix, VR dynamic resolution |
 
 ## Features
 
