@@ -230,12 +230,13 @@ export class DayNightSystem {
           float illumination = smoothstep(-0.05, 0.10, dot(normal, sunDir));
           // Sample texture
           vec4 texColor = texture2D(moonMap, uv);
-          // Lit surface from texture; shadow side always transparent
+          // Lit surface shows texture; shadow side transparent
           vec3 color = texColor.rgb * illumination;
           // As sky brightens: wash lit side pale to match sky luminance
           color = mix(color, vec3(0.85, 0.87, 0.92), skyBrightness * 0.6);
-          // Shadow = transparent, lit = opaque
-          float pixelAlpha = illumination;
+          // Sharp alpha: lit side fully opaque, shadow fully transparent,
+          // soft transition at the terminator only
+          float pixelAlpha = smoothstep(0.0, 0.15, illumination);
           // Soft disc edge (softer during day to avoid hard rim)
           float edgeSoftness = mix(0.9, 0.7, skyBrightness);
           float edge = smoothstep(1.0, edgeSoftness, dist2);
