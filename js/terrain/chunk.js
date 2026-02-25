@@ -73,7 +73,7 @@ export class Chunk {
       this._generateVegetation(chunkX, chunkZ);
       this._generateRocks(chunkX, chunkZ);
       this._generateLogs(chunkX, chunkZ);
-      this._generateRiverWater(chunkX, chunkZ);
+      // this._generateRiverWater(chunkX, chunkZ);  // Rivers disabled
       // Skip: flowers, foam, stream rocks, collectibles (invisible at LOD distance)
       this.flowerPositions.length = 0;
       this.foamSegments.length = 0;
@@ -98,8 +98,8 @@ export class Chunk {
     this._generateLogs(chunkX, chunkZ);
     this._generateCollectibles(chunkX, chunkZ);
     this._generateFoam(chunkX, chunkZ);
-    this._generateStreamRocks(chunkX, chunkZ);
-    this._generateRiverWater(chunkX, chunkZ);
+    // this._generateStreamRocks(chunkX, chunkZ);  // Rivers disabled
+    // this._generateRiverWater(chunkX, chunkZ);  // Rivers disabled
   }
 
   _createMesh(data) {

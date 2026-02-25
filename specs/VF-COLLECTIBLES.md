@@ -1,8 +1,8 @@
 # VF-COLLECTIBLES — Collectibles & HUD
 
-**Version:** 0.1 Draft  
-**Date:** 2026-02-20  
-**Status:** Draft  
+**Version:** 1.0
+**Date:** 2026-02-25
+**Status:** Active
 **Purpose:** Fairy orb placement, animation, collection mechanics, sprint power system, persistence, HUD layout, and minimap rendering.  
 **Dependencies:** VF-CONFIG, VF-ARCH, VF-TERRAIN, VF-MOVEMENT, VF-AUDIO  
 

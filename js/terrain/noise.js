@@ -138,10 +138,11 @@ export function getBaseTerrainHeight(worldX, worldZ) {
 
 /**
  * Get terrain height at world coordinates.
- * Base terrain minus physically-traced river carving.
+ * Rivers disabled — using base terrain only (river carving code preserved in river-tracer.js).
  */
 export function getTerrainHeight(worldX, worldZ) {
-  return getBaseTerrainHeight(worldX, worldZ) - getRiverCarving(worldX, worldZ);
+  return getBaseTerrainHeight(worldX, worldZ);
+  // return getBaseTerrainHeight(worldX, worldZ) - getRiverCarving(worldX, worldZ);
 }
 
 /**
@@ -226,9 +227,12 @@ export function getCottageDensity(worldX, worldZ) {
 }
 
 /**
- * Stream/river factor — re-exported from physically-traced river system.
+ * Stream/river factor — rivers disabled.
+ * Original: export { getRiverFactor as getStreamFactor, getRiverFlowDir } from './river-tracer.js';
  */
-export { getRiverFactor as getStreamFactor, getRiverFlowDir } from './river-tracer.js';
+const _zeroFlowDir = [0, 0];
+export function getStreamFactor(/* worldX, worldZ */) { return 0; }
+export function getRiverFlowDir(/* worldX, worldZ */) { return _zeroFlowDir; }
 
 /**
  * Jitter noise for river-tracer source point jittering (deterministic).

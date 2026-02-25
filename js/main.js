@@ -428,8 +428,8 @@ vr.onSessionEnd = () => {
 }
 
 // --- Initial Load ---
-// Trace rivers from mountain sources before any terrain is built
-riverTracer.init(0, 0, CONFIG.RIVER_TRACE_RADIUS);
+// Rivers disabled — code preserved in river-tracer.js for future use
+// riverTracer.init(0, 0, CONFIG.RIVER_TRACE_RADIUS);
 
 // Place player at origin, facing the lake
 vr.dolly.position.set(0, 0, 0);
@@ -801,7 +801,7 @@ function onFrame() {
   const pos = movement.getPlayerPosition();
   const inVR = vr.isInVR();
   const frame = _frameCount++;
-  riverTracer.checkRetrace(pos.x, pos.z);
+  // riverTracer.checkRetrace(pos.x, pos.z);  // Rivers disabled
   chunkManager.update(pos.x, pos.z, inVR);
 
   // Water plane follows player XZ, snapped to grid step so wave vertices

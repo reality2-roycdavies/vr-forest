@@ -1,8 +1,8 @@
 # VF-ARCH — Architecture
 
-**Version:** 1.0  
-**Date:** 20 February 2026  
-**Status:** Active  
+**Version:** 1.1
+**Date:** 25 February 2026
+**Status:** Active
 **Purpose:** System relationships, data flow, frame update order, dolly camera rig, and renderer configuration. Normative where it defines interfaces between systems.  
 **Dependencies:** VF-OVERVIEW, VF-CONFIG  
 
@@ -50,8 +50,10 @@ graph TB
     Weather -->|drives| Birds
 
     DayNight --> Sky[Sky Dome<br/>ShaderMaterial]
-    DayNight --> Stars[Star Field<br/>438 real stars]
+    DayNight --> Stars[Star Field<br/>2865 real stars]
+    DayNight --> MilkyWay[Milky Way Band]
     DayNight --> Moon[Moon<br/>Phase Shader]
+    DayNight --> Planets[Planets<br/>Keplerian Ephemeris]
     DayNight --> Clouds[Cloud Groups<br/>4 archetypes]
     DayNight --> Lighting[Sun/Hemi/Ambient<br/>Lights]
 ```
@@ -60,7 +62,7 @@ graph TB
 
 | Module | Role | Key Exports |
 |--------|------|-------------|
-| `config.js` | All tunable constants (~190 parameters) | `CONFIG` object |
+| `config.js` | All tunable constants (~250 parameters) | `CONFIG` object |
 | `vr-setup.js` | WebXR renderer, camera rig, controllers | `VRSetup` class |
 | `input.js` | VR gamepad + keyboard/mouse input abstraction | `InputManager` class |
 | `movement.js` | Player locomotion, physics, collision | `MovementSystem` class |
@@ -69,7 +71,7 @@ graph TB
 | `terrain/chunk.js` | Per-chunk mesh + object placement | `Chunk` class |
 | `terrain/chunk-manager.js` | Dynamic chunk loading/unloading | `ChunkManager` class |
 | `terrain/ground-material.js` | Shared ground material + procedural textures | `getGroundMaterial()` |
-| `forest/tree-factory.js` | 3 procedural tree geometries + materials | Geometry/material getters |
+| `forest/tree-factory.js` | 4 procedural tree geometries + materials (pine, oak, birch, tussock) | Geometry/material getters |
 | `forest/tree-pool.js` | InstancedMesh tree rendering | `TreePool` class |
 | `forest/vegetation.js` | Grass, ferns, flowers, rocks, logs, foam | `VegetationPool` class |
 | `forest/textures.js` | Procedural canvas textures | Texture creators |
@@ -79,7 +81,8 @@ graph TB
 | `forest/wildlife.js` | Bear, lion, Wally peek encounters | `WildlifeSystem` class |
 | `forest/collectibles.js` | Fairy orbs with collection mechanics | `CollectibleSystem` class |
 | `atmosphere/day-night.js` | Sun/moon/stars, sky, palettes, clouds | `DayNightSystem` class |
-| `atmosphere/star-catalog.js` | 438 real stars packed as binary catalog | `getStarCatalog()` |
+| `atmosphere/star-catalog.js` | 2865 real stars packed as binary catalog (6 bytes/star: RA, Dec, mag, B-V) | `getStarCatalog()` |
+| `atmosphere/planet-ephemeris.js` | Keplerian orbital mechanics for 5 naked-eye planets | `getPlanetPositions()` |
 | `atmosphere/weather.js` | Weather state machine, rain, thunder, lightning | `WeatherSystem` class |
 | `atmosphere/audio.js` | All procedural audio | `AmbientAudio` class |
 | `atmosphere/fireflies.js` | Night-time glowing particles | `FireflySystem` class |

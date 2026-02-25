@@ -1,10 +1,10 @@
 # VF-CONFIG — Configuration Reference
 
-**Version:** 0.2 Draft
-**Date:** 2026-02-24
-**Status:** Draft
-**Purpose:** Complete table of ALL tunable configuration parameters (~220), organised by system. Every magic number in the experience lives here.
-**Dependencies:** None (this spec is referenced by all others)  
+**Version:** 1.0
+**Date:** 2026-02-25
+**Status:** Active
+**Purpose:** Complete table of ALL tunable configuration parameters (~250), organised by system. Every magic number in the experience lives here.
+**Dependencies:** None (this spec is referenced by all others)
 
 ---
 
@@ -35,14 +35,14 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `TERRAIN_HEIGHT` | 8 | Max height displacement (m) |
 | `TERRAIN_SEED` | 42 | Base seed for all 13 noise instances |
 
-## 2. Streams & Mountains
+## 2. Valley Carving & Mountains
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
-| `STREAM_SCALE` | 0.009 | Stream noise frequency |
-| `STREAM_DEPTH` | 6.0 | Carving depth (m) |
-| `STREAM_WARP` | 22 | Domain warp amount |
-| `STREAM_SHARPNESS` | 2 | Ridge sharpness exponent |
+| `VALLEY_SCALE` | 0.009 | Valley noise frequency |
+| `VALLEY_DEPTH` | 6.0 | Max carving depth (m) |
+| `VALLEY_WARP` | 22 | Domain warp amount |
+| `VALLEY_SHARPNESS` | 2 | Ridge sharpness exponent |
 | `MOUNTAIN_SCALE` | 0.003 | Mountain noise frequency |
 | `MOUNTAIN_HEIGHT` | 45 | Max additive mountain height (m) |
 | `MOUNTAIN_WARP` | 35 | Domain warp amount |
@@ -52,7 +52,9 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `FOOTHILL_HEIGHT` | 6 | Max foothill height (m) |
 | `FOOTHILL_SCALE` | 0.008 | Foothill noise frequency |
 
-## 2b. Rivers (Physically-Traced)
+## 2b. Rivers (Physically-Traced) — Currently Disabled
+
+> **Note:** Rivers are implemented but disabled pending visual quality improvements. The parameters and code are preserved for future re-enablement.
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -87,7 +89,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `SUBALPINE_START` | 10 | Height where dark forest green begins |
 | `TREELINE_START` | 16 | Height where trees start shrinking |
 | `ALPINE_START` | 20 | Height where exposed rock begins |
-| `SNOWLINE_START` | 24 | Height where snow begins |
+| `SNOWLINE_START` | 20 | Height where snow begins |
 | `TREELINE_SCALE_MIN` | 0.3 | Minimum tree scale at treeline |
 
 ## 4. Trees
@@ -100,7 +102,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `TREE_JITTER` | 1.2 | Random offset from grid position (m) |
 | `TREE_MIN_HEIGHT` | 2.5 | Minimum tree scale |
 | `TREE_MAX_HEIGHT` | 6 | Maximum tree scale |
-| `TREE_TYPES` | 3 | Number of tree species (pine, oak, birch) |
+| `TREE_TYPES` | 4 | Number of tree species (pine, oak, birch, tussock) |
 | `TREE_COLLISION_RADIUS` | 0.4 | Trunk collision radius (m) |
 
 ## 5. Vegetation
@@ -113,10 +115,18 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `VEG_ROCK_SCALE` | 0.3 | Rock instance scale |
 | `VEG_FERN_SCALE` | 1.2 | Fern instance scale |
 | `FLOWER_GRID_SPACING` | 2.0 | Grid spacing for flower placement |
-| `FLOWER_DENSITY_THRESHOLD` | 0.45 | Noise threshold for flowers |
+| `FLOWER_DENSITY_THRESHOLD` | 0.55 | Noise threshold for flowers |
 | `FLOWER_SCALE` | 0.55 | Base flower scale |
 | `ROCK_GRID_SPACING` | 5 | Grid spacing for rock placement |
 | `ROCK_DENSITY_THRESHOLD` | 0.45 | Noise threshold for rocks |
+
+## 5b. Ground Surface
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `GROUND_DIRT_SCALE` | 0.03 | Noise frequency for dirt patches |
+| `GROUND_DIRT_THRESHOLD` | 0.5 | Noise > this = dirt (higher = less dirt) |
+| `GROUND_TEX_REPEAT` | 6 | Texture tiles per chunk |
 
 ## 6. Logs & Stumps
 
@@ -168,7 +178,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `GRAVITY` | 9.8 | Downward acceleration (m/s²) |
 | `WALK_BOB_SPEED` | 2.2 | Bob oscillations per second while moving |
 | `WALK_BOB_AMOUNT` | 0.025 | Vertical bob amplitude (m) |
-| `ROCK_COLLISION_RADII` | [0.15, 0.35, 0.7] | Collision radius per rock size index |
+| `ROCK_COLLISION_RADII` | [0.35, 0.7, 1.4] | Collision radius per rock size index |
 
 ## 9. Water & Shore
 
@@ -183,7 +193,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `SWIM_BOB_SPEED` | 0.6 | Swim bob oscillation rate (Hz) |
 | `SWIM_BOB_AMOUNT` | 0.025 | Swim bob amplitude (m) |
 | `SWIM_EYE_ABOVE_WATER` | 0.45 | Eye height above water surface when swimming (m) |
-| `FOAM_GRID_SPACING` | 0.6 | Marching-squares step for foam contour |
+| `FOAM_GRID_SPACING` | 1.5 | Marching-squares step for foam contour |
 | `FOAM_SHORE_WIDTH` | 0.6 | Foam strip offset toward shore (m) |
 | `FOAM_WATER_WIDTH` | 0.8 | Foam strip offset toward water (m) |
 
@@ -194,6 +204,7 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `WEATHER_TRANSITION_RATE` | 0.0083 | Intensity change per second (~2 min per unit) |
 | `WEATHER_HOLD_MIN` | 180 | Minimum hold time per weather state (s) = 3 min |
 | `WEATHER_HOLD_MAX` | 480 | Maximum hold time per weather state (s) = 8 min |
+| `WEATHER_STORM_CLOUD_COLOR` | 0x303038 | Dark grey storm cloud tint |
 | `RAIN_PARTICLE_COUNT` | 5000 | Maximum rain particles |
 | `RAIN_RADIUS` | 25 | Rain cylinder radius around player (m) |
 | `RAIN_HEIGHT` | 20 | Rain cylinder height (m) |
@@ -203,10 +214,22 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `THUNDER_INTERVAL_MIN` | 6 | Minimum seconds between lightning flashes (at full rain) |
 | `THUNDER_INTERVAL_MAX` | 18 | Maximum seconds between lightning flashes |
 | `LIGHTNING_FLASH_DECAY` | 0.2 | Flash fade-out time (s) |
-| `LIGHTNING_BOLT_MIN_DIST` | 200 | Minimum lightning bolt distance from player (m) |
-| `LIGHTNING_BOLT_MAX_DIST` | 900 | Maximum lightning bolt distance from player (m) |
+| `LIGHTNING_BOLT_MIN_DIST` | 60 | Minimum lightning bolt distance from player (m) |
+| `LIGHTNING_BOLT_MAX_DIST` | 200 | Maximum lightning bolt distance from player (m) |
 | `WETNESS_WET_RATE` | 0.0083 | Ground wetting rate per second (~2 min to full wet) |
 | `WETNESS_DRY_RATE` | 0.0042 | Ground drying rate per second (~4 min to full dry) |
+
+## 10b. Rain Audio
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `RAIN_PATTER_FREQ` | 3200 | Rain patter bandpass frequency (Hz) |
+| `RAIN_PATTER_Q` | 0.6 | Rain patter bandpass Q |
+| `RAIN_WASH_FREQ` | 800 | Rain wash bandpass frequency (Hz) |
+| `RAIN_WASH_Q` | 0.4 | Rain wash bandpass Q |
+| `THUNDER_FREQ_MIN` | 150 | Thunder oscillator minimum frequency (Hz) |
+| `THUNDER_FREQ_MAX` | 250 | Thunder oscillator maximum frequency (Hz) |
+| `THUNDER_DECAY` | 7 | Thunder reverberant tail duration (s) |
 
 ## 11. Atmosphere
 
@@ -218,13 +241,19 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `AMBIENT_VOLUME` | 0.3 | Master audio gain |
 | `SUN_VISUAL_RADIUS` | 14 | Sun disc visual size |
 | `SUN_DISTANCE` | 150 | Sun sprite distance from player (m) |
-| `CLOUD_COUNT` | 18 | Number of cloud groups |
-| `CLOUD_MIN_RADIUS` | 40 | Cloud ring inner radius (m) |
-| `CLOUD_MAX_RADIUS` | 180 | Cloud ring outer radius (m) |
+| `CLOUD_COUNT` | 20 | Number of cloud groups |
+| `CLOUD_MIN_RADIUS` | 35 | Cloud ring inner radius (m) |
+| `CLOUD_MAX_RADIUS` | 200 | Cloud ring outer radius (m) |
+| `CLOUD_HEIGHT_MIN` | 55 | Minimum cloud altitude (m) |
+| `CLOUD_HEIGHT_MAX` | 115 | Maximum cloud altitude (m) |
+| `CLOUD_SCALE_MIN` | 25 | Minimum cloud puff size (m) |
+| `CLOUD_SCALE_MAX` | 65 | Maximum cloud puff size (m) |
 | `DEFAULT_LATITUDE` | -36.85 | Fallback latitude (Auckland, NZ) |
 | `DEFAULT_LONGITUDE` | 174.76 | Fallback longitude (Auckland, NZ) |
 | `MOON_VISUAL_RADIUS` | 1.75 | Moon disc radius |
 | `MOON_DISTANCE` | 135 | Moon sprite distance from player (m) |
+| `PLANET_DISTANCE` | 140 | Planet sprite distance from player (m) |
+| `PLANET_VISUAL_RADIUS` | 0.6 | Base planet sprite radius (scaled by magnitude) |
 
 ## 12. Audio
 
@@ -282,7 +311,41 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | `COLLECTIBLE_CHIME_FREQ` | 880 | Base chime frequency (Hz) |
 | `COLLECTIBLE_MAX_INSTANCES` | 500 | Maximum instanced mesh capacity |
 
-## 15. Renderer
+## 15. Colours
+
+### 15a. Ground Colours
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `GROUND_LOW_COLOR` | (0.13, 0.24, 0.06) | Dark green (low, near-shore) |
+| `GROUND_MID_COLOR` | (0.28, 0.45, 0.12) | Mid green |
+| `GROUND_HIGH_COLOR` | (0.35, 0.50, 0.18) | Light green (high) |
+| `GROUND_DIRT_COLOR` | (0.40, 0.30, 0.18) | Dirt brown |
+| `GROUND_DIRT_DARK` | (0.30, 0.22, 0.12) | Dark dirt |
+
+### 15b. Mountain Zone Colours
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `SUBALPINE_COLOR` | (0.15, 0.28, 0.08) | Dark forest green |
+| `TUSSOCK_COLOR` | (0.55, 0.50, 0.30) | Tan/olive |
+| `ALPINE_ROCK_COLOR` | (0.45, 0.42, 0.38) | Grey-brown rock |
+| `SNOW_COLOR` | (1.4, 1.42, 1.5) | Bright snow (>1.0 for emissive bloom) |
+| `STEEP_ROCK_COLOR` | (0.28, 0.27, 0.26) | Dark grey bare rock |
+
+### 15c. Tree & Vegetation Colours
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `TRUNK_COLOR` | 0x5c3a1e | Tree trunk brown |
+| `CANOPY_COLORS` | [0x2d5a1e, 0x3a6b2a, 0x1e4a12] | Canopy green variants |
+| `GRASS_COLOR` | 0x4a7a2e | Grass green |
+| `ROCK_COLOR` | 0x888888 | Generic rock grey |
+| `ROCK_COLORS` | [0x504d4a, 0x5a5652, 0x464442, 0x625e5a, 0x3e3c3a] | Rock colour variants |
+| `FERN_COLOR` | 0x4a8040 | Fern green |
+| `FLOWER_COLORS` | [0xff4da6, 0xffe040, 0x8b6cf7, 0xff80b0, 0xffee55, 0xff6060] | 6 flower colours |
+
+## 16. Renderer
 
 | Setting | Value | Description |
 |---------|-------|-------------|
@@ -301,10 +364,14 @@ All parameters below are exported from a single `CONFIG` object (or equivalent).
 | Foveated rendering | Level 1.0 (maximum) | Eye-tracked; saves 25–40% fill on Quest 3 |
 | XR framebuffer scale | 1.0 (native) | No supersampling; foveation keeps centre sharp |
 
-## 16. Render Order
+## 17. Render Order
 
 | Object | Render Order | Reason |
 |--------|-------------|--------|
 | Sky dome | -2 | Always behind everything |
+| Milky Way band | -2 | Co-planar with sky dome |
+| Sun sprite | -1 | Behind terrain but in front of sky |
+| Moon disc | -1 | Behind terrain but in front of sky |
+| Planet sprites | -1 | Behind terrain but in front of sky |
 | Water plane | -1 | Behind terrain/objects but in front of sky |
 | Everything else | 0 (default) | Standard depth-tested rendering |

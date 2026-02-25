@@ -1,8 +1,8 @@
 # VF-PERFORMANCE — Performance Budget
 
-**Version:** 0.3 Draft
+**Version:** 1.0
 **Date:** 2026-02-25
-**Status:** Draft
+**Status:** Active
 **Purpose:** Target frame rate, instance caps, draw call budget, key optimisations, staggered loading rationale, chunk recycling, fog-hides-boundaries design, Quest 3 tuning history, and VR-specific invisible optimisations (foveation, LOD terrain, water grid swap, throttled updates).
 **Dependencies:** VF-CONFIG, VF-ARCH, VF-TERRAIN, VF-FOREST, VF-WATER, VF-WEATHER  
 
@@ -26,7 +26,7 @@ Every instanced object type has a maximum instance count. These caps MUST NOT be
 
 | Object | Max Instances | Draw Calls | Notes |
 |--------|--------------|------------|-------|
-| Trees (per type) | 2000 | 2 (trunk + canopy) × 3 types = 6 | See VF-FOREST |
+| Trees (per type) | 2000 | 2 (trunk + canopy) × 4 types = 8 | See VF-FOREST |
 | Grass tufts | 3000 | 1 | Single `InstancedMesh` |
 | Ferns (per variant) | 3000 (shared pool) | 3 | 3 geometry variants |
 | Flowers (per colour × variant) | 1500 (shared pool) | 18 | 3 variants × 6 colours |
@@ -53,7 +53,9 @@ Beyond instanced objects, the scene includes:
 | Sky dome | 1 | Render order -2 |
 | Sun sprite | 1 | |
 | Moon disc | 1 | |
-| Stars | 1 | Single `Points` mesh (438 stars) |
+| Stars | 1 | Single `Points` mesh (2865 stars) |
+| Milky Way | 1 | Galactic-plane strip mesh |
+| Planet sprites | ≤ 5 | Mercury, Venus, Mars, Jupiter, Saturn |
 | Cloud puffs | ~50–80 | 18 groups × 2–10 puffs each (see VF-ATMOSPHERE) |
 | Foam strips | ≤ 121 | One per active chunk (see VF-WATER) |
 | Lightning bolts | 0–2 | Only during storms |

@@ -1,10 +1,10 @@
 # VF-ATMOSPHERE — Atmosphere
 
-**Version:** 1.0  
-**Date:** 20 February 2026  
-**Status:** Active  
-**Purpose:** Sky dome, day/night cycle (astronomical sun/moon), stars (catalog, sidereal rotation), clouds (4 archetypes), fog, fireflies, and shooting stars.  
-**Dependencies:** VF-CONFIG, VF-WEATHER  
+**Version:** 1.1
+**Date:** 25 February 2026
+**Status:** Active
+**Purpose:** Sky dome, day/night cycle (astronomical sun/moon), stars (2865-star catalog with spectral colours, sidereal rotation), naked-eye planets (Keplerian ephemeris), Milky Way band, clouds (4 archetypes), fog, fireflies, and shooting stars. Desktop/VR adaptive brightness.
+**Dependencies:** VF-CONFIG, VF-WEATHER
 
 ---
 
@@ -117,10 +117,13 @@ A `CircleGeometry` (radius 1.75, 32 segments) with custom ShaderMaterial:
 1. Reconstructs sphere normals from disc UV: `normal = (centered.x, centered.y, sqrt(1 - x² - y²))`
 2. Computes illumination from scene sun-to-moon geometry projected onto the moon disc's own local axes (stable regardless of camera rotation)
 3. Smooth terminator: `smoothstep(-0.05, 0.10, dot(normal, sunDir))`
-4. Earthshine (0.04, 0.04, 0.06) on the unlit side
-5. Soft disc edge: `smoothstep(1.0, 0.9, dist²)`
+4. Shadow side fully transparent: `pixelAlpha = smoothstep(0.0, 0.15, illumination)` — sharp alpha cutoff so the lit crescent is fully opaque and the dark side is invisible
+5. Daytime sky wash: `mix(color, vec3(0.85, 0.87, 0.92), skyBrightness × 0.6)` — lit side pales to match bright sky
+6. Soft disc edge: `smoothstep(1.0, edgeSoftness, dist²)` where edgeSoftness = 0.9 at night, 0.7 during day (softer edge avoids harsh rim against bright sky)
 
 Behind clouds: photo disc hidden, replaced with a soft glow Sprite (reusing sun texture, cool blue-white tint) that fades aggressively with cloud darkness.
+
+> ⚠️ **Gotcha: Moon shadow at twilight.** The shadow side of the moon MUST always be transparent, not dark. An earlier approach used `shadowAlpha = 1.0 - skyBrightness` which left the shadow at 60% opacity during dawn/dusk, creating a very obvious dark patch. Using raw `illumination` as alpha also fails — the smoothstep terminator produces very low values near the edge, making the moon nearly invisible. The fix is `smoothstep(0.0, 0.15, illumination)` which creates a sharp cutoff: lit pixels are fully opaque, shadow pixels are fully transparent, with only a narrow transition band at the terminator.
 
 > ⚠️ **Gotcha: Moon phase stability.** The sun direction on the moon disc MUST be projected onto the moon mesh's own local coordinate frame (extractBasis from matrixWorld), NOT the camera's right/up vectors. Using camera axes causes the phase shadow to shift when the player rotates their head.
 
@@ -155,18 +158,29 @@ Convert ecliptic → equatorial using obliquity (23.44°), then equatorial → h
 
 ## 4. Stars
 
-**438 real stars** (magnitude ≤ 4.5) from the HYG stellar database, packed as binary.
+**2,865 real stars** (magnitude ≤ 5.5) from the Yale Bright Star Catalog / HYG database, with spectral colours from B-V color index.
 
 ### 4.1 Star Catalog Format
 
-**Encoding**: 5 bytes per star:
-- Bytes 0–1: Right ascension (uint16, 0–65535 maps to 0–24h → 0–2π)
+**Encoding**: 6 bytes per star:
+- Bytes 0–1: Right ascension (uint16, 0–65535 maps to 0–2π radians)
 - Bytes 2–3: Declination (uint16, 0–65535 maps to -90°–+90°)
 - Byte 4: Visual magnitude (uint8, decoded as `value / 31.875 - 1.5`)
+- Byte 5: B-V color index (uint8, decoded as `value / 255 × 3.0 - 0.5`, range -0.5 to 2.5)
 
-Total: ~2190 bytes, stored as base64 string (~3KB).
+Total: ~17,190 bytes, stored as base64 string (~23KB).
 
-### 4.2 Equatorial Placement (one-time at startup)
+### 4.2 Spectral Colours
+
+B-V color index is converted to RGB using the Ballesteros (2012) blackbody approximation:
+
+```
+T_color = 4600 × (1 / (0.92 × BV + 1.7) + 1 / (0.92 × BV + 0.62))
+```
+
+This maps spectral types: blue O/B stars → white A → yellow G → orange K → red M. The resulting colour MUST be desaturated to 55% (`sat = 0.55`) — pure spectral colours look garish against a dark sky.
+
+### 4.3 Equatorial Placement (one-time at startup)
 
 ```
 x =  cos(dec) × cos(ra) × R
@@ -175,7 +189,7 @@ z = -cos(dec) × sin(ra) × R
 ```
 where R = SKY_RADIUS × 0.95
 
-### 4.3 O(1) Sidereal Rotation
+### 4.4 O(1) Sidereal Rotation
 
 The entire Points mesh MUST be rotated by a single Euler (order `'ZYX'`):
 - Y rotation: `π - LST` (hour angle rotation)
@@ -183,17 +197,160 @@ The entire Points mesh MUST be rotated by a single Euler (order `'ZYX'`):
 
 where LST = Local Sidereal Time = (GMST + longitude) in radians, and GMST = (280.46061837 + 360.98564736629 × (JD - 2451545.0)) mod 360.
 
-**Why O(1) rotation**: The naive approach — converting each star from equatorial to horizontal coordinates every frame — is O(N) work (438 trig operations per frame). Since all stars move together (they're on a rigid celestial sphere), a single rotation of the entire mesh achieves the same result in O(1).
+**Why O(1) rotation**: The naive approach — converting each star from equatorial to horizontal coordinates every frame — is O(N) work (2865 trig operations per frame). Since all stars move together (they're on a rigid celestial sphere), a single rotation of the entire mesh achieves the same result in O(1).
 
 > ⚠️ **Gotcha: Euler rotation order for stars.** The scene uses +X = North, +Z = East (see VF-OVERVIEW §6). The Euler MUST be 'ZYX' with Z carrying the latitude tilt. Using 'YXZ' tilts the celestial pole toward East instead of North. The Southern Cross will appear in the wrong part of the sky.
 
-### 4.4 Star Shader
+### 4.5 Star Shader
 
-Per-star size (3.5 - mag × 0.5, min 0.8), brightness (1.0 - mag × 0.12, min 0.3), soft circular points, subtle twinkling via `0.85 + 0.15 × sin(time × 2.7 + phase) × sin(time × 1.3 + phase × 0.7)`.
+Per-star attributes are computed from magnitude at startup:
 
-## 5. Clouds (4 Archetypes)
+```
+normMag = (mag + 1.5) / 7.0          // normalise to 0..1
+lumFactor = pow(1.0 - normMag, 2.5)   // logarithmic — magnitude is log scale
 
-18 cloud groups, each containing multiple puffs:
+size = 1.0 + lumFactor × 3.5          // range ~1.1 (mag 5.5) to ~4.5 (Sirius)
+brightness = max(0.35, lumFactor × 1.3)  // raised floor so faint stars are visible
+```
+
+Fragment shader features:
+- **Core + halo**: `core = smoothstep(0.25, 0.01, d)`, `halo = smoothstep(0.25, 0.08, d) × 0.5`
+- **Twinkling**: Brighter stars twinkle less (atmospheric scintillation is more noticeable for fainter stars). Amount = `0.08 + (1 - brightness) × 0.15`
+- **Per-star colour**: Spectral colour applied to core; halo blends toward neutral white `(0.92, 0.92, 1.0)` via `smoothstep(0.20, 0.04, d)`
+- **Brightness multiplier**: `uBrightMul` uniform — **1.8× on desktop, 1.5× in VR** (stars are naturally brighter in VR due to lens magnification; desktop needs a boost to compensate for ambient room light)
+
+> ⚠️ **Gotcha: Star size vs brightness.** Stars that are too large (gl_PointSize > 5) look like disks rather than points, especially in VR where lens magnification enlarges them further. Keep the size range tight (1.0–4.5) and boost shader brightness instead. Several iterations were needed: starting at max size 12 (obvious disks), then 5.5 (still too large), before settling on 4.5 with a brightness multiplier to compensate.
+
+### 4.6 Desktop/VR Adaptive Brightness
+
+The star shader includes a `uBrightMul` uniform that is set per frame based on `vr.isInVR()`:
+
+| Mode | uBrightMul | Rationale |
+|------|-----------|-----------|
+| Desktop | 1.8 | Compensates for ambient room light; stars on a monitor need to be brighter |
+| VR | 1.5 | VR headset blocks ambient light; too bright causes bloom artifacts |
+
+## 5. Naked-Eye Planets
+
+Mercury, Venus, Mars, Jupiter, and Saturn are rendered as coloured Sprites positioned using Keplerian orbital mechanics.
+
+### 5.1 Keplerian Ephemeris
+
+Planet positions are computed from J2000.0 orbital elements (Standish 1992 / JPL), valid ±few centuries. Each planet has 6 elements and their century rates:
+
+| Element | Symbol | Description |
+|---------|--------|-------------|
+| a | Semi-major axis | AU |
+| e | Eccentricity | dimensionless |
+| I | Inclination | degrees |
+| L | Mean longitude | degrees |
+| wBar | Longitude of perihelion | degrees |
+| Omega | Longitude of ascending node | degrees |
+
+Each element is computed as `value = value₀ + rate × T` where T = Julian centuries since J2000.0.
+
+**Kepler's equation** `M = E - e·sin(E)` MUST be solved via Newton's method (3 iterations sufficient for e ≤ 0.21, which covers all naked-eye planets):
+
+```
+E₀ = M + e × sin(M)
+Eₙ₊₁ = Eₙ + (M - Eₙ + e × sin(Eₙ)) / (1 - e × cos(Eₙ))
+```
+
+**Coordinate transform pipeline:**
+1. Orbital elements → heliocentric ecliptic (x, y, z) via true anomaly
+2. Subtract Earth's heliocentric position → geocentric ecliptic
+3. Ecliptic → equatorial (rotate by obliquity 23.44° - 0.013°×T)
+4. Equatorial → horizontal (using hour angle = LST - RA, observer latitude)
+
+**Visual magnitude** approximation:
+```
+magnitude = H + 5 × log₁₀(r_helio × r_geo) + phaseFactor × phaseAngle°
+```
+
+| Planet | H (abs mag) | Phase factor | Characteristic colour |
+|--------|------------|-------------|----------------------|
+| Mercury | -0.36 | 0.038 | Grey-pink (#d4c5b9) |
+| Venus | -4.40 | 0.009 | White-yellow (#fff8e0) |
+| Mars | -1.52 | 0.016 | Orange-red (#ff8844) |
+| Jupiter | -9.40 | 0.005 | Cream (#fff0d0) |
+| Saturn | -8.88 | 0.004 | Pale gold (#ffe8a0) |
+
+### 5.2 Planet Rendering
+
+Each planet is a `THREE.Sprite` with a shared 64×64 radial gradient texture (bright white core fading to transparent). Per-planet `SpriteMaterial.color` applies the characteristic tint.
+
+**Positioning**: Same altitude/azimuth → 3D conversion as the moon, at `PLANET_DISTANCE = 140m`.
+
+**Magnitude-based scaling**: `magScale = max(0.3, 1.0 + (0 - magnitude) × 0.25)`, applied to `PLANET_VISUAL_RADIUS = 0.6`. Venus (mag -4.4) appears ~2.4× base size; Saturn (mag +0.5) appears ~0.7× base size.
+
+### 5.3 Visibility Rules
+
+Planets MUST respect sky brightness — brighter planets (lower magnitude) remain visible deeper into twilight:
+
+| Magnitude | Max sun elevation | Example |
+|-----------|------------------|---------|
+| < -3 | 0.20 | Venus |
+| < -1 | 0.12 | Jupiter |
+| < 1 | 0.05 | Mars, Saturn |
+| ≥ 1 | 0.02 | Mercury (when faint) |
+
+**Opacity combines**: horizon fade × twilight fade × weather dimming. Below altitude 0.02 (near horizon) the planet is hidden; between 0.02 and 0.10 it fades in.
+
+### 5.4 Zero-Allocation Design
+
+The ephemeris module MUST pre-allocate all output arrays and intermediate vectors. The `getPlanetPositions()` function returns the same array reference each call with updated values, avoiding GC pressure in the render loop.
+
+## 6. Milky Way Band
+
+A procedural galactic-plane strip rendered as a mesh with a shader that generates individual star points from the density texture.
+
+### 6.1 Galactic Coordinate System
+
+The Milky Way mesh is built in J2000 equatorial coordinates (matching the star field) using the galactic coordinate axes:
+
+| Reference Point | RA | Dec |
+|----------------|-----|-----|
+| Galactic North Pole | 192.86° | +27.13° |
+| Galactic Centre (Sagittarius) | 266.4° | -29.0° |
+
+The third axis (galactic Y) is computed as the cross product NGP × GC.
+
+### 6.2 Geometry
+
+A strip mesh spanning ±15° galactic latitude, 64 longitude segments × 8 latitude segments, at radius `SKY_RADIUS × 0.94` (slightly inside the star sphere). The mesh rotates with the star field via the same O(1) sidereal rotation.
+
+### 6.3 Density Texture (1024×256)
+
+A procedural texture encoding brightness and colour:
+
+- **Longitude brightness**: Galactic centre (l=0°, Sagittarius) brightest; Carina/Crux (l≈290°) secondary bright region; anticenter (l=180°, Auriga) dimmest
+- **Latitude profile**: Tight bright core (`exp(-b² × 6)`) plus wider dim halo (`exp(-b² × 1.5)`)
+- **Multi-scale cloud structure**: 3 layers of fractal noise at different scales for irregular nebular structure
+- **Dark dust lanes (Great Rift)**: Runs from Cygnus (l≈75°) through Aquila/Scutum to Sagittarius (l≈0°); tight to the galactic plane
+- **Coalsack**: Dark patch near Southern Cross (l≈303°)
+- **Bright star clouds**: Scutum Star Cloud (l≈28°), Sagittarius Star Cloud (l≈355°)
+
+The texture is blurred (4px Gaussian) to create a smooth density/colour envelope.
+
+### 6.4 Milky Way Shader
+
+The fragment shader generates individual star points from the density texture using a multi-layer hash-grid technique:
+
+| Layer | Grid size | Density scale | Radius | Brightness weight |
+|-------|-----------|--------------|--------|------------------|
+| Dense dim | 4096×1024 | density × 0.55 | 0.45 | 0.6 |
+| Medium | 2048×512 | density × 0.30 | 0.35 | 1.0 |
+| Bright highlights | 1024×256 | density × 0.12 | 0.3 | 1.4 |
+
+Each layer uses a hash function per grid cell to place a single star at a random position within the cell. Stars above the density threshold appear; below it, the cell is empty. This creates thousands of individual points that resolve at close inspection but blend into a diffuse glow at a glance.
+
+A diffuse glow underneath (`density × 0.25`) represents the unresolved stellar background.
+
+**Additive blending** (`THREE.AdditiveBlending`), `DoubleSide`, horizon fade via `smoothstep(-0.02, 0.12, elevation)`. Opacity controlled by the same `uOpacity` uniform as stars (fades with sky brightness and weather).
+
+## 7. Clouds (4 Archetypes)
+
+`CLOUD_COUNT` (20) cloud groups, each containing multiple puffs:
 
 | Archetype | Weight | Puffs | Height (m) | Drift Speed | Horizontal? |
 |-----------|--------|-------|------------|-------------|-------------|
@@ -218,9 +375,9 @@ Horizontal clouds (wispy, flat) MUST use `Mesh` with `PlaneGeometry` rotated fla
 
 **Time-of-day tinting**: Night = dark blue-grey (0x222233, 50% opacity), twilight = blend toward sunset orange (0xe8a070), day = white (full opacity). Weather pushes toward storm grey (0x303038) with increased opacity.
 
-## 6. Fog
+## 8. Fog
 
-Scene fog (linear) with base near=120, far=250. Weather reduces via `fogMultiplier`. Snow zones further reduce via `snowFog`. Fog colour MUST track the palette with weather desaturation toward luminance-matched grey.
+Scene fog (linear) with base near=50, far=130 (see VF-CONFIG). Weather reduces via `fogMultiplier`. Snow zones further reduce via `snowFog`. Fog colour MUST track the palette with weather desaturation toward luminance-matched grey.
 
 **Why luminance-matched grey**: During storms, the fog should desaturate toward grey. But which grey? A fixed grey (like 0x606068) looks fine during the day but *brightens* the scene at night — night fog is much darker than that grey. The solution: compute the luminance of the current palette's fog colour and use that as the grey target.
 
@@ -228,7 +385,7 @@ Scene fog (linear) with base near=120, far=250. Weather reduces via `fogMultipli
 
 **Snow fog**: Above snowline during storms, fog near/far MUST collapse to 30/80m, creating blizzard whiteout. Fog colour MUST shift toward white (0.85, 0.87, 0.92).
 
-## 7. Fireflies
+## 9. Fireflies
 
 30 particles, visible at night (sun elevation < -0.05), suppressed by rain (×(1 - rainIntensity × 0.8)).
 
@@ -240,7 +397,7 @@ Scene fog (linear) with base near=120, far=250. Weather reduces via `fogMultipli
 
 Fireflies MUST be excluded from water (terrain below SHORE_LEVEL) and above treeline. They MUST be respawned if they drift out of bounds.
 
-## 8. Shooting Stars
+## 10. Shooting Stars
 
 Visible at night (sun elevation < -0.05) with clear skies (star dimming < 0.5). Pooled for zero allocation.
 

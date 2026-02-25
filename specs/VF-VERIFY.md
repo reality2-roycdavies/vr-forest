@@ -1,8 +1,8 @@
 # VF-VERIFY — Verification Guide
 
-**Version:** 0.1 Draft  
-**Date:** 2026-02-20  
-**Status:** Draft  
+**Version:** 1.0
+**Date:** 2026-02-25
+**Status:** Active
 **Purpose:** Per-system verification checklists, gotcha callouts, numerical spot-checks, time-of-day verification, and audio verification. Use this to check your implementation against the reference.  
 **Dependencies:** VF-TERRAIN, VF-WATER, VF-FOREST, VF-WILDLIFE, VF-ATMOSPHERE, VF-WEATHER, VF-AUDIO, VF-MOVEMENT, VF-COLLECTIBLES, VF-PERFORMANCE, VF-CONFIG  
 
@@ -85,9 +85,17 @@
 - [ ] Sun position matches real time of day
 - [ ] Four colour palettes blend smoothly (deep night → night → twilight → golden → day)
 - [ ] Stars visible at night — look for real constellations (Southern Cross from southern hemisphere)
+- [ ] Stars show spectral colours: blue-white (Sirius), orange (Betelgeuse), red (Antares)
+- [ ] Stars brighter on desktop than in VR (adaptive brightness)
 - [ ] Stars rotate correctly over time (sidereal rate)
+- [ ] Milky Way band visible at night — bright toward Sagittarius, dark rift visible
+- [ ] Milky Way rotates with the stars (same sidereal rotation)
+- [ ] Planets visible: Venus (brightest, near horizon at dusk/dawn), Jupiter, Mars, Saturn
+- [ ] Planets positioned astronomically correctly for current date
+- [ ] Bright planets (Venus) visible during late twilight; faint planets only at night
 - [ ] Moon at approximately correct position with phase shadow
 - [ ] Phase shadow stable when you rotate your head
+- [ ] Moon shadow side is transparent (no dark patch at dawn/dusk)
 - [ ] Diverse clouds: round puffs, wispy streaks, flat layers, small clusters
 - [ ] Clouds tint with time of day (orange at sunset, dark at night)
 - [ ] Fog distance appropriate (closer in storms, consistent day/night)
@@ -269,5 +277,10 @@ Consolidated table from all system specs (see also Appendix E of the monolithic 
 | Sky at night | Too bright or too uniform | Progressive darkening toward deep night |
 | Cloud diversity | All identical puffs | Four distinct archetypes at different altitudes |
 | Moon phase | Shifts when camera rotates | Stable shadow using moon's own local frame |
+| Moon shadow | Dark patch visible at dawn/dusk | Shadow side fully transparent (smoothstep alpha cutoff) |
+| Star colours | All white points | Spectral colours from B-V index (blue, white, yellow, orange, red) |
+| Star size in VR | Bright stars look like disks | Tight size range (1.0–4.5), boost brightness not size |
+| Planets | Not visible or wrong positions | Venus brightest near horizon at dusk/dawn; correct ephemeris |
+| Milky Way | Uniform bright band or absent | Sagittarius brightest, dark rift, Coalsack near Southern Cross |
 | Vegetation lighting | Harsh dark undersides | Shader forces front-face normals on backfaces |
 | Collectible motion | All orbs bob in sync | Per-orb phase offsets derived from position |
