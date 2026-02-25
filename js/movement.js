@@ -40,6 +40,9 @@ export class MovementSystem {
     this.skiVelZ = 0;
     this.isOnSnow = false;
 
+    // Cached terrain height at player position (computed each frame in update)
+    this.playerTerrainY = 0;
+
     // Smoothed thumbstick input (removes jerkiness in VR)
     this._smoothLX = 0;
     this._smoothLY = 0;
@@ -55,6 +58,7 @@ export class MovementSystem {
     const px = dolly.position.x;
     const pz = dolly.position.z;
     const terrainY = getTerrainHeight(px, pz);
+    this.playerTerrainY = terrainY;
     const rockY = this._getRockSurfaceY(px, pz);
     const solidGroundY = Math.max(terrainY, rockY);
 

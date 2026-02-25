@@ -146,6 +146,31 @@ export function getTerrainHeight(worldX, worldZ) {
 }
 
 /**
+ * Approximate terrain height — base terrain + valley carving only, no mountains.
+ * ~46% fewer noise evaluations (7 vs 13). Use for contexts where mountain
+ * precision is irrelevant (e.g. water shader heightmap — mountains are far above water).
+ */
+export function getTerrainHeightApprox(worldX, worldZ) {
+  const baseHeight = fractalNoise(
+    worldX,
+    worldZ,
+    CONFIG.TERRAIN_SCALE,
+    CONFIG.TERRAIN_OCTAVES,
+    CONFIG.TERRAIN_PERSISTENCE,
+    CONFIG.TERRAIN_LACUNARITY
+  ) * CONFIG.TERRAIN_HEIGHT;
+
+  const vWarpX = warpNoise2D(worldX * 0.006, worldZ * 0.006) * CONFIG.VALLEY_WARP;
+  const vWarpZ = warpNoise2D(worldX * 0.006 + 100, worldZ * 0.006 + 100) * CONFIG.VALLEY_WARP;
+  const vRaw = streamNoise2D((worldX + vWarpX) * CONFIG.VALLEY_SCALE, (worldZ + vWarpZ) * CONFIG.VALLEY_SCALE);
+  const vRidge = 1 - Math.abs(vRaw);
+  const vChannel = Math.pow(vRidge, CONFIG.VALLEY_SHARPNESS);
+  const normalizedH = (baseHeight / CONFIG.TERRAIN_HEIGHT + 1) * 0.5;
+  const carveMask = Math.max(0, 1 - normalizedH * 0.8);
+  return baseHeight - vChannel * CONFIG.VALLEY_DEPTH * carveMask;
+}
+
+/**
  * Mountain factor at world coordinates (0 = no mountain, 1 = peak)
  */
 export function getMountainFactor(worldX, worldZ) {

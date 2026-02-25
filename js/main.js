@@ -17,7 +17,7 @@ import { WeatherSystem } from './atmosphere/weather.js';
 import { BirdFlockSystem } from './forest/birds.js';
 import { CollectibleSystem } from './forest/collectibles.js';
 import { CottageSystem } from './forest/cottage-system.js';
-import { getTerrainHeight, getStreamFactor } from './terrain/noise.js';
+import { getTerrainHeight, getTerrainHeightApprox, getStreamFactor } from './terrain/noise.js';
 import { riverTracer } from './terrain/river-tracer.js';
 import { updateGroundTime, getGroundMaterial, setGroundAnisotropy } from './terrain/ground-material.js';
 
@@ -79,7 +79,7 @@ const hmapCenter = { x: 0, z: 0 };
 let _hmapPending = false;
 let _hmapNextRow = 0;
 let _hmapTargetX = 0, _hmapTargetZ = 0;
-let HMAP_ROWS_PER_FRAME = 16; // 16 rows × 128 cols = 2048 samples/frame → 8 frames total (halved in VR)
+let HMAP_ROWS_PER_FRAME = 16; // 16 rows × 128 cols = 2048 samples/frame → 8 frames total (reduced in VR)
 
 function updateHeightmap(cx, cz) {
   _hmapTargetX = cx;
@@ -99,7 +99,7 @@ function _tickHeightmap() {
     for (let ix = 0; ix < HMAP_RES; ix++) {
       const wx = _hmapTargetX - half + ix * step;
       const wz = _hmapTargetZ - half + iz * step;
-      hmapData[iz * HMAP_RES + ix] = getTerrainHeight(wx, wz);
+      hmapData[iz * HMAP_RES + ix] = getTerrainHeightApprox(wx, wz);
     }
   }
   _hmapNextRow = endRow;
@@ -782,7 +782,7 @@ const clock = new THREE.Clock();
   const step = HMAP_SIZE / HMAP_RES;
   for (let iz = 0; iz < HMAP_RES; iz++) {
     for (let ix = 0; ix < HMAP_RES; ix++) {
-      hmapData[iz * HMAP_RES + ix] = getTerrainHeight(-half + ix * step, -half + iz * step);
+      hmapData[iz * HMAP_RES + ix] = getTerrainHeightApprox(-half + ix * step, -half + iz * step);
     }
   }
   hmapTex.needsUpdate = true;
@@ -814,7 +814,7 @@ function onFrame() {
   if (hmDx * hmDx + hmDz * hmDz > 25) { // >5m moved
     updateHeightmap(pos.x, pos.z);
   }
-  HMAP_ROWS_PER_FRAME = inVR ? 8 : 16;
+  HMAP_ROWS_PER_FRAME = inVR ? 4 : 16;
   _tickHeightmap();
   // Deferred cottage density (1 chunk per frame)
   _tickCottageDensity();
@@ -826,7 +826,8 @@ function onFrame() {
   updateWind(delta);
 
   // Weather system (pass terrain height for snow-zone awareness)
-  const terrainAtPos = getTerrainHeight(pos.x, pos.z);
+  // Reuse the height already computed by movement this frame (avoids 13 noise evals)
+  const terrainAtPos = movement.playerTerrainY;
   weather.update(delta, dayNight.sunElevation, pos, windUniforms.uWindDirection.value, terrainAtPos);
   // Weather drives wind strength
   windUniforms.uWindStrength.value = weather.windMultiplier;
