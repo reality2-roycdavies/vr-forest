@@ -230,14 +230,15 @@ export class DayNightSystem {
           float illumination = smoothstep(-0.05, 0.10, dot(normal, sunDir));
           // Sample texture
           vec4 texColor = texture2D(moonMap, uv);
-          // Mix lit surface with dark earthshine (fades out during day)
+          // Mix lit surface with dark earthshine (fades out as sky brightens)
           vec3 earthshine = vec3(0.04, 0.04, 0.06) * (1.0 - skyBrightness);
           vec3 color = mix(earthshine, texColor.rgb, illumination);
-          // During day: wash lit side pale/bright to match sky luminance
+          // As sky brightens: wash lit side pale to match sky luminance
           color = mix(color, vec3(0.85, 0.87, 0.92), skyBrightness * 0.6);
-          // Shadow side fades to fully transparent against bright sky
-          float shadowAlpha = 1.0 - skyBrightness;
-          float pixelAlpha = mix(shadowAlpha, 1.0, illumination);
+          // Shadow side fades to transparent — starts early so dark patch
+          // doesn't stand out against twilight sky
+          float shadowFade = smoothstep(0.0, 0.5, skyBrightness);
+          float pixelAlpha = mix(1.0 - shadowFade, 1.0, illumination);
           // Soft disc edge (softer during day to avoid hard rim)
           float edgeSoftness = mix(0.9, 0.7, skyBrightness);
           float edge = smoothstep(1.0, edgeSoftness, dist2);
