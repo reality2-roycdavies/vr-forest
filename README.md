@@ -2,7 +2,7 @@
 
 A WebXR immersive experience of an infinite procedurally-generated forest with real-world day/night cycles, dynamic audio, wildlife, and atmospheric effects. Built entirely with Three.js and the Web Audio API — two external assets (morepork owl call, moon photograph), everything else procedurally generated.
 
-This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over seven days.
+This project was created using AI (Claude) as an educational exercise in human-AI collaborative development over ten days.
 
 **Try it now:** [https://reality2-roycdavies.github.io/vr-forest/](https://reality2-roycdavies.github.io/vr-forest/)
 
@@ -13,7 +13,7 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 | Document | Description |
 |----------|-------------|
 | [Beginner's Guide](GUIDE.md) | Technical primer for novice VR/AI developers — VR fundamentals, framerate, WebXR, Three.js, procedural generation, shaders, spatial audio, performance, and the AI-assisted workflow |
-| [Creation Process](CREATION_PROCESS.md) | Detailed narrative of how the project was built over four days, phase by phase, with a thematic analysis of the human-AI dialogue |
+| [Creation Process](CREATION_PROCESS.md) | Detailed narrative of the early build (Days 1–4), phase by phase, with a thematic analysis of the human-AI dialogue |
 
 ### Conversation Transcripts
 
@@ -34,10 +34,12 @@ Human-AI conversation logs from each development session (readable markdown, con
 | [Day 4, Session 1](transcripts/day4-01-cloud-diversity.md) | Cloud diversity, terrain shader refactor, wildlife legs |
 | [Day 4, Session 2](transcripts/day4-02-weather-system.md) | Weather system — architecture, rain particles, thunder, sky/fog tuning |
 | [Day 4, Session 3](transcripts/day4-03-weather-polish-stormy-water.md) | Weather polish — stormy water, rain audio, twilight fog, sun/moon cloud fade |
-| Day 5 | Mountain chains, snow/ski physics, altitude weather, performance optimisations |
-| Day 6 | Fallen logs/stumps, altitude audio, blizzard snow, fog tint |
-| Day 6, Session 2 | Rain canopy sheltering — rain blocked under trees with occasional drips |
-| Day 7 | Real constellation stars, moon phase fix, terrain-following birds, firefly/minimap fixes |
+| Day 5 | Mountain chains, snow/ski physics, altitude weather, VR performance optimisations |
+| Day 6 | Fallen logs/stumps, altitude audio, blizzard snow, real constellation stars, lightning bolts, altitude biome transitions |
+| Day 7 | Wind tuning, Auckland AR/VR meetup presentation |
+| Day 8 | VR terrain quality (anti-tile, boundary noise), water realism, cloud lighting, NZ tussock grass, VR performance |
+| Day 9 | Physically-traced river system, Milky Way band, VR foveation and LOD |
+| Day 10 | 2,865-star catalog with spectral colours, naked-eye planets (Keplerian ephemeris), river polish, VR dynamic resolution scaling |
 
 ## Features
 
@@ -59,6 +61,7 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Sandy shore zones with smooth colour transitions (wet sand → foam → dry sand)
 - Shore foam strip with marching-squares waterline contour, wave-driven lapping animation
 - Water edge transparency: surface fades at terrain boundary via heightmap texture
+- Physically-traced rivers: downhill path tracing from mountain sources with confluence merging, flow-based widening, terrain carving, and organic banks
 - Swimming physics: buoyancy, reduced speed, gentle bobbing, no jumping
 
 ### Three Procedural Tree Types
@@ -86,9 +89,13 @@ Human-AI conversation logs from each development session (readable markdown, con
 - Moon illumination direction computed from moon disc local axes (stable regardless of camera rotation)
 - Behind clouds: photo disc hidden, soft glow sprite shows hazy brightness through overcast
 - Subtle moonlight shadows at night via DirectionalLight crossfade (cool blue-white tint)
-- 438 real constellation stars with accurate J2000 equatorial positions (packed binary catalog)
+- 2,865 real stars (mag ≤ 5.5) with accurate J2000 equatorial positions and spectral colours from B-V index
 - Stars rotate correctly for observer's latitude, longitude, and local sidereal time — Southern Cross visible from southern hemisphere, constellations track across the sky
-- Custom ShaderMaterial with per-star brightness/size, soft circular points, and subtle GPU twinkling
+- Custom ShaderMaterial with per-star brightness/size/colour, soft circular points, and subtle GPU twinkling
+- Desktop/VR adaptive brightness (1.8x on monitors, 1.5x in headsets)
+- 5 naked-eye planets (Mercury, Venus, Mars, Jupiter, Saturn) computed from Keplerian orbital elements — real-time positions, characteristic colours, magnitude-based sizing
+- Venus and Jupiter visible during twilight; fainter planets appear only at night
+- Milky Way band with procedural starfield shader, dust lanes, and galactic structure
 - Progressive night sky darkening to near-black at deep night
 - Occasional shooting stars
 - Diverse cloud system: cumulus puffs, wispy cirrus bands, flat haze layers, and small puffy clusters at stratified altitudes with gentle billowing animation and wind-aligned drift
@@ -245,37 +252,40 @@ Then open `https://localhost:8000` in a WebXR-capable browser. For VR, an HTTPS 
 - **Rendering**: WebGL 2 with WebXR
 - **Textures**: All procedurally generated on HTML5 Canvas (moon photo loaded externally with procedural fallback)
 - **Geometry**: All built from Three.js primitives (no 3D models)
-- **Lines of code**: ~13,500 lines of JavaScript across 28 modules
+- **Lines of code**: ~16,800 lines of JavaScript across 30 modules
 
 ## Project Structure
 
 ```
 js/
-├── main.js              # Scene bootstrap, render loop, system orchestration
-├── config.js            # All tunable constants (~190 parameters)
-├── vr-setup.js          # WebXR renderer, camera rig, controllers
-├── input.js             # VR gamepad + keyboard/mouse input
-├── movement.js          # Player locomotion, physics, collision
+├── main.js                   # Scene bootstrap, render loop, system orchestration
+├── config.js                 # All tunable constants (~280 parameters)
+├── vr-setup.js               # WebXR renderer, camera rig, controllers
+├── input.js                  # VR gamepad + keyboard/mouse input
+├── movement.js               # Player locomotion, physics, collision
 ├── terrain/
-│   ├── chunk-manager.js # Dynamic chunk loading/unloading
-│   ├── chunk.js         # Per-chunk mesh + object placement
-│   ├── noise.js         # Seeded simplex noise (13 instances)
+│   ├── chunk-manager.js      # Dynamic chunk loading/unloading
+│   ├── chunk.js              # Per-chunk mesh + object placement
+│   ├── noise.js              # Seeded simplex noise (13 instances)
 │   ├── terrain-generator.js  # Height, colour, normal generation
-│   └── ground-material.js    # Shared ground material + texture
+│   ├── ground-material.js    # Shared ground material + texture
+│   └── river-tracer.js       # Physically-traced downhill river system
 ├── forest/
-│   ├── tree-factory.js  # 3 procedural tree geometries + materials
-│   ├── tree-pool.js     # InstancedMesh tree rendering
-│   ├── vegetation.js    # Grass, ferns (3 variants), flowers (3×6), rocks
-│   ├── textures.js      # Procedural canvas textures (bark, leaves, rock)
-│   ├── cottage-factory.js # Procedural log cabin geometry + materials
-│   ├── cottage-system.js  # Cottage pool, smoke particles, emissive windows
-│   ├── birds.js         # Bird flock visual + crow audio
-│   └── wildlife.js      # Bear, lion, Wally peek encounters
+│   ├── tree-factory.js       # 3 procedural tree geometries + materials
+│   ├── tree-pool.js          # InstancedMesh tree rendering
+│   ├── vegetation.js         # Grass, ferns (3 variants), flowers (3×6), rocks
+│   ├── textures.js           # Procedural canvas textures (bark, leaves, rock)
+│   ├── cottage-factory.js    # Procedural log cabin geometry + materials
+│   ├── cottage-system.js     # Cottage pool, smoke particles, emissive windows
+│   ├── collectibles.js       # Fairy orb collectibles with chime audio
+│   ├── birds.js              # Bird flock visual + crow audio
+│   └── wildlife.js           # Bear, lion, Wally peek encounters
 └── atmosphere/
-    ├── day-night.js     # Sun/moon/stars, sky dome, palettes, clouds
-    ├── star-catalog.js  # 438 real stars (mag ≤ 4.5) packed as binary catalog
-    ├── weather.js       # Weather state machine, rain particles, thunder, lightning
-    ├── audio.js         # All procedural audio (footsteps, crickets, morepork, etc.)
-    ├── fireflies.js     # Night-time glowing particles (forest areas only)
-    └── wind.js          # Vertex shader wind displacement
+    ├── day-night.js          # Sun/moon/stars/planets, sky dome, palettes, clouds
+    ├── star-catalog.js       # 2,865 real stars (mag ≤ 5.5) with spectral colours
+    ├── planet-ephemeris.js   # Keplerian orbital elements for 5 naked-eye planets
+    ├── weather.js            # Weather state machine, rain particles, thunder, lightning
+    ├── audio.js              # All procedural audio (footsteps, crickets, morepork, etc.)
+    ├── fireflies.js          # Night-time glowing particles (forest areas only)
+    └── wind.js               # Vertex shader wind displacement
 ```
