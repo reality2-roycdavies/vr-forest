@@ -435,6 +435,7 @@ export class DayNightSystem {
       uniforms: {
         uOpacity: { value: 1.0 },
         uTime: { value: 0.0 },
+        uBrightMul: { value: 1.8 },  // desktop boost; set to 1.0 in VR
       },
       vertexShader: `
         attribute float aSize;
@@ -456,6 +457,7 @@ export class DayNightSystem {
       fragmentShader: `
         uniform float uOpacity;
         uniform float uTime;
+        uniform float uBrightMul;
         varying float vBrightness;
         varying float vPhase;
         varying vec3 vColor;
@@ -475,7 +477,7 @@ export class DayNightSystem {
           // Color saturation increases toward the bright core
           vec3 col = mix(vec3(0.92, 0.92, 1.0), vColor, smoothstep(0.20, 0.04, d));
           // Boost brightness — intense points rather than large blobs
-          gl_FragColor = vec4(col * vBrightness * twinkle * 1.5,
+          gl_FragColor = vec4(col * vBrightness * twinkle * uBrightMul,
                               alpha * uOpacity);
         }
       `,
@@ -1430,8 +1432,9 @@ export class DayNightSystem {
    * @param {THREE.Camera} camera
    * @param {number} delta
    * @param {object} [weather] - WeatherSystem instance (optional)
+   * @param {boolean} [inVR] - true when presenting in VR headset
    */
-  update(playerPos, camera, delta, weather) {
+  update(playerPos, camera, delta, weather, inVR) {
     _now.setTime(Date.now());
     const now = _now;
     const { elevation, azimuth } = this._getSunPosition(now);
@@ -1537,6 +1540,7 @@ export class DayNightSystem {
     let starOpacity = Math.max(0, Math.min(1, (-elevation + 0.05) / 0.15));
     if (weather) starOpacity *= (1 - weather.starDimming);
     this.stars.material.uniforms.uOpacity.value = starOpacity;
+    this.stars.material.uniforms.uBrightMul.value = inVR ? 1.5 : 1.8;
     this.stars.material.uniforms.uTime.value += (delta || 0.016);
     this.stars.visible = elevation < 0.1 && starOpacity > 0.01;
     if (this.stars.visible) {

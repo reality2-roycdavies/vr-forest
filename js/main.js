@@ -895,7 +895,7 @@ function onFrame() {
   }
 
   // Update day/night cycle (sky, sun, lights, fog, clouds, moon)
-  dayNight.update(pos, vr.camera, delta, weather);
+  dayNight.update(pos, vr.camera, delta, weather, inVR);
 
   // Show time offset indicator (visible while adjusting, fades out after)
   const isAdjusting = input.timeAdjust !== 0;
