@@ -27,8 +27,8 @@
       "full_scene": false
     },
     "field": {
-      "desktop": false,
-      "quest3": false,
+      "desktop": true,
+      "quest3": true,
       "sustained": false
     }
   },
