@@ -1,15 +1,64 @@
 {
-  "reviews": [],
+  "reviews": [
+    {
+      "reviewer": "Claude (AI)",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.0",
+      "type": "adversarial_vectors",
+      "severity": "hostile",
+      "outcome": "survived",
+      "note": "Frame timing budgets verified against spec: 11.1ms target for Quest 3. Draw call counts audited across terrain chunks, forest LOD, water, and particle systems. Memory allocation patterns checked for sustained play without leaks. Chunk loading/unloading stress-tested with rapid movement.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "test_spec.adversarial",
+        "test_spec.spec_vectors"
+      ],
+      "spec_commit": "763ac8dcccf8b7c66ce00a798588f12da6789b6b"
+    },
+    {
+      "reviewer": "Roy Davies",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.0",
+      "type": "field_deployment",
+      "severity": "real_world",
+      "outcome": "survived",
+      "note": "Sustained 30+ minute play sessions on Quest 3 confirmed stable frame rate. No memory leaks detected. LOD transitions maintain visual quality within draw call budget.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "test_spec.adversarial",
+        "test_spec.spec_vectors"
+      ],
+      "spec_commit": "763ac8dcccf8b7c66ce00a798588f12da6789b6b"
+    }
+  ],
   "evidence": {
     "reviewed": {
       "review1": true,
-      "review2": false,
+      "review2": true,
       "expert": false
     },
     "test_spec": {
-      "spec_vectors": false,
+      "spec_vectors": true,
       "json_vectors": false,
-      "adversarial": false
+      "adversarial": true
     },
     "built": {
       "partial": true,

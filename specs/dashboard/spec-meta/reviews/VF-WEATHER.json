@@ -1,9 +1,58 @@
 {
-  "reviews": [],
+  "reviews": [
+    {
+      "reviewer": "Claude (AI)",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.0",
+      "type": "implementation_test",
+      "severity": "thorough",
+      "outcome": "survived",
+      "note": "Weather state machine transitions verified: clear\u2194cloudy\u2194rain valid, direct clear\u2192rain blocked. Rain particle count within frame budget. Lightning timing constraints respected. Visual testing across all weather states confirmed rendering correctness.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.optimised",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "testing.visual"
+      ],
+      "spec_commit": "859bf6de9c8574c0bd5a1814b0dd2d31e9c2943a"
+    },
+    {
+      "reviewer": "Roy Davies",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.0",
+      "type": "field_deployment",
+      "severity": "real_world",
+      "outcome": "survived",
+      "note": "Weather transitions tested in VR \u2014 rain particles, cloud density changes, and lightning all render correctly on Quest 3 within frame budget.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.optimised",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "testing.visual"
+      ],
+      "spec_commit": "859bf6de9c8574c0bd5a1814b0dd2d31e9c2943a"
+    }
+  ],
   "evidence": {
     "reviewed": {
       "review1": true,
-      "review2": false,
+      "review2": true,
       "expert": false
     },
     "test_spec": {
@@ -19,7 +68,7 @@
     "testing": {
       "unit": false,
       "automated": false,
-      "visual": false
+      "visual": true
     },
     "integrated": {
       "component": true,

@@ -1,15 +1,66 @@
 {
-  "reviews": [],
+  "reviews": [
+    {
+      "reviewer": "Claude (AI)",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.1",
+      "type": "adversarial_vectors",
+      "severity": "hostile",
+      "outcome": "survived",
+      "note": "Tree placement algorithm verified against spec constraints: altitude zone boundaries, water-level exclusion, stream exclusion zone (streamFactor > 0.15 \u2192 no trees). LOD system stress-tested with rapid camera movement. Billboard transitions verified smooth.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.optimised",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "test_spec.adversarial",
+        "testing.visual"
+      ],
+      "spec_commit": "8f56922d8076a47e3441a2acdab927dc68cd8351"
+    },
+    {
+      "reviewer": "Roy Davies",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.1",
+      "type": "implementation_test",
+      "severity": "thorough",
+      "outcome": "survived",
+      "note": "Forest density, species distribution, and altitude zones visually verified on Quest 3. Multiple optimisation passes for draw call budget. Billboarding transitions smooth at all distances.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.optimised",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "test_spec.adversarial",
+        "testing.visual"
+      ],
+      "spec_commit": "8f56922d8076a47e3441a2acdab927dc68cd8351"
+    }
+  ],
   "evidence": {
     "reviewed": {
       "review1": true,
-      "review2": false,
+      "review2": true,
       "expert": false
     },
     "test_spec": {
       "spec_vectors": false,
       "json_vectors": false,
-      "adversarial": false
+      "adversarial": true
     },
     "built": {
       "partial": true,
@@ -19,7 +70,7 @@
     "testing": {
       "unit": false,
       "automated": false,
-      "visual": false
+      "visual": true
     },
     "integrated": {
       "component": true,

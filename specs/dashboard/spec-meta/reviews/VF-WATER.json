@@ -1,15 +1,66 @@
 {
-  "reviews": [],
+  "reviews": [
+    {
+      "reviewer": "Claude (AI)",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.1",
+      "type": "adversarial_vectors",
+      "severity": "thorough",
+      "outcome": "survived",
+      "note": "Water plane rendering tested against spec: wave displacement amplitude, shore foam thresholds, water-terrain boundary precision. Adversarial: edge cases where terrain height equals WATER_LEVEL exactly.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.optimised",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "test_spec.adversarial",
+        "testing.visual"
+      ],
+      "spec_commit": "8f56922d8076a47e3441a2acdab927dc68cd8351"
+    },
+    {
+      "reviewer": "Roy Davies",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.1",
+      "type": "field_deployment",
+      "severity": "real_world",
+      "outcome": "survived",
+      "note": "Water rendering verified in VR headset \u2014 shore foam, reflections, and wave motion all visually correct. No z-fighting at water-terrain boundary.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.optimised",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "test_spec.adversarial",
+        "testing.visual"
+      ],
+      "spec_commit": "8f56922d8076a47e3441a2acdab927dc68cd8351"
+    }
+  ],
   "evidence": {
     "reviewed": {
       "review1": true,
-      "review2": false,
+      "review2": true,
       "expert": false
     },
     "test_spec": {
       "spec_vectors": false,
       "json_vectors": false,
-      "adversarial": false
+      "adversarial": true
     },
     "built": {
       "partial": true,
@@ -19,7 +70,7 @@
     "testing": {
       "unit": false,
       "automated": false,
-      "visual": false
+      "visual": true
     },
     "integrated": {
       "component": true,

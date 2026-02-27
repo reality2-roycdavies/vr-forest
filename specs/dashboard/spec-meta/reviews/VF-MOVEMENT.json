@@ -1,9 +1,58 @@
 {
-  "reviews": [],
+  "reviews": [
+    {
+      "reviewer": "Claude (AI)",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.0",
+      "type": "implementation_test",
+      "severity": "thorough",
+      "outcome": "survived",
+      "note": "Terrain-following locomotion verified: player height tracks terrain heightmap correctly. Collision with water level enforced. VR controller thumbstick input mapped per spec. Visual testing confirmed smooth movement across terrain transitions.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.optimised",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "testing.visual"
+      ],
+      "spec_commit": "69af60cb5a73f0b10a1213649ee8a2bece0449a3"
+    },
+    {
+      "reviewer": "Roy Davies",
+      "date": "2026-02-27",
+      "status": "approved",
+      "version": "1.0",
+      "type": "field_deployment",
+      "severity": "real_world",
+      "outcome": "survived",
+      "note": "Movement tested extensively in VR headset \u2014 terrain following, speed, and controller input all feel natural. No motion sickness from height tracking errors.",
+      "evidence_snapshot": [
+        "built.complete",
+        "built.optimised",
+        "built.partial",
+        "field.desktop",
+        "field.quest3",
+        "integrated.component",
+        "integrated.cross_system",
+        "integrated.full_scene",
+        "reviewed.review1",
+        "reviewed.review2",
+        "testing.visual"
+      ],
+      "spec_commit": "69af60cb5a73f0b10a1213649ee8a2bece0449a3"
+    }
+  ],
   "evidence": {
     "reviewed": {
       "review1": true,
-      "review2": false,
+      "review2": true,
       "expert": false
     },
     "test_spec": {
@@ -19,7 +68,7 @@
     "testing": {
       "unit": false,
       "automated": false,
-      "visual": false
+      "visual": true
     },
     "integrated": {
       "component": true,
