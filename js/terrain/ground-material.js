@@ -82,11 +82,11 @@ export function getGroundMaterial() {
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute float treeDensity;\nvarying float vTreeDensity;\nattribute float cottageDensity;\nvarying float vCottageDensity;\nattribute float streamChannel;\nvarying float vStreamChannel;\nattribute vec2 streamFlowDir;\nvarying vec2 vStreamFlowDir;'
+        '#include <common>\nvarying vec3 vWorldPos;\nvarying vec3 vWorldNormal;\nattribute float treeDensity;\nvarying float vTreeDensity;\nattribute float cottageDensity;\nvarying float vCottageDensity;\nattribute float streamChannel;\nvarying float vStreamChannel;\nattribute vec2 streamFlowDir;\nvarying vec2 vStreamFlowDir;\nvarying float vFlowAlong;\nvarying float vFlowAcross;'
       );
       shader.vertexShader = shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;\nvCottageDensity = cottageDensity;\nvStreamChannel = streamChannel;\nvStreamFlowDir = streamFlowDir;\nvWorldNormal = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);'
+        '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvTreeDensity = treeDensity;\nvCottageDensity = cottageDensity;\nvStreamChannel = streamChannel;\nvStreamFlowDir = streamFlowDir;\nvWorldNormal = normalize((modelMatrix * vec4(objectNormal, 0.0)).xyz);\n{ float fLen = length(streamFlowDir); vec2 fDir = fLen > 0.01 ? streamFlowDir / fLen : vec2(0.0, -1.0); vFlowAlong = dot(vWorldPos.xz, fDir); vFlowAcross = dot(vWorldPos.xz, vec2(-fDir.y, fDir.x)); }'
       );
 
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -127,6 +127,8 @@ export function getGroundMaterial() {
          varying float vCottageDensity;
          varying float vStreamChannel;
          varying vec2 vStreamFlowDir;
+         varying float vFlowAlong;
+         varying float vFlowAcross;
 
          // Per-pixel value noise for dirt patches (no triangle artifacts)
          // Sin-free hash: sin(large_arg) loses precision on mobile GPUs (Quest)
@@ -329,42 +331,34 @@ export function getGroundMaterial() {
          streamFactor *= riverAltFade;
          bankFactor *= riverAltFade;
 
-         // Water core — the flowing center of the channel
-         // Tight threshold so animation stays on the riverbed, not up the banks
-         float waterCore = smoothstep(0.55, 0.85, vStreamChannel) * riverAltFade;
+         // Water core — flowing animated water (visible across most of channel)
+         float waterCore = smoothstep(0.15, 0.45, vStreamChannel) * riverAltFade;
 
          // Channel banks — dark wet rock across entire bank (all in water channel)
          if (bankFactor > 0.01) {
            vec3 bankRock = _antiTileSample(rockMap, vWorldPos.xz * 0.25 * 0.7);
-           vec3 bankRockColor = bankRock * vec3(0.08, 0.11, 0.16) * uWaterDarken;
+           vec3 bankRockColor = bankRock * vec3(0.18, 0.16, 0.12) * uWaterDarken;
            terrainColor = mix(terrainColor, bankRockColor, bankFactor);
          }
          if (waterCore > 0.01) {
-           vec2 tracedDir = vStreamFlowDir;
-           float tracedLen = length(tracedDir);
-           vec3 nrm = normalize(vWorldNormal);
-           vec2 flowDir = tracedLen > 0.3
-             ? normalize(tracedDir)
-             : (length(nrm.xz) > 0.01 ? normalize(-nrm.xz) : vec2(0.0, -1.0));
-           vec2 perpDir = vec2(-flowDir.y, flowDir.x);
+           // Flow coordinates computed per-vertex (vFlowAlong/vFlowAcross) —
+           // linear interpolation across triangles avoids seams at shared edges
 
-           float along = dot(vWorldPos.xz, flowDir);
-           float across = dot(vWorldPos.xz, perpDir);
+           // Gentle noise warp for organic variation
+           float bpN = _vnoise(vWorldPos.xz * 0.3) * 1.5
+                      + _vnoise(vWorldPos.xz * 0.8 + 50.0) * 0.8;
+           float bAlong = vFlowAlong + bpN;
+           float bAcross = vFlowAcross + bpN * 0.3;
 
-           // Noise-warped coordinates to break sine regularity
-           float bpN = _vnoise(vWorldPos.xz * 0.4) * 5.0;
-           float bAlong = along + bpN;
-           float bAcross = across + bpN * 0.3;
-
-           // Fine-scale continuous sine-wave scroll for water surface
-           float bedW1 = sin(bAlong * 12.0 - uTime * 6.0 + bAcross * 2.0) * 0.5 + 0.5;
-           float bedW2 = sin(bAlong * 20.0 - uTime * 10.0 - bAcross * 3.0 + 7.0) * 0.5 + 0.5;
-           float bedW3 = sin(bAlong * 35.0 - uTime * 16.0 + bAcross * 5.0 + 13.0) * 0.5 + 0.5;
+           // Flowing water — predominantly downstream, subtle cross-river wobble
+           float bedW1 = sin(bAlong * 6.0 - uTime * 3.5 + bAcross * 0.8) * 0.5 + 0.5;
+           float bedW2 = sin(bAlong * 11.0 - uTime * 5.5 - bAcross * 0.5 + 7.0) * 0.5 + 0.5;
+           float bedW3 = sin(bAlong * 18.0 - uTime * 8.0 + bAcross * 0.3 + 13.0) * 0.5 + 0.5;
            float flowPattern = bedW1 * 0.4 + bedW2 * 0.35 + bedW3 * 0.25;
 
-           // Dark water with flowing light/dark variation
-           vec3 riverColor = vec3(0.06, 0.12, 0.18) * uWaterDarken;
-           riverColor += (flowPattern - 0.5) * 0.18 * uWaterDarken;
+           // Stream water with flowing light/dark variation
+           vec3 riverColor = vec3(0.14, 0.24, 0.32) * uWaterDarken;
+           riverColor += (flowPattern - 0.5) * 0.14 * uWaterDarken;
 
            terrainColor = mix(terrainColor, riverColor, waterCore);
          }

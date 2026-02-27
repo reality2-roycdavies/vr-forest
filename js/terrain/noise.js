@@ -2,6 +2,7 @@
 import { createNoise2D } from 'simplex-noise';
 import { CONFIG } from '../config.js';
 import { getRiverCarving } from './river-tracer.js';
+export { getRiverFactor as getStreamFactor, getRiverFlowDir } from './river-tracer.js';
 
 // Simple seeded PRNG (mulberry32)
 function mulberry32(seed) {
@@ -75,6 +76,19 @@ export function fractalNoise(x, z, scale, octaves, persistence, lacunarity) {
 }
 
 /**
+ * Shared valley channel noise — domain-warped ridge noise encoding stream presence.
+ * Returns 0..1 where 1 = channel centre. Used by terrain carving and stream factor.
+ */
+function _getValleyChannel(worldX, worldZ) {
+  const vWarpX = warpNoise2D(worldX * 0.006, worldZ * 0.006) * CONFIG.VALLEY_WARP;
+  const vWarpZ = warpNoise2D(worldX * 0.006 + 100, worldZ * 0.006 + 100) * CONFIG.VALLEY_WARP;
+  const vRaw = streamNoise2D((worldX + vWarpX) * CONFIG.VALLEY_SCALE,
+                              (worldZ + vWarpZ) * CONFIG.VALLEY_SCALE);
+  const vRidge = 1 - Math.abs(vRaw);
+  return Math.pow(vRidge, CONFIG.VALLEY_SHARPNESS);
+}
+
+/**
  * Get base terrain height (no river carving).
  * Used by river tracer to find downhill paths, and by getTerrainHeight as the starting point.
  */
@@ -89,11 +103,7 @@ export function getBaseTerrainHeight(worldX, worldZ) {
   ) * CONFIG.TERRAIN_HEIGHT;
 
   // Valley carving — domain-warped ridge noise creates landscape valleys and lakes
-  const vWarpX = warpNoise2D(worldX * 0.006, worldZ * 0.006) * CONFIG.VALLEY_WARP;
-  const vWarpZ = warpNoise2D(worldX * 0.006 + 100, worldZ * 0.006 + 100) * CONFIG.VALLEY_WARP;
-  const vRaw = streamNoise2D((worldX + vWarpX) * CONFIG.VALLEY_SCALE, (worldZ + vWarpZ) * CONFIG.VALLEY_SCALE);
-  const vRidge = 1 - Math.abs(vRaw);
-  const vChannel = Math.pow(vRidge, CONFIG.VALLEY_SHARPNESS);
+  const vChannel = _getValleyChannel(worldX, worldZ);
   const normalizedH = (baseHeight / CONFIG.TERRAIN_HEIGHT + 1) * 0.5;
   const carveMask = Math.max(0, 1 - normalizedH * 0.8);
   const valleyCarvedHeight = baseHeight - vChannel * CONFIG.VALLEY_DEPTH * carveMask;
@@ -160,11 +170,7 @@ export function getTerrainHeightApprox(worldX, worldZ) {
     CONFIG.TERRAIN_LACUNARITY
   ) * CONFIG.TERRAIN_HEIGHT;
 
-  const vWarpX = warpNoise2D(worldX * 0.006, worldZ * 0.006) * CONFIG.VALLEY_WARP;
-  const vWarpZ = warpNoise2D(worldX * 0.006 + 100, worldZ * 0.006 + 100) * CONFIG.VALLEY_WARP;
-  const vRaw = streamNoise2D((worldX + vWarpX) * CONFIG.VALLEY_SCALE, (worldZ + vWarpZ) * CONFIG.VALLEY_SCALE);
-  const vRidge = 1 - Math.abs(vRaw);
-  const vChannel = Math.pow(vRidge, CONFIG.VALLEY_SHARPNESS);
+  const vChannel = _getValleyChannel(worldX, worldZ);
   const normalizedH = (baseHeight / CONFIG.TERRAIN_HEIGHT + 1) * 0.5;
   const carveMask = Math.max(0, 1 - normalizedH * 0.8);
   return baseHeight - vChannel * CONFIG.VALLEY_DEPTH * carveMask;
@@ -250,14 +256,6 @@ export function getLogDensity(worldX, worldZ) {
 export function getCottageDensity(worldX, worldZ) {
   return cottageNoise2D(worldX * 0.02, worldZ * 0.02);
 }
-
-/**
- * Stream/river factor — rivers disabled.
- * Original: export { getRiverFactor as getStreamFactor, getRiverFlowDir } from './river-tracer.js';
- */
-const _zeroFlowDir = [0, 0];
-export function getStreamFactor(/* worldX, worldZ */) { return 0; }
-export function getRiverFlowDir(/* worldX, worldZ */) { return _zeroFlowDir; }
 
 /**
  * Jitter noise for river-tracer source point jittering (deterministic).

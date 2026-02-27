@@ -117,10 +117,9 @@ export const CONFIG = {
   VALLEY_DEPTH: 6.0,              // max carving depth
   VALLEY_WARP: 22,                // domain warp for meander
   VALLEY_SHARPNESS: 2,            // power exponent (higher = narrower valleys)
-
   // Rivers (physically-traced downhill from mountain sources)
   RIVER_SOURCE_SPACING: 64,       // source candidate grid (meters, denser for high-altitude valleys)
-  RIVER_SOURCE_MIN_ALT: 12,       // min base terrain height for sources (mountain zone)
+  RIVER_SOURCE_MIN_ALT: 12,       // min base terrain height for sources (subalpine zone)
   RIVER_STEP_SIZE: 4.0,           // trace step (meters)
   RIVER_GRAD_EPS: 2.0,            // gradient central-difference epsilon
   RIVER_MAX_STEPS: 500,           // max steps per river
