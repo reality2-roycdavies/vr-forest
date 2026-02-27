@@ -22,9 +22,9 @@
       "visual": false
     },
     "integrated": {
-      "component": false,
-      "cross_system": false,
-      "full_scene": false
+      "component": true,
+      "cross_system": true,
+      "full_scene": true
     },
     "field": {
       "desktop": true,
