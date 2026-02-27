@@ -56,6 +56,16 @@ Six evidence columns, each with 3 signals. Overall confidence is the weighted av
 | Green | 0.60 – 0.84 | Survived multiple refutations |
 | Full | >= 0.85 | Battle-tested |
 
+## Updating Evidence
+
+The normal workflow is conversational — tell [Claude Code](https://claude.ai/claude-code) what you've verified and it updates the dashboard for you:
+
+> "all specs have survived VR testing on desktop and Quest 3"
+> "VF-TERRAIN has unit tests passing now"
+> "I've reviewed all the specs"
+
+Claude runs the `review.py` CLI commands, rebuilds the dashboard, and pushes. You can also run the CLI directly:
+
 ## CLI Usage
 
 ```bash
