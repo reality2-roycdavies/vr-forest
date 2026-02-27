@@ -14,7 +14,7 @@ Open this link in your VR headset's browser (Quest, Pico, etc.) and tap "Enter V
 |----------|-------------|
 | [Beginner's Guide](GUIDE.md) | Technical primer for novice VR/AI developers — VR fundamentals, framerate, WebXR, Three.js, procedural generation, shaders, spatial audio, performance, and the AI-assisted workflow |
 | [Creation Process](CREATION_PROCESS.md) | Detailed narrative of the early build (Days 1–4), phase by phase, with a thematic analysis of the human-AI dialogue |
-| [Specifications](specs/) | 14 modular specs (VF-OVERVIEW through VF-VERIFY) with RFC 2119 language, dependency graph, and [confidence dashboard](specs/dashboard/) |
+| [Specifications](specs/) | 14 modular specs (VF-OVERVIEW through VF-VERIFY) with RFC 2119 language, dependency graph, and [confidence dashboard](https://reality2-roycdavies.github.io/vr-forest/specs/dashboard/) |
 
 ### Conversation Transcripts
 
