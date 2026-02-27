@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:report": "vitest run --reporter=json --outputFile=specs/testing/results/vitest-results.json"
+  },
+  "devDependencies": {
+    "simplex-noise": "4.0.3",
+    "vitest": "^3.0.0"
+  }
+}

@@ -41,8 +41,8 @@
       "optimised": false
     },
     "testing": {
-      "unit": false,
-      "automated": false,
+      "unit": true,
+      "automated": true,
       "visual": false
     },
     "integrated": {

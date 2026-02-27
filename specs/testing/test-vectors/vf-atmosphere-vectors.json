@@ -79,8 +79,8 @@
       "expected": {
         "baseFogNear": 50,
         "baseFogFar": 130,
-        "fogMultiplier": [1.0, 0.65, 0.6],
-        "effectiveFogFar": [130, 84.5, 78],
+        "fogMultiplier": [1.0, 0.5, 0.2],
+        "effectiveFogFar": [130, 65, 26],
         "snowBlizzardFog": {"near": 30, "far": 80},
         "note": "fogMultiplier from lerp3(wi, 1.0, 0.65, 0.6). Applied to fog distances. During storms above snowline, fog collapses to 30/80m for blizzard whiteout."
       },

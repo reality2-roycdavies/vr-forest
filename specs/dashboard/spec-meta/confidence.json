@@ -1,16 +1,16 @@
 {
   "VF-CONFIG": {
-    "confidence": 0.56,
+    "confidence": 0.69,
     "cells": {
       "reviewed": 0.7,
       "test_spec": 0.35,
       "built": 0.7,
-      "testing": 0.0,
+      "testing": 0.7,
       "integrated": 1.0,
       "field": 0.7
     },
     "penalties": [],
-    "needs_attention": true,
+    "needs_attention": false,
     "inherited_drops": []
   },
   "VF-OVERVIEW": {
@@ -28,326 +28,243 @@
     "inherited_drops": []
   },
   "VF-ARCH": {
-    "confidence": 0.42,
-    "cells": {
-      "reviewed": 0.6,
-      "test_spec": 0.0,
-      "built": 0.6,
-      "testing": 0.0,
-      "integrated": 0.86,
-      "field": 0.6
-    },
-    "penalties": [
-      "Inherited drop from VF-OVERVIEW, VF-CONFIG: -14.2%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-OVERVIEW",
-        "dep_confidence": 0.49
-      },
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      }
-    ]
-  },
-  "VF-TERRAIN": {
-    "confidence": 0.62,
-    "cells": {
-      "reviewed": 0.59,
-      "test_spec": 0.55,
-      "built": 0.85,
-      "testing": 0.25,
-      "integrated": 0.85,
-      "field": 0.59
-    },
-    "penalties": [
-      "Inherited drop from VF-CONFIG, VF-ARCH: -15.3%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      },
-      {
-        "from": "VF-ARCH",
-        "dep_confidence": 0.42
-      }
-    ]
-  },
-  "VF-ATMOSPHERE": {
-    "confidence": 0.64,
-    "cells": {
-      "reviewed": 0.61,
-      "test_spec": 0.57,
-      "built": 0.88,
-      "testing": 0.26,
-      "integrated": 0.88,
-      "field": 0.61
-    },
-    "penalties": [
-      "Inherited drop from VF-CONFIG: -12.4%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      }
-    ]
-  },
-  "VF-AUDIO": {
-    "confidence": 0.49,
-    "cells": {
-      "reviewed": 0.62,
-      "test_spec": 0.31,
-      "built": 0.62,
-      "testing": 0.0,
-      "integrated": 0.88,
-      "field": 0.62
-    },
-    "penalties": [
-      "Inherited drop from VF-CONFIG: -12.0%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      }
-    ]
-  },
-  "VF-COLLECTIBLES": {
-    "confidence": 0.47,
-    "cells": {
-      "reviewed": 0.6,
-      "test_spec": 0.0,
-      "built": 0.6,
-      "testing": 0.26,
-      "integrated": 0.86,
-      "field": 0.6
-    },
-    "penalties": [
-      "Inherited drop from VF-CONFIG, VF-ARCH, VF-AUDIO: -13.8%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      },
-      {
-        "from": "VF-ARCH",
-        "dep_confidence": 0.42
-      },
-      {
-        "from": "VF-AUDIO",
-        "dep_confidence": 0.49
-      }
-    ]
-  },
-  "VF-FOREST": {
-    "confidence": 0.58,
-    "cells": {
-      "reviewed": 0.62,
-      "test_spec": 0.26,
-      "built": 0.88,
-      "testing": 0.26,
-      "integrated": 0.88,
-      "field": 0.62
-    },
-    "penalties": [
-      "Inherited drop from VF-CONFIG: -12.1%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      }
-    ]
-  },
-  "VF-MOVEMENT": {
-    "confidence": 0.54,
-    "cells": {
-      "reviewed": 0.62,
-      "test_spec": 0.0,
-      "built": 0.88,
-      "testing": 0.26,
-      "integrated": 0.88,
-      "field": 0.62
-    },
-    "penalties": [
-      "Inherited drop from VF-CONFIG, VF-FOREST: -11.8%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      },
-      {
-        "from": "VF-FOREST",
-        "dep_confidence": 0.58
-      }
-    ]
-  },
-  "VF-PERFORMANCE": {
-    "confidence": 0.54,
-    "cells": {
-      "reviewed": 0.61,
-      "test_spec": 0.57,
-      "built": 0.61,
-      "testing": 0.0,
-      "integrated": 0.87,
-      "field": 0.61
-    },
-    "penalties": [
-      "Inherited drop from VF-CONFIG, VF-ARCH, VF-FOREST: -12.7%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      },
-      {
-        "from": "VF-ARCH",
-        "dep_confidence": 0.42
-      },
-      {
-        "from": "VF-FOREST",
-        "dep_confidence": 0.58
-      }
-    ]
-  },
-  "VF-VERIFY": {
     "confidence": 0.43,
     "cells": {
       "reviewed": 0.61,
       "test_spec": 0.0,
       "built": 0.61,
       "testing": 0.0,
-      "integrated": 0.87,
+      "integrated": 0.88,
       "field": 0.61
     },
     "penalties": [
-      "Inherited drop from VF-FOREST, VF-WILDLIFE, VF-AUDIO, VF-MOVEMENT, VF-COLLECTIBLES, VF-PERFORMANCE, VF-CONFIG: -12.9%"
+      "Inherited drop from VF-OVERVIEW: -12.3%"
     ],
     "needs_attention": true,
     "inherited_drops": [
       {
-        "from": "VF-FOREST",
-        "dep_confidence": 0.58
+        "from": "VF-OVERVIEW",
+        "dep_confidence": 0.49
+      }
+    ]
+  },
+  "VF-TERRAIN": {
+    "confidence": 0.75,
+    "cells": {
+      "reviewed": 0.61,
+      "test_spec": 0.56,
+      "built": 0.87,
+      "testing": 0.87,
+      "integrated": 0.87,
+      "field": 0.61
+    },
+    "penalties": [
+      "Inherited drop from VF-ARCH: -13.2%"
+    ],
+    "needs_attention": true,
+    "inherited_drops": [
+      {
+        "from": "VF-ARCH",
+        "dep_confidence": 0.43
+      }
+    ]
+  },
+  "VF-ATMOSPHERE": {
+    "confidence": 0.79,
+    "cells": {
+      "reviewed": 0.64,
+      "test_spec": 0.59,
+      "built": 0.91,
+      "testing": 0.91,
+      "integrated": 0.91,
+      "field": 0.64
+    },
+    "penalties": [],
+    "needs_attention": false,
+    "inherited_drops": []
+  },
+  "VF-AUDIO": {
+    "confidence": 0.51,
+    "cells": {
+      "reviewed": 0.64,
+      "test_spec": 0.32,
+      "built": 0.64,
+      "testing": 0.0,
+      "integrated": 0.91,
+      "field": 0.64
+    },
+    "penalties": [],
+    "needs_attention": true,
+    "inherited_drops": []
+  },
+  "VF-COLLECTIBLES": {
+    "confidence": 0.48,
+    "cells": {
+      "reviewed": 0.62,
+      "test_spec": 0.0,
+      "built": 0.62,
+      "testing": 0.26,
+      "integrated": 0.88,
+      "field": 0.62
+    },
+    "penalties": [
+      "Inherited drop from VF-ARCH, VF-AUDIO: -12.1%"
+    ],
+    "needs_attention": true,
+    "inherited_drops": [
+      {
+        "from": "VF-ARCH",
+        "dep_confidence": 0.43
       },
+      {
+        "from": "VF-AUDIO",
+        "dep_confidence": 0.51
+      }
+    ]
+  },
+  "VF-FOREST": {
+    "confidence": 0.73,
+    "cells": {
+      "reviewed": 0.64,
+      "test_spec": 0.28,
+      "built": 0.92,
+      "testing": 0.92,
+      "integrated": 0.92,
+      "field": 0.64
+    },
+    "penalties": [],
+    "needs_attention": false,
+    "inherited_drops": []
+  },
+  "VF-MOVEMENT": {
+    "confidence": 0.56,
+    "cells": {
+      "reviewed": 0.65,
+      "test_spec": 0.0,
+      "built": 0.92,
+      "testing": 0.28,
+      "integrated": 0.92,
+      "field": 0.65
+    },
+    "penalties": [],
+    "needs_attention": true,
+    "inherited_drops": []
+  },
+  "VF-PERFORMANCE": {
+    "confidence": 0.56,
+    "cells": {
+      "reviewed": 0.63,
+      "test_spec": 0.59,
+      "built": 0.63,
+      "testing": 0.0,
+      "integrated": 0.91,
+      "field": 0.63
+    },
+    "penalties": [
+      "Inherited drop from VF-ARCH: -9.3%"
+    ],
+    "needs_attention": true,
+    "inherited_drops": [
+      {
+        "from": "VF-ARCH",
+        "dep_confidence": 0.43
+      }
+    ]
+  },
+  "VF-VERIFY": {
+    "confidence": 0.44,
+    "cells": {
+      "reviewed": 0.63,
+      "test_spec": 0.0,
+      "built": 0.63,
+      "testing": 0.0,
+      "integrated": 0.9,
+      "field": 0.63
+    },
+    "penalties": [
+      "Inherited drop from VF-WILDLIFE, VF-AUDIO, VF-MOVEMENT, VF-COLLECTIBLES, VF-PERFORMANCE: -10.5%"
+    ],
+    "needs_attention": true,
+    "inherited_drops": [
       {
         "from": "VF-WILDLIFE",
         "dep_confidence": 0.55
       },
       {
         "from": "VF-AUDIO",
-        "dep_confidence": 0.49
+        "dep_confidence": 0.51
       },
       {
         "from": "VF-MOVEMENT",
-        "dep_confidence": 0.54
+        "dep_confidence": 0.56
       },
       {
         "from": "VF-COLLECTIBLES",
-        "dep_confidence": 0.47
+        "dep_confidence": 0.48
       },
       {
         "from": "VF-PERFORMANCE",
-        "dep_confidence": 0.54
-      },
-      {
-        "from": "VF-CONFIG",
         "dep_confidence": 0.56
       }
     ]
   },
   "VF-WATER": {
-    "confidence": 0.58,
+    "confidence": 0.73,
+    "cells": {
+      "reviewed": 0.64,
+      "test_spec": 0.28,
+      "built": 0.92,
+      "testing": 0.92,
+      "integrated": 0.92,
+      "field": 0.64
+    },
+    "penalties": [],
+    "needs_attention": false,
+    "inherited_drops": []
+  },
+  "VF-WEATHER": {
+    "confidence": 0.66,
     "cells": {
       "reviewed": 0.62,
-      "test_spec": 0.26,
-      "built": 0.88,
-      "testing": 0.26,
-      "integrated": 0.88,
+      "test_spec": 0.0,
+      "built": 0.89,
+      "testing": 0.89,
+      "integrated": 0.89,
       "field": 0.62
     },
     "penalties": [
-      "Inherited drop from VF-CONFIG: -12.1%"
+      "Inherited drop from VF-ARCH, VF-AUDIO: -11.1%"
     ],
     "needs_attention": true,
     "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      }
-    ]
-  },
-  "VF-WEATHER": {
-    "confidence": 0.53,
-    "cells": {
-      "reviewed": 0.6,
-      "test_spec": 0.0,
-      "built": 0.86,
-      "testing": 0.26,
-      "integrated": 0.86,
-      "field": 0.6
-    },
-    "penalties": [
-      "Inherited drop from VF-CONFIG, VF-ARCH, VF-WATER, VF-AUDIO: -13.9%"
-    ],
-    "needs_attention": true,
-    "inherited_drops": [
-      {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      },
       {
         "from": "VF-ARCH",
-        "dep_confidence": 0.42
-      },
-      {
-        "from": "VF-WATER",
-        "dep_confidence": 0.58
+        "dep_confidence": 0.43
       },
       {
         "from": "VF-AUDIO",
-        "dep_confidence": 0.49
+        "dep_confidence": 0.51
       }
     ]
   },
   "VF-WILDLIFE": {
-    "confidence": 0.48,
+    "confidence": 0.5,
     "cells": {
-      "reviewed": 0.61,
+      "reviewed": 0.64,
       "test_spec": 0.0,
-      "built": 0.61,
-      "testing": 0.26,
-      "integrated": 0.87,
-      "field": 0.61
+      "built": 0.64,
+      "testing": 0.27,
+      "integrated": 0.91,
+      "field": 0.64
     },
     "penalties": [
-      "Inherited drop from VF-CONFIG, VF-AUDIO, VF-FOREST: -12.7%"
+      "Inherited drop from VF-AUDIO: -9.2%"
     ],
     "needs_attention": true,
     "inherited_drops": [
       {
-        "from": "VF-CONFIG",
-        "dep_confidence": 0.56
-      },
-      {
         "from": "VF-AUDIO",
-        "dep_confidence": 0.49
-      },
-      {
-        "from": "VF-FOREST",
-        "dep_confidence": 0.58
+        "dep_confidence": 0.51
       }
     ]
   }

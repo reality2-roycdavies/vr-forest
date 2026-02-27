@@ -34,7 +34,7 @@
       "type": "field_deployment",
       "severity": "real_world",
       "outcome": "survived",
-      "note": "Night sky verified in VR headset \u2014 star positions, moon phases, planet visibility all correct. Day-night transitions smooth. Sun/moon arc follows spec orbital parameters.",
+      "note": "Night sky verified in VR headset — star positions, moon phases, planet visibility all correct. Day-night transitions smooth. Sun/moon arc follows spec orbital parameters.",
       "evidence_snapshot": [
         "built.complete",
         "built.optimised",
@@ -70,8 +70,8 @@
       "optimised": true
     },
     "testing": {
-      "unit": false,
-      "automated": false,
+      "unit": true,
+      "automated": true,
       "visual": true
     },
     "integrated": {

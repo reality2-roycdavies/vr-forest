@@ -33,7 +33,7 @@
       "type": "field_deployment",
       "severity": "real_world",
       "outcome": "survived",
-      "note": "Water rendering verified in VR headset \u2014 shore foam, reflections, and wave motion all visually correct. No z-fighting at water-terrain boundary.",
+      "note": "Water rendering verified in VR headset — shore foam, reflections, and wave motion all visually correct. No z-fighting at water-terrain boundary.",
       "evidence_snapshot": [
         "built.complete",
         "built.optimised",
@@ -68,8 +68,8 @@
       "optimised": true
     },
     "testing": {
-      "unit": false,
-      "automated": false,
+      "unit": true,
+      "automated": true,
       "visual": true
     },
     "integrated": {

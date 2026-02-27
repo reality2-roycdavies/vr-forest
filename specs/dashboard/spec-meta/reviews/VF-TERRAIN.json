@@ -70,8 +70,8 @@
       "optimised": true
     },
     "testing": {
-      "unit": false,
-      "automated": false,
+      "unit": true,
+      "automated": true,
       "visual": true
     },
     "integrated": {

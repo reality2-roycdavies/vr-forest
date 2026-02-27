@@ -8,7 +8,7 @@
       "type": "adversarial_vectors",
       "severity": "hostile",
       "outcome": "survived",
-      "note": "Tree placement algorithm verified against spec constraints: altitude zone boundaries, water-level exclusion, stream exclusion zone (streamFactor > 0.15 \u2192 no trees). LOD system stress-tested with rapid camera movement. Billboard transitions verified smooth.",
+      "note": "Tree placement algorithm verified against spec constraints: altitude zone boundaries, water-level exclusion, stream exclusion zone (streamFactor > 0.15 → no trees). LOD system stress-tested with rapid camera movement. Billboard transitions verified smooth.",
       "evidence_snapshot": [
         "built.complete",
         "built.optimised",
@@ -68,8 +68,8 @@
       "optimised": true
     },
     "testing": {
-      "unit": false,
-      "automated": false,
+      "unit": true,
+      "automated": true,
       "visual": true
     },
     "integrated": {

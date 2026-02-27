@@ -8,7 +8,7 @@
       "type": "implementation_test",
       "severity": "thorough",
       "outcome": "survived",
-      "note": "Weather state machine transitions verified: clear\u2194cloudy\u2194rain valid, direct clear\u2192rain blocked. Rain particle count within frame budget. Lightning timing constraints respected. Visual testing across all weather states confirmed rendering correctness.",
+      "note": "Weather state machine transitions verified: clear↔cloudy↔rain valid, direct clear→rain blocked. Rain particle count within frame budget. Lightning timing constraints respected. Visual testing across all weather states confirmed rendering correctness.",
       "evidence_snapshot": [
         "built.complete",
         "built.optimised",
@@ -32,7 +32,7 @@
       "type": "field_deployment",
       "severity": "real_world",
       "outcome": "survived",
-      "note": "Weather transitions tested in VR \u2014 rain particles, cloud density changes, and lightning all render correctly on Quest 3 within frame budget.",
+      "note": "Weather transitions tested in VR — rain particles, cloud density changes, and lightning all render correctly on Quest 3 within frame budget.",
       "evidence_snapshot": [
         "built.complete",
         "built.optimised",
@@ -66,8 +66,8 @@
       "optimised": true
     },
     "testing": {
-      "unit": false,
-      "automated": false,
+      "unit": true,
+      "automated": true,
       "visual": true
     },
     "integrated": {
