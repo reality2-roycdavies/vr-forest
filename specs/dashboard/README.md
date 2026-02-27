@@ -2,7 +2,7 @@
 
 Popperian refutation-aware confidence tracking for the VR Forest specification suite. Specs are treated as conjectures — confidence comes from surviving structured attempts to break them.
 
-Forked from the [R2 Specification Dashboard](https://github.com/reality2-ai/r2-specifications) and adapted for a client-side WebXR project.
+Adapted for a client-side WebXR project using a Popperian refutation model where confidence is earned by surviving structured attempts to break each spec.
 
 ## Quick Start
 
