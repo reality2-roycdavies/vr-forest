@@ -1,0 +1,168 @@
+{
+  "spec": "VF-TERRAIN",
+  "version": "1.1",
+  "description": "Deterministic terrain noise outputs — verifies that getTerrainHeight produces correct values from the seeded simplex noise pipeline (fBm base + valley carving + mountain chains). All heights are in meters. TERRAIN_SEED=42, 13 noise instances seeded via mulberry32.",
+  "vectors": [
+    {
+      "id": "terrain-001",
+      "description": "Origin height: getTerrainHeight(0, 0) with TERRAIN_SEED=42. The base fBm at origin produces a deterministic value from the seeded permutation table. Mountains are suppressed within 60m of origin (spawnFade=0).",
+      "input": {
+        "x": 0,
+        "z": 0,
+        "seed": 42
+      },
+      "expected": {
+        "heightRange": [-8.0, 8.0],
+        "note": "Base fBm range is [-1,1] * TERRAIN_HEIGHT(8). Valley carving subtracts up to 6m (masked). Mountains are fully suppressed at origin (spawnFade=0 since dist=0 < 60). Exact value depends on simplex-noise library permutation from mulberry32 seeded at 42."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "terrain-002",
+      "description": "Distant point: getTerrainHeight(1000, 1000). Well outside spawn suppression zone (spawnFade=1.0). Mountain chains can add up to 45m (MOUNTAIN_HEIGHT). Height should be capable of reaching mountain zone (>20m).",
+      "input": {
+        "x": 1000,
+        "z": 1000,
+        "seed": 42
+      },
+      "expected": {
+        "heightRange": [-8.0, 53.0],
+        "mountainContributionMax": 45,
+        "foothillContributionMax": 6,
+        "baseHeightRange": [-8.0, 8.0],
+        "note": "Total = base fBm (up to 8) + mountain ridge (up to 45 * ampMod) + foothill (up to 6) - valley dip (up to 5) - valley carving (up to 6). At 1000m from origin, spawnFade=1.0. If on a mountain ridge, height can exceed 20m (alpine zone threshold)."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "terrain-003",
+      "description": "Shore level transition: any terrain point near WATER_LEVEL (-3.5) is at the water boundary. Terrain below -3.5m is underwater, terrain between -3.5 and -2.8 is shore zone.",
+      "input": {
+        "waterLevel": -3.5,
+        "shoreLevel": -2.8
+      },
+      "expected": {
+        "waterLevelY": -3.5,
+        "shoreLevelY": -2.8,
+        "shoreZoneWidth": 0.7,
+        "belowWaterLevel": "terrain is clamped visually to water plane; foam generated at crossing",
+        "shoreRange": [-3.5, -2.8],
+        "note": "Shore zone spans 0.7m vertical band. Terrain in this range gets sandy shore colour. Foam strips are generated where terrain crosses WATER_LEVEL."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "terrain-004",
+      "description": "Valley carving: stream channels carve up to VALLEY_DEPTH (6.0m) into base terrain. Ridge noise is domain-warped (warp=22) and squared (sharpness=2). A carve mask reduces carving at high base terrain values.",
+      "input": {
+        "valleyScale": 0.009,
+        "valleyDepth": 6.0,
+        "valleyWarp": 22,
+        "valleySharpness": 2,
+        "formula": "carving = ridge^2 * 6.0 * carveMask, where ridge = 1 - |streamNoise(warped_coords)|, carveMask = max(0, 1 - normalizedH * 0.8)"
+      },
+      "expected": {
+        "maxCarvingDepth": 6.0,
+        "carvingRange": [0, 6.0],
+        "ridgeRange": [0, 1.0],
+        "carveMaskRange": [0, 1.0],
+        "note": "At ridge=1 (channel centre) with carveMask=1 (low terrain), carving is maximum 6.0m. At high terrain (normalizedH > 1.25), carveMask=0 and no carving occurs — preserving mountain summits."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "terrain-005",
+      "description": "Altitude zone boundaries: verifies the zone transition heights match the spec. Zone edges are noise-displaced by +-4m in the shader, but the base thresholds are fixed CONFIG values.",
+      "input": {
+        "subalpineStart": 10,
+        "treelineStart": 16,
+        "alpineStart": 20,
+        "snowlineStart": 20,
+        "noiseDisplacement": 4.0
+      },
+      "expected": {
+        "zones": [
+          {
+            "name": "Forest",
+            "heightBelow": 10,
+            "description": "Full trees, grass, ferns, flowers. Green gradient ground colour."
+          },
+          {
+            "name": "Subalpine",
+            "heightStart": 10,
+            "colour": {"r": 0.15, "g": 0.28, "b": 0.08},
+            "description": "Dark forest green. Only pine trees, grass thinning."
+          },
+          {
+            "name": "Treeline",
+            "heightStart": 16,
+            "colour": {"r": 0.55, "g": 0.50, "b": 0.30},
+            "description": "Tan/olive tussock. Trees shrink to 30% scale (TREELINE_SCALE_MIN=0.3), then vanish at 18m."
+          },
+          {
+            "name": "Alpine",
+            "heightStart": 20,
+            "colour": {"r": 0.45, "g": 0.42, "b": 0.38},
+            "description": "Grey-brown rock. No trees, no vegetation. Increased rock density."
+          },
+          {
+            "name": "Snow",
+            "heightStart": 24,
+            "colour": {"r": 1.4, "g": 1.42, "b": 1.5},
+            "description": "Bright emissive white (values >1.0 for bloom). Only on flat surfaces (smoothstep(0.6, 0.85, normal.y))."
+          }
+        ],
+        "shaderNoiseDisplacement": "+-4m per-pixel value noise for ragged zone edges"
+      },
+      "tolerance": 0.5
+    },
+    {
+      "id": "terrain-006",
+      "description": "Chunk boundary seamlessness: height at chunk boundary (32.0, 0) must be identical whether computed as part of chunk (0,0) or chunk (1,0). getTerrainHeight is a pure function of world coordinates — no chunk-local state.",
+      "input": {
+        "chunkSize": 32,
+        "boundaryX": 32.0,
+        "boundaryZ": 0,
+        "seed": 42
+      },
+      "expected": {
+        "heightAtBoundary": "getTerrainHeight(32.0, 0) produces identical result regardless of which chunk requests it",
+        "mechanism": "Height function is purely world-coordinate based (no chunk-local offsets). Noise functions are continuous. Adjacent chunks produce identical vertex positions at shared boundaries.",
+        "normalSeamless": "Boundary vertex normals use getTerrainHeight for out-of-chunk neighbours (VF-TERRAIN section 6)"
+      },
+      "tolerance": 0.0
+    },
+    {
+      "id": "terrain-007",
+      "description": "Mountain spawn suppression: mountains are fully suppressed at origin (spawnFade=0), fully active at 100m+ (spawnFade=1), and linearly ramped between 60-100m.",
+      "input": {
+        "distances": [0, 30, 60, 80, 100, 200]
+      },
+      "expected": {
+        "spawnFade": [0.0, 0.0, 0.0, 0.5, 1.0, 1.0],
+        "formula": "spawnFade = clamp((distance - 60) / 40, 0, 1)",
+        "note": "Ensures player always starts in a forest clearing at origin, not embedded in a mountain."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "terrain-008",
+      "description": "fBm normalisation: the fractalNoise function normalises output to [-1, 1] by dividing by the sum of amplitudes across all octaves.",
+      "input": {
+        "octaves": 4,
+        "persistence": 0.45,
+        "lacunarity": 2.2,
+        "scale": 0.008,
+        "terrainHeight": 8.0
+      },
+      "expected": {
+        "maxAmplitudeSum": 1.7630125,
+        "amplitudes": [1.0, 0.45, 0.2025, 0.091125],
+        "normalisedRange": [-1.0, 1.0],
+        "scaledRange": [-8.0, 8.0],
+        "note": "Sum of amplitudes: 1 + 0.45 + 0.2025 + 0.091125 = 1.743625. Each octave samples at frequency scale * lacunarity^i. Output divided by sum, then multiplied by TERRAIN_HEIGHT."
+      },
+      "tolerance": 0.001
+    }
+  ]
+}

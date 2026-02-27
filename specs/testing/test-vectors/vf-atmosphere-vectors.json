@@ -1,0 +1,199 @@
+{
+  "spec": "VF-ATMOSPHERE",
+  "version": "1.1",
+  "description": "Atmosphere system test vectors — verifies star count, day/night cycle solar altitude, fog parameters, cloud count, moon and planet visual radii. Location defaults to Auckland NZ (-36.85, 174.76).",
+  "vectors": [
+    {
+      "id": "atmo-001",
+      "description": "Star count: the catalog contains exactly 2865 real stars (magnitude <= 5.5) from HYG/Yale Bright Star Catalog.",
+      "input": {
+        "catalog": "HYG / Yale Bright Star Catalog",
+        "magnitudeLimit": 5.5
+      },
+      "expected": {
+        "starCount": 2865,
+        "bytesPerStar": 6,
+        "totalBytes": 17190,
+        "encoding": "base64 (~23KB)",
+        "note": "6 bytes per star: RA (uint16), Dec (uint16), magnitude (uint8), B-V colour index (uint8)."
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "atmo-002",
+      "description": "Solar altitude at noon Auckland summer solstice (Dec 21). Sun should be high in the sky (near zenith for southern hemisphere summer).",
+      "input": {
+        "latitude": -36.85,
+        "longitude": 174.76,
+        "date": "2025-12-21",
+        "localTime": "12:00 NZDT (UTC+13)",
+        "formula": {
+          "declination": "-23.44 * cos(2*pi*(dayOfYear + 10) / 365)",
+          "hourAngle": "(hours - 12) * 15 degrees",
+          "sinAlt": "sin(lat)*sin(dec) + cos(lat)*cos(dec)*cos(hourAngle)"
+        }
+      },
+      "expected": {
+        "declinationApprox": -23.44,
+        "hourAngleAtNoon": 0,
+        "solarElevationSin": 0.89,
+        "solarElevationDeg": 76.6,
+        "positive": true,
+        "paletteState": "Day (elevation sin > 0.1)",
+        "note": "At Auckland (36.85S) on summer solstice with declination -23.44, solar altitude at noon is approximately 90 - |lat - dec| = 90 - |-36.85 - (-23.44)| = 90 - 13.41 = 76.6 degrees. sin(76.6) ≈ 0.97."
+      },
+      "tolerance": 2.0
+    },
+    {
+      "id": "atmo-003",
+      "description": "Solar altitude at midnight Auckland winter solstice (Jun 21). Sun should be deeply below the horizon.",
+      "input": {
+        "latitude": -36.85,
+        "longitude": 174.76,
+        "date": "2025-06-21",
+        "localTime": "00:00 NZST (UTC+12)",
+        "formula": {
+          "declination": "-23.44 * cos(2*pi*(172 + 10) / 365)",
+          "hourAngle": "(0 - 12) * 15 = -180 degrees",
+          "sinAlt": "sin(lat)*sin(dec) + cos(lat)*cos(dec)*cos(hourAngle)"
+        }
+      },
+      "expected": {
+        "declinationApprox": 23.44,
+        "hourAngleAtMidnight": -180,
+        "solarElevationSinNegative": true,
+        "solarElevationApproxDeg": -76.6,
+        "paletteState": "Deep Night (elevation sin < -0.35)",
+        "note": "At midnight in winter, the sun is roughly 76+ degrees below the horizon. sin(elevation) is deeply negative (<< -0.35), placing the scene firmly in Deep Night palette."
+      },
+      "tolerance": 5.0
+    },
+    {
+      "id": "atmo-004",
+      "description": "Fog density range: base FOG_NEAR=50, FOG_FAR=130. Weather modifies via fogMultiplier.",
+      "input": {
+        "fogNear": 50,
+        "fogFar": 130,
+        "weatherIntensity": [0, 1, 2]
+      },
+      "expected": {
+        "baseFogNear": 50,
+        "baseFogFar": 130,
+        "fogMultiplier": [1.0, 0.65, 0.6],
+        "effectiveFogFar": [130, 84.5, 78],
+        "snowBlizzardFog": {"near": 30, "far": 80},
+        "note": "fogMultiplier from lerp3(wi, 1.0, 0.65, 0.6). Applied to fog distances. During storms above snowline, fog collapses to 30/80m for blizzard whiteout."
+      },
+      "tolerance": 0.5
+    },
+    {
+      "id": "atmo-005",
+      "description": "Cloud count: CONFIG.CLOUD_COUNT = 20 cloud groups. Each group contains multiple puffs (2-10 depending on archetype).",
+      "input": {
+        "parameter": "CLOUD_COUNT"
+      },
+      "expected": {
+        "cloudGroups": 20,
+        "archetypes": [
+          {"name": "Cumulus", "weight": 0.35, "puffs": "5-8", "horizontal": false},
+          {"name": "Wispy", "weight": 0.25, "puffs": "3-6", "horizontal": true},
+          {"name": "Flat layer", "weight": 0.20, "puffs": "6-10", "horizontal": true},
+          {"name": "Small puffy", "weight": 0.20, "puffs": "2-3", "horizontal": false}
+        ],
+        "heightRange": [55, 115],
+        "radiusRange": [35, 200],
+        "note": "20 groups with weighted random archetype selection. Total puffs approximately 80-120 across all groups."
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "atmo-006",
+      "description": "Moon visual radius: CONFIG.MOON_VISUAL_RADIUS = 1.75. CircleGeometry with 32 segments at distance 135m from player.",
+      "input": {
+        "parameter": "MOON_VISUAL_RADIUS"
+      },
+      "expected": {
+        "moonVisualRadius": 1.75,
+        "moonDistance": 135,
+        "geometrySegments": 32,
+        "angularSize": "approximately 1.5 degrees (2 * atan(1.75/135) * 180/pi)",
+        "phaseShader": "Sharp alpha cutoff: lit side opaque, shadow side transparent",
+        "note": "Moon is rendered as a CircleGeometry disc with custom ShaderMaterial. Phase computed from synodic period (29.53059 days)."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "atmo-007",
+      "description": "Planet visual radius: CONFIG.PLANET_VISUAL_RADIUS = 0.6. Base size scaled by magnitude for each of 5 naked-eye planets.",
+      "input": {
+        "parameter": "PLANET_VISUAL_RADIUS"
+      },
+      "expected": {
+        "planetVisualRadius": 0.6,
+        "planetDistance": 140,
+        "planets": [
+          {"name": "Mercury", "absMag": -0.36, "color": "#d4c5b9"},
+          {"name": "Venus", "absMag": -4.40, "color": "#fff8e0"},
+          {"name": "Mars", "absMag": -1.52, "color": "#ff8844"},
+          {"name": "Jupiter", "absMag": -9.40, "color": "#fff0d0"},
+          {"name": "Saturn", "absMag": -8.88, "color": "#ffe8a0"}
+        ],
+        "magScaleFormula": "max(0.3, 1.0 + (0 - magnitude) * 0.25)",
+        "note": "Venus at mag -4.4 appears at scale ~2.1x base. Jupiter and Saturn even larger due to high absolute magnitude."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "atmo-008",
+      "description": "Day/night palette transitions: 6 elevation bands drive palette blending.",
+      "input": {
+        "elevationBands": [
+          {"range": "> 0.1", "palette": "Day"},
+          {"range": "0.02 to 0.1", "blend": "Golden to Day"},
+          {"range": "-0.02 to 0.02", "blend": "Twilight to Golden"},
+          {"range": "-0.1 to -0.02", "blend": "Night to Twilight"},
+          {"range": "-0.35 to -0.1", "blend": "Deep Night to Night"},
+          {"range": "< -0.35", "palette": "Deep Night"}
+        ]
+      },
+      "expected": {
+        "dayPalette": {
+          "skyTop": [0.4, 0.6, 0.9],
+          "skyBottom": [0.55, 0.7, 0.9],
+          "fog": [0.7, 0.8, 0.9],
+          "sunIntensity": 1.0,
+          "hemiIntensity": 0.85,
+          "ambientIntensity": 0.45
+        },
+        "deepNightPalette": {
+          "skyTop": [0.03, 0.05, 0.08],
+          "skyBottom": [0.02, 0.03, 0.04],
+          "fog": [0.016, 0.024, 0.032],
+          "sunIntensity": 0.0,
+          "hemiIntensity": 0.1,
+          "ambientIntensity": 0.06
+        },
+        "note": "Deep Night is distinctly darker than Night. Midnight should use Deep Night (sin elevation << -0.35). Early evening around -0.2 is Night/Deep Night blend."
+      },
+      "tolerance": 0.01
+    },
+    {
+      "id": "atmo-009",
+      "description": "Star rendering parameters: size and brightness derived from magnitude.",
+      "input": {
+        "magnitudeRange": [-1.5, 5.5],
+        "brightMul": {"desktop": 1.8, "vr": 1.5}
+      },
+      "expected": {
+        "sizeRange": [1.0, 4.5],
+        "sizeFormula": "1.0 + pow(1.0 - (mag+1.5)/7.0, 2.5) * 3.5",
+        "brightnessFloor": 0.35,
+        "brightnessFormula": "max(0.35, pow(1.0 - (mag+1.5)/7.0, 2.5) * 1.3)",
+        "twinkleFormula": "0.08 + (1 - brightness) * 0.15",
+        "siderealRotation": "Y=pi-LST, Z=-(pi/2-lat), Euler order ZYX",
+        "note": "Sirius (mag -1.46) gets size ~4.5 and brightness ~1.3. Faintest stars (mag 5.5) get size ~1.0 and brightness 0.35."
+      },
+      "tolerance": 0.1
+    }
+  ]
+}

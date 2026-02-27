@@ -1,0 +1,204 @@
+{
+  "spec": "VF-WEATHER",
+  "version": "1.0",
+  "description": "Weather state machine test vectors — verifies the single weatherIntensity float (0-2) drives correct derived parameters, rain particles, ground wetness hysteresis, and state transitions. All interpolation uses lerp3(t, a, b, c).",
+  "vectors": [
+    {
+      "id": "weather-001",
+      "description": "Valid weather states: sunny (0), cloudy (1), rainy (2). The state machine transitions between these by ramping weatherIntensity.",
+      "input": {
+        "states": ["sunny", "cloudy", "rainy"]
+      },
+      "expected": {
+        "stateValues": {"sunny": 0, "cloudy": 1, "rainy": 2},
+        "intensityRange": [0.0, 2.0],
+        "transitions": [
+          "sunny -> cloudy: ramp 0 to 1",
+          "cloudy -> rainy: ramp 1 to 2",
+          "cloudy -> sunny: ramp 1 to 0",
+          "rainy -> cloudy: ramp 2 to 1"
+        ],
+        "note": "weatherIntensity is a continuous float. States are thresholds: 0=sunny, 1=cloudy, 2=rainy. Transitions select a random different target."
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "weather-002",
+      "description": "Transition rate: WEATHER_TRANSITION_RATE = 0.0083 units/second. Approximately 2 minutes to traverse 1 intensity unit.",
+      "input": {
+        "transitionRate": 0.0083,
+        "unitsPerTransition": 1.0
+      },
+      "expected": {
+        "rate": 0.0083,
+        "secondsPerUnit": 120.48,
+        "approximateMinutesPerUnit": 2.0,
+        "formula": "weatherIntensity += rate * delta (or -= rate * delta)",
+        "note": "1.0 / 0.0083 = ~120.5 seconds per intensity unit. Each full state transition (e.g. sunny->cloudy) takes approximately 2 minutes."
+      },
+      "tolerance": 0.01
+    },
+    {
+      "id": "weather-003",
+      "description": "Derived parameters at intensity=0 (sunny): all storm effects absent, baseline values.",
+      "input": {
+        "weatherIntensity": 0.0
+      },
+      "expected": {
+        "cloudDensity": 0,
+        "cloudDarkness": 0,
+        "windMultiplier": 1.0,
+        "fogMultiplier": 1.0,
+        "lightDimming": 0,
+        "skyDarkening": 0,
+        "starDimming": 0,
+        "waveAmplitude": 1.0,
+        "rainIntensity": 0,
+        "groundWetness": "0 (not wetting, drying if previously wet)"
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "weather-004",
+      "description": "Derived parameters at intensity=1.0 (cloudy): overcast sky, no rain yet.",
+      "input": {
+        "weatherIntensity": 1.0
+      },
+      "expected": {
+        "cloudDensity": 0.8,
+        "cloudDarkness": 0.65,
+        "windMultiplier": 1.3,
+        "fogMultiplier": 0.65,
+        "lightDimming": 0.35,
+        "skyDarkening": 0.35,
+        "starDimming": 1.0,
+        "waveAmplitude": 1.15,
+        "rainIntensity": 0,
+        "groundWetness": "0 (not raining, so not wetting)"
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "weather-005",
+      "description": "Derived parameters at intensity=2.0 (rainy): full storm, maximum rain.",
+      "input": {
+        "weatherIntensity": 2.0
+      },
+      "expected": {
+        "cloudDensity": 0.9,
+        "cloudDarkness": 0.9,
+        "windMultiplier": 2.5,
+        "fogMultiplier": 0.6,
+        "lightDimming": 0.5,
+        "skyDarkening": 0.5,
+        "starDimming": 1.0,
+        "waveAmplitude": 1.8,
+        "rainIntensity": 1.0,
+        "groundWetness": "wetting at 0.0083/s * rainIntensity"
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "weather-006",
+      "description": "Rain particle system parameters.",
+      "input": {
+        "section": "Rain particles"
+      },
+      "expected": {
+        "particleCount": 5000,
+        "cylinderRadius": 25,
+        "cylinderHeight": 20,
+        "fallSpeedMin": 11,
+        "fallSpeedMax": 16,
+        "windInfluence": 0.3,
+        "pointSize": "4-8px",
+        "fragmentShader": {
+          "xGaussianSigma": "~0.08 (exp(-x*x*80))",
+          "yGaussianSigma": "~0.79 (exp(-y*y*0.8))",
+          "baseAlpha": 0.6,
+          "color": [0.7, 0.75, 0.85]
+        },
+        "note": "Rain appears as hair-thin vertical streaks (extreme X/Y aspect ratio ~80:0.8). Translucent blue-grey, NOT round dots."
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "weather-007",
+      "description": "Hold time range: each weather state holds for WEATHER_HOLD_MIN to WEATHER_HOLD_MAX seconds before transitioning.",
+      "input": {
+        "holdMin": 180,
+        "holdMax": 480
+      },
+      "expected": {
+        "holdMinSeconds": 180,
+        "holdMaxSeconds": 480,
+        "holdMinMinutes": 3,
+        "holdMaxMinutes": 8,
+        "distribution": "uniform random in [180, 480]",
+        "note": "After reaching target intensity, the system holds for 3-8 minutes before selecting a new random target."
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "weather-008",
+      "description": "Ground wetness hysteresis: wets faster than it dries. Wetting only occurs during rain (rainIntensity > 0).",
+      "input": {
+        "wetnessWetRate": 0.0083,
+        "wetnessDryRate": 0.0042,
+        "rainIntensity": 1.0
+      },
+      "expected": {
+        "wettingRate": 0.0083,
+        "dryingRate": 0.0042,
+        "wettingFormula": "groundWetness += WETNESS_WET_RATE * rainIntensity * delta",
+        "dryingFormula": "groundWetness -= WETNESS_DRY_RATE * delta",
+        "timeToFullyWet": "~120 seconds (at rainIntensity=1.0)",
+        "timeToFullyDry": "~238 seconds",
+        "clampRange": [0, 1],
+        "hysteresisRatio": 1.976,
+        "note": "Wetting rate is ~2x drying rate. Ground stays wet longer than it takes to get wet, creating realistic puddle persistence. Wetting is scaled by rainIntensity; drying is constant."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "weather-009",
+      "description": "Intermediate intensity: at weatherIntensity=0.5 (halfway between sunny and cloudy), all lerp3 values should be midpoint between sunny and cloudy values.",
+      "input": {
+        "weatherIntensity": 0.5
+      },
+      "expected": {
+        "cloudDensity": 0.4,
+        "cloudDarkness": 0.325,
+        "windMultiplier": 1.15,
+        "fogMultiplier": 0.825,
+        "lightDimming": 0.175,
+        "skyDarkening": 0.175,
+        "starDimming": 0.5,
+        "waveAmplitude": 1.075,
+        "rainIntensity": 0,
+        "note": "lerp3(0.5, a, b, c) = lerp(a, b, 0.5) for all parameters. Rain is 0 because max(0, 0.5-1) = 0."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "weather-010",
+      "description": "Intermediate intensity: at weatherIntensity=1.5 (halfway between cloudy and rainy), lerp3 produces mid-storm values.",
+      "input": {
+        "weatherIntensity": 1.5
+      },
+      "expected": {
+        "cloudDensity": 0.85,
+        "cloudDarkness": 0.775,
+        "windMultiplier": 1.9,
+        "fogMultiplier": 0.625,
+        "lightDimming": 0.425,
+        "skyDarkening": 0.425,
+        "starDimming": 1.0,
+        "waveAmplitude": 1.475,
+        "rainIntensity": 0.5,
+        "note": "lerp3(1.5, a, b, c) = lerp(b, c, 0.5). Rain = max(0, 1.5-1) = 0.5. Storm is building."
+      },
+      "tolerance": 0.001
+    }
+  ]
+}

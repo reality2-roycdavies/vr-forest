@@ -1,0 +1,36 @@
+{
+  "reviews": [],
+  "evidence": {
+    "reviewed": {
+      "review1": false,
+      "review2": false,
+      "expert": false
+    },
+    "test_spec": {
+      "spec_vectors": true,
+      "json_vectors": false,
+      "adversarial": false
+    },
+    "built": {
+      "partial": true,
+      "complete": true,
+      "optimised": false
+    },
+    "testing": {
+      "unit": false,
+      "automated": false,
+      "visual": false
+    },
+    "integrated": {
+      "component": false,
+      "cross_system": false,
+      "full_scene": false
+    },
+    "field": {
+      "desktop": false,
+      "quest3": false,
+      "sustained": false
+    }
+  },
+  "issues": []
+}

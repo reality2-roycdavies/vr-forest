@@ -1,0 +1,202 @@
+{
+  "spec": "VF-FOREST",
+  "version": "1.1",
+  "description": "Vegetation placement test vectors — verifies tree placement grid, density thresholds, altitude exclusion zones, stream exclusion, tree types, scale ranges, collision radius, and tussock alpine-only rule.",
+  "vectors": [
+    {
+      "id": "forest-001",
+      "description": "Tree placement grid spacing: potential tree positions are on a 3.0m grid within each chunk, with jitter applied.",
+      "input": {
+        "treeGridSpacing": 3.0,
+        "treeJitter": 1.2,
+        "chunkSize": 32
+      },
+      "expected": {
+        "gridSpacing": 3.0,
+        "jitterAmount": 1.2,
+        "potentialPositionsPerChunk": "approximately 11 x 11 = 121 grid cells per chunk (floor(32/3)+1 per axis)",
+        "formula": "finalPos = gridPos + getJitter(worldX, worldZ) * TREE_JITTER",
+        "note": "Trees are placed on a regular grid with deterministic noise-based jitter. Not all grid positions produce a tree — density noise must exceed threshold."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "forest-002",
+      "description": "Tree density threshold: a tree is placed only if treeNoise2D(x * 0.05, z * 0.05) > 0.15.",
+      "input": {
+        "densityScale": 0.05,
+        "densityThreshold": 0.15
+      },
+      "expected": {
+        "threshold": 0.15,
+        "noiseScale": 0.05,
+        "noiseRange": [-1, 1],
+        "placementProbability": "roughly 42.5% of grid positions (assuming uniform noise distribution above 0.15 in [-1,1])",
+        "formula": "density = treeNoise2D(worldX * 0.05, worldZ * 0.05); skip if density <= 0.15",
+        "note": "The density value also drives tree type and scale selection."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "forest-003",
+      "description": "No trees below SHORE_LEVEL (-2.8m): terrain at or below shore level is sandy/underwater and has no vegetation.",
+      "input": {
+        "shoreLevel": -2.8,
+        "waterLevel": -3.5
+      },
+      "expected": {
+        "exclusionBelow": -2.8,
+        "rule": "skip if getTerrainHeight(finalX, finalZ) < SHORE_LEVEL (-2.8)",
+        "note": "Shore zone (-3.5 to -2.8) and underwater zone (< -3.5) have no trees. This prevents trees from floating in water or appearing on sandy beaches."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "forest-004",
+      "description": "No trees above TREELINE_START + 2 (18m): trees are excluded above this altitude. Tussock (type 3) is placed above TREELINE_START but uses the same exclusion ceiling.",
+      "input": {
+        "treelineStart": 16,
+        "maxTreeAltitude": 18,
+        "treelineScaleMin": 0.3
+      },
+      "expected": {
+        "treeExclusionAbove": 18,
+        "rule": "skip if height > TREELINE_START + 2 (18m)",
+        "treelineTransition": {
+          "start": 16,
+          "end": 18,
+          "scaleFormula": "altitudeScale = max(0.3, 1 - (height - 10) / 8)",
+          "typeOverride": "pine only (type 0) above SUBALPINE_START (10m)",
+          "tussockOverride": "type 3 when altitude > TREELINE_START (16m)"
+        },
+        "note": "Between 16-18m, trees exist but are progressively smaller (down to 30% scale). Above 18m, no tree instances at all."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "forest-005",
+      "description": "Stream exclusion: no trees where streamFactor > 0.15. The terrain shader computes streamFactor from the valley channel noise (domain-warped ridge noise).",
+      "input": {
+        "streamFactorThreshold": 0.15
+      },
+      "expected": {
+        "exclusionRule": "Trees should not be placed where stream channels are active",
+        "streamFactorSource": "smoothstep over vStreamChannel attribute from getRiverFactor()",
+        "terrainShaderThreshold": "smoothstep(0.3, 0.5, vStreamChannel) for water core rendering",
+        "note": "Stream exclusion prevents trees from spawning in valley channels. The exact threshold depends on the placement code's use of getStreamFactor(). River carving currently disabled but valley channels still affect terrain."
+      },
+      "tolerance": 0.01
+    },
+    {
+      "id": "forest-006",
+      "description": "Tree types: 4 types indexed 0-3. Type is determined by density value. Above subalpine, type is forced to 0 (pine). Above treeline, type becomes 3 (tussock).",
+      "input": {
+        "treeTypes": 4
+      },
+      "expected": {
+        "types": [
+          {"index": 0, "name": "pine", "description": "5 stacked open-ended cones, dark cool green"},
+          {"index": 1, "name": "oak", "description": "6 clustered icosahedron spheres, warm rich green"},
+          {"index": 2, "name": "birch", "description": "4 open-ended cone lobes, white bark, bright yellow-green"},
+          {"index": 3, "name": "tussock", "description": "56 PlaneGeometry blade strips, golden-straw, alpine only"}
+        ],
+        "typeSelectionFormula": "|floor(density * 30)| mod 3 (for types 0-2 below subalpine)",
+        "subalpineOverride": "type = 0 (pine only) when height > SUBALPINE_START (10m)",
+        "tussockRule": "type = 3 when height > TREELINE_START (16m)",
+        "note": "Types 0-2 are full trees. Type 3 (tussock) reuses tree instancing but is alpine ground cover."
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "forest-007",
+      "description": "Scale range: tree base scale is 2.5 to 6.0, computed from density value.",
+      "input": {
+        "minHeight": 2.5,
+        "maxHeight": 6.0,
+        "densityThreshold": 0.15
+      },
+      "expected": {
+        "scaleMin": 2.5,
+        "scaleMax": 6.0,
+        "scaleFormula": "scale = 2.5 + (density - 0.15) / 0.85 * (6.0 - 2.5)",
+        "scaleRange": 3.5,
+        "atThreshold": {"density": 0.15, "scale": 2.5},
+        "atMaxDensity": {"density": 1.0, "scale": 6.0},
+        "altitudeModifier": "scale *= max(0.3, 1 - (height - 10) / 8) above SUBALPINE_START",
+        "note": "Higher density noise produces larger trees. At treeline, trees shrink to 30% of computed scale."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "forest-008",
+      "description": "Tree collision radius: trunks have a collision radius of 0.4m for player collision detection.",
+      "input": {
+        "collisionRadius": 0.4
+      },
+      "expected": {
+        "treeCollisionRadius": 0.4,
+        "collisionShape": "cylinder (vertical axis)",
+        "disabledWhenSwimming": true,
+        "tussockNoCollision": true,
+        "note": "Player cannot walk through tree trunks (types 0-2). Collision disabled while swimming. Tussock (type 3) has no collision — player walks through."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "forest-009",
+      "description": "Tussock (type 3) only above TREELINE_START (16m). Tussock is NZ red tussock — golden-straw alpine ground cover.",
+      "input": {
+        "treelineStart": 16,
+        "tussockType": 3
+      },
+      "expected": {
+        "tussockMinAltitude": 16,
+        "tussockMaxAltitude": 18,
+        "rule": "type = 3 (tussock) when height > TREELINE_START",
+        "properties": {
+          "bladeCount": 56,
+          "geometry": "PlaneGeometry blade strips merged into dome",
+          "terrainTilt": true,
+          "noCollision": true,
+          "noWildlifeHiding": true
+        },
+        "note": "Tussock reuses tree instancing infrastructure. The vestigial trunk is invisible at tussock's small scale. Above 18m (tree exclusion ceiling), no tussock either."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "forest-010",
+      "description": "Tree planting depth: trees are planted 0.15m below terrain height so trunks emerge naturally.",
+      "input": {
+        "plantingOffset": -0.15
+      },
+      "expected": {
+        "yPosition": "getTerrainHeight(x, z) - 0.15",
+        "offset": -0.15,
+        "note": "Prevents visible gap between trunk base and ground. The 0.15m burial ensures the trunk appears to grow from the soil."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "forest-011",
+      "description": "Altitude scale transition: tree scale reduces linearly from full at 10m to 30% at 18m (TREELINE_START + 2).",
+      "input": {
+        "subalpineStart": 10,
+        "treelineEnd": 18,
+        "scaleMin": 0.3
+      },
+      "expected": {
+        "scaleAtAltitudes": [
+          {"height": 5, "altitudeScale": 1.0, "note": "Below subalpine, no reduction"},
+          {"height": 10, "altitudeScale": 1.0, "note": "At subalpine start, full scale"},
+          {"height": 12, "altitudeScale": 0.75, "note": "max(0.3, 1-(12-10)/8) = 0.75"},
+          {"height": 14, "altitudeScale": 0.5, "note": "max(0.3, 1-(14-10)/8) = 0.5"},
+          {"height": 16, "altitudeScale": 0.3, "note": "max(0.3, 1-(16-10)/8) = 0.25 -> clamped to 0.3"},
+          {"height": 18, "altitudeScale": 0.3, "note": "max(0.3, 1-(18-10)/8) = 0.0 -> clamped to 0.3"}
+        ],
+        "formula": "altitudeScale = max(TREELINE_SCALE_MIN, 1 - (height - SUBALPINE_START) / 8)"
+      },
+      "tolerance": 0.001
+    }
+  ]
+}

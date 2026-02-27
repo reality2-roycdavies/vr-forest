@@ -1,0 +1,7 @@
+# Specifications are canonical and require owner approval.
+# Forks are welcome to diverge — but this repo stays clean.
+
+/specs/VF-*.md              @reality2-roycdavies
+/specs/README.md            @reality2-roycdavies
+/specs/dashboard/           @reality2-roycdavies
+/specs/testing/             @reality2-roycdavies

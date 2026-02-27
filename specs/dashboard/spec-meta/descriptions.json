@@ -1,0 +1,58 @@
+{
+  "VF-OVERVIEW": {
+    "title": "VF-OVERVIEW — Overview & Conventions",
+    "conjecture": "This document defines the shared vocabulary, coordinate conventions, and teaching methodology for the entire VR Endless Forest project. It is the conceptual foundation — if the overview is wrong, every other spec inherits its confusion."
+  },
+  "VF-ARCH": {
+    "title": "VF-ARCH — Architecture",
+    "conjecture": "The architecture spec claims that a client-side WebXR application can be cleanly decomposed into independent systems (terrain, water, forest, atmosphere, weather, audio, movement) with well-defined data flow and a deterministic frame update order. The dolly camera rig and A-Frame entity structure are sufficient for both desktop and VR."
+  },
+  "VF-TERRAIN": {
+    "title": "VF-TERRAIN — Terrain System",
+    "conjecture": "An infinite, seamless terrain can be generated from 13 deterministic noise instances with chunked LOD, producing believable mountains, valleys, and stream channels — all at 90 fps on Quest 3. The 4-part height calculation (base fBm + stream carving + mountains + river carving) produces no visible seams at chunk boundaries."
+  },
+  "VF-WATER": {
+    "title": "VF-WATER — Water System",
+    "conjecture": "A single 300×300m water plane with 13 sine waves, GPU-side displacement, and marching-squares shore foam can convincingly simulate an ocean surface, shoreline, and swimming mechanics — without any physics engine or fluid simulation."
+  },
+  "VF-FOREST": {
+    "title": "VF-FOREST — Forest System",
+    "conjecture": "Four procedural tree types (pine, oak, birch, tussock) placed on a noise-driven density grid, with altitude-zone scaling, stream exclusion, and wind animation, can create the illusion of an endless forest — using only instanced geometry and vertex colours, no textures."
+  },
+  "VF-WILDLIFE": {
+    "title": "VF-WILDLIFE — Wildlife",
+    "conjecture": "Bird flocks following simple orbital paths and peek encounters (eyes behind trees) are sufficient to make the forest feel alive, without requiring AI pathfinding, physics, or complex animation systems."
+  },
+  "VF-ATMOSPHERE": {
+    "title": "VF-ATMOSPHERE — Atmosphere",
+    "conjecture": "A procedural sky dome with real astronomical calculations (solar declination, hour angle, altitude), 2865 deterministic stars, planetary bodies, clouds, fog, fireflies, and shooting stars can produce a convincing day/night cycle that matches the user's real-world time and location."
+  },
+  "VF-WEATHER": {
+    "title": "VF-WEATHER — Weather System",
+    "conjecture": "A simple 3-state machine (sunny/cloudy/rainy) driving a single weatherIntensity float (0–2) is sufficient to produce convincing weather transitions, including rain particles, lightning, thunder, ground wetness, and coordinated changes across all visual and audio systems."
+  },
+  "VF-AUDIO": {
+    "title": "VF-AUDIO — Audio System",
+    "conjecture": "All forest soundscape can be generated procedurally using Web Audio API oscillators, filters, and noise buffers — no audio files needed. Footsteps, crickets, birds, rain, thunder, wind, and water sounds emerge from synthesis parameters alone."
+  },
+  "VF-MOVEMENT": {
+    "title": "VF-MOVEMENT — Movement & Input",
+    "conjecture": "A unified movement system can handle desktop WASD, VR thumbstick, terrain following, tree collision, swimming, jumping, and ski physics — all sharing the same ground-truth height function and collision model, with no physics engine."
+  },
+  "VF-COLLECTIBLES": {
+    "title": "VF-COLLECTIBLES — Collectibles & HUD",
+    "conjecture": "Deterministically-placed glowing orbs on a noise-driven grid, with collection scoring, sprint power, persistence via localStorage, and a HUD with minimap, provide sufficient gameplay to motivate exploration of the endless forest."
+  },
+  "VF-PERFORMANCE": {
+    "title": "VF-PERFORMANCE — Performance Budget",
+    "conjecture": "The entire scene — terrain, water, 3000+ trees, weather particles, audio, wildlife — can run at 90 fps on Quest 3 (72 fps minimum) within a draw call budget of <150 and triangle budget of <500K, using instancing, LOD, and aggressive culling."
+  },
+  "VF-CONFIG": {
+    "title": "VF-CONFIG — Configuration Reference",
+    "conjecture": "Every tunable parameter in the entire project can be captured in a single flat table of ~250 key-value pairs. This table is the single source of truth — if a parameter exists in code but not in VF-CONFIG, it is a bug."
+  },
+  "VF-VERIFY": {
+    "title": "VF-VERIFY — Verification Guide",
+    "conjecture": "A set of visual spot-checks, gotcha callouts, and per-system checklists is sufficient to verify that an implementation matches the specifications — without requiring automated test infrastructure."
+  }
+}

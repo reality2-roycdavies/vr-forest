@@ -61,3 +61,19 @@ graph TD
 ## Status
 
 VF-OVERVIEW through VF-MOVEMENT are at **1.0** — initial extraction from the monolithic specification. VF-COLLECTIBLES, VF-PERFORMANCE, VF-CONFIG, and VF-VERIFY are at **0.1 Draft**. Expect amendments as implementations discover gaps.
+
+## Dashboard
+
+See [dashboard/](dashboard/) for the Popperian specification confidence dashboard — tracks which specs have survived peer review, test vectors, implementation, automated testing, integration, and VR field testing.
+
+```bash
+# Generate the dashboard
+bash specs/dashboard/build.sh
+
+# Or serve with live editing
+python3 specs/dashboard/server.py --port 8090
+```
+
+## Test Vectors
+
+See [testing/test-vectors/](testing/test-vectors/) for deterministic test vectors covering terrain, water, forest, atmosphere, weather, and config validation.

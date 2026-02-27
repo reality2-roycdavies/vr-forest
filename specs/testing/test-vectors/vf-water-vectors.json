@@ -1,0 +1,174 @@
+{
+  "spec": "VF-WATER",
+  "version": "1.1",
+  "description": "Water system test vectors — verifies water plane position, wave displacement, shore foam, swimming triggers, and shore fade. The water plane is a 300x300m plane at WATER_LEVEL with 13 base sine waves plus 6 storm-chop waves.",
+  "vectors": [
+    {
+      "id": "water-001",
+      "description": "Water plane y-position must equal CONFIG.WATER_LEVEL. The plane follows the player on XZ, snapped to grid step 300/128.",
+      "input": {
+        "parameter": "WATER_LEVEL"
+      },
+      "expected": {
+        "waterPlaneY": -3.5,
+        "planeSize": 300,
+        "subdivisions": 128,
+        "gridSnap": 2.34375,
+        "note": "Grid snap = 300/128 = 2.34375m. Prevents wave pattern sliding when the plane repositions."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "water-002",
+      "description": "Wave displacement at position (0,0) time=0: deterministic sum of 13 base sine waves. Each wave = amplitude * sin(dot(pos.xz, direction) + time * speed). At pos=(0,0) t=0, dot product is 0 for all waves, so sin(0)=0 for all.",
+      "input": {
+        "position": {"x": 0, "z": 0},
+        "time": 0,
+        "rainIntensity": 0,
+        "uWaveAmplitude": 1.0
+      },
+      "expected": {
+        "waveDisplacement": 0.0,
+        "calculation": "All 13 waves: amplitude * sin(0 + 0) = 0. Storm-chop waves also zero (rainIntensity=0). Total displacement = 0.",
+        "note": "At origin with time=0, every wave's phase is sin(0)=0. This is a deterministic zero-displacement test point."
+      },
+      "tolerance": 0.0001
+    },
+    {
+      "id": "water-003",
+      "description": "Wave displacement at a non-trivial point: position (10, 5) time=1.0 with no rain. Sum of 13 base sine waves with known directions, speeds, and amplitudes.",
+      "input": {
+        "position": {"x": 10, "z": 5},
+        "time": 1.0,
+        "rainIntensity": 0,
+        "uWaveAmplitude": 1.0,
+        "baseWaves": [
+          {"dir": [0.38, 0.12], "speed": 0.35, "amp": 0.045},
+          {"dir": [-0.15, 0.35], "speed": 0.28, "amp": 0.040},
+          {"dir": [0.27, -0.22], "speed": 0.42, "amp": 0.030},
+          {"dir": [0.45, -0.55], "speed": 0.55, "amp": 0.020},
+          {"dir": [-0.50, 0.30], "speed": 0.48, "amp": 0.018},
+          {"dir": [0.60, 0.40], "speed": 0.65, "amp": 0.015},
+          {"dir": [-0.35, -0.60], "speed": 0.58, "amp": 0.012},
+          {"dir": [1.70, 1.10], "speed": 1.00, "amp": 0.007},
+          {"dir": [-1.30, 1.80], "speed": 0.90, "amp": 0.006},
+          {"dir": [2.10, -0.90], "speed": 1.20, "amp": 0.005},
+          {"dir": [-0.80, -2.20], "speed": 1.10, "amp": 0.004},
+          {"dir": [2.80, 1.50], "speed": 1.40, "amp": 0.003},
+          {"dir": [-1.70, 2.80], "speed": 1.30, "amp": 0.002}
+        ]
+      },
+      "expected": {
+        "totalAmplitudeRange": [-0.207, 0.207],
+        "sumOfAllAmplitudes": 0.207,
+        "note": "Max possible displacement = sum of all 13 amplitudes = 0.207m (when all waves align). Actual displacement is the sum of each wave at the given position/time. The exact value can be computed from the formula."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "water-004",
+      "description": "Wave amplitude range: uWaveAmplitude uniform scales all wave heights. Weather drives this from 1.0 (sunny) to 1.8 (rainy) via lerp3.",
+      "input": {
+        "weatherIntensity": [0.0, 1.0, 2.0]
+      },
+      "expected": {
+        "uWaveAmplitude": [1.0, 1.15, 1.8],
+        "formula": "lerp3(weatherIntensity, 1.0, 1.15, 1.8)",
+        "rangeMin": 1.0,
+        "rangeMax": 1.8,
+        "note": "At sunny (0), amplitude is baseline 1.0. At cloudy (1), slight increase to 1.15. At rainy (2), full storm waves at 1.8x."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "water-005",
+      "description": "Shore foam threshold: foam strips are generated where terrain height crosses WATER_LEVEL (-3.5m). The foam region spans from WATER_LEVEL - FOAM_WATER_WIDTH to approximately WATER_LEVEL + FOAM_SHORE_WIDTH in terrain space.",
+      "input": {
+        "waterLevel": -3.5,
+        "foamGridSpacing": 1.5,
+        "foamShoreWidth": 0.6,
+        "foamWaterWidth": 0.8
+      },
+      "expected": {
+        "foamCrossingLevel": -3.5,
+        "foamWaterSideY": -3.43,
+        "foamWaterSideOffset": 0.07,
+        "foamShoreExtent": 0.6,
+        "foamWaterExtent": 0.8,
+        "terrainCrossingRange": "Foam appears wherever terrain crosses WATER_LEVEL. Shore side follows terrain surface; water side sits at WATER_LEVEL + 0.07m.",
+        "note": "Foam uses marching squares on a 1.5m (FOAM_GRID_SPACING) grid. It does NOT use the range [-3.7, -3.35] directly; rather, it detects where terrain transitions across the water level. The water-side vertices sit at WATER_LEVEL + 0.07m to avoid z-fighting."
+      },
+      "tolerance": 0.01
+    },
+    {
+      "id": "water-006",
+      "description": "Shore fade: water transparency ramps from opaque to transparent between -0.2m and +0.15m above terrain height. Uses heightmap texture lookup.",
+      "input": {
+        "shoreTransition": {
+          "opaqueBelow": -0.2,
+          "transparentAbove": 0.15,
+          "relativeTo": "terrain height from heightmap texture"
+        }
+      },
+      "expected": {
+        "fullyOpaque": "water height is 0.2m+ above terrain (deep water)",
+        "fullyTransparent": "water height is 0.15m below terrain (above waterline/shore)",
+        "transitionBand": 0.35,
+        "heightmapSize": 128,
+        "heightmapFormat": "R channel, Float32",
+        "updateThreshold": "player moves >5m",
+        "staggeredFrames": 8,
+        "note": "The shore fade uses a 128x128 DataTexture encoding terrain heights across the water plane extent. Updated in 8-frame batches (16 rows per frame)."
+      },
+      "tolerance": 0.01
+    },
+    {
+      "id": "water-007",
+      "description": "Swimming trigger: swimming activates when water depth exceeds SWIM_DEPTH_THRESHOLD (1.2m). Water depth = waterSurface - terrainHeight.",
+      "input": {
+        "swimDepthThreshold": 1.2,
+        "waterLevel": -3.5,
+        "swimSpeed": 1.8,
+        "swimEyeAboveWater": 0.45
+      },
+      "expected": {
+        "triggerDepth": 1.2,
+        "triggerTerrainHeight": -4.7,
+        "formula": "isSwimming = (WATER_LEVEL + waveH - terrainHeight) > SWIM_DEPTH_THRESHOLD",
+        "swimBehavior": {
+          "speed": 1.8,
+          "canJump": false,
+          "treeCollision": false,
+          "eyeHeight": "WATER_LEVEL + waveH + SWIM_EYE_ABOVE_WATER (0.45m)",
+          "bobSpeed": 0.6,
+          "bobAmount": 0.025
+        },
+        "note": "When terrainHeight < WATER_LEVEL - SWIM_DEPTH_THRESHOLD (i.e. < -4.7m), swimming triggers. Player eyes float 0.45m above water surface with gentle 0.6Hz bob."
+      },
+      "tolerance": 0.001
+    },
+    {
+      "id": "water-008",
+      "description": "Storm-chop waves: 6 additional waves activated by rainIntensity (0-1). These add turbulence during storms.",
+      "input": {
+        "stormChopWaves": [
+          {"dir": [1.60, -0.90], "speed": 2.80, "amp": 0.015},
+          {"dir": [-1.25, 1.55], "speed": 3.20, "amp": 0.012},
+          {"dir": [2.00, 1.15], "speed": 2.50, "amp": 0.010},
+          {"dir": [-0.95, -2.20], "speed": 3.60, "amp": 0.008},
+          {"dir": [2.40, 0.40], "speed": 4.10, "amp": 0.006},
+          {"dir": [-1.85, 2.30], "speed": 3.80, "amp": 0.005}
+        ],
+        "rainIntensity": 1.0
+      },
+      "expected": {
+        "stormChopAmplitudeSum": 0.056,
+        "scaledByRain": true,
+        "formula": "stormWaveAmp = baseAmp * rainIntensity",
+        "totalMaxDisplacement": "base(0.207) * uWaveAmplitude(1.8) + storm(0.056) = ~0.429m at max storm",
+        "note": "Storm-chop waves have higher speeds (2.5-4.1) for choppy appearance. Amplitudes multiplied by rainIntensity which is max(0, weatherIntensity - 1)."
+      },
+      "tolerance": 0.001
+    }
+  ]
+}

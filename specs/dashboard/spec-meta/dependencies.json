@@ -1,0 +1,243 @@
+{
+  "VF-ARCH": {
+    "name": "VF-ARCH \u2014 Architecture",
+    "version": "1.1",
+    "status": "Active",
+    "path": "specs/VF-ARCH.md",
+    "depends_on": [
+      "VF-OVERVIEW",
+      "VF-CONFIG"
+    ],
+    "depended_by": [
+      "VF-COLLECTIBLES",
+      "VF-PERFORMANCE",
+      "VF-TERRAIN",
+      "VF-WEATHER"
+    ]
+  },
+  "VF-ATMOSPHERE": {
+    "name": "VF-ATMOSPHERE \u2014 Atmosphere",
+    "version": "1.1",
+    "status": "Active",
+    "path": "specs/VF-ATMOSPHERE.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-WEATHER"
+    ],
+    "depended_by": [
+      "VF-VERIFY",
+      "VF-WEATHER",
+      "VF-WILDLIFE"
+    ]
+  },
+  "VF-AUDIO": {
+    "name": "VF-AUDIO \u2014 Audio System",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-AUDIO.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-WEATHER",
+      "VF-MOVEMENT",
+      "VF-TERRAIN"
+    ],
+    "depended_by": [
+      "VF-COLLECTIBLES",
+      "VF-VERIFY",
+      "VF-WEATHER",
+      "VF-WILDLIFE"
+    ]
+  },
+  "VF-COLLECTIBLES": {
+    "name": "VF-COLLECTIBLES \u2014 Collectibles & HUD",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-COLLECTIBLES.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-ARCH",
+      "VF-TERRAIN",
+      "VF-MOVEMENT",
+      "VF-AUDIO"
+    ],
+    "depended_by": [
+      "VF-VERIFY"
+    ]
+  },
+  "VF-CONFIG": {
+    "name": "VF-CONFIG \u2014 Configuration Reference",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-CONFIG.md",
+    "depends_on": [],
+    "depended_by": [
+      "VF-ARCH",
+      "VF-ATMOSPHERE",
+      "VF-AUDIO",
+      "VF-COLLECTIBLES",
+      "VF-FOREST",
+      "VF-MOVEMENT",
+      "VF-PERFORMANCE",
+      "VF-TERRAIN",
+      "VF-VERIFY",
+      "VF-WATER",
+      "VF-WEATHER",
+      "VF-WILDLIFE"
+    ]
+  },
+  "VF-FOREST": {
+    "name": "VF-FOREST \u2014 Forest System",
+    "version": "1.1",
+    "status": "Active",
+    "path": "specs/VF-FOREST.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-TERRAIN",
+      "VF-WEATHER"
+    ],
+    "depended_by": [
+      "VF-MOVEMENT",
+      "VF-PERFORMANCE",
+      "VF-VERIFY",
+      "VF-WILDLIFE"
+    ]
+  },
+  "VF-MOVEMENT": {
+    "name": "VF-MOVEMENT \u2014 Movement & Input",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-MOVEMENT.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-TERRAIN",
+      "VF-WATER",
+      "VF-FOREST"
+    ],
+    "depended_by": [
+      "VF-AUDIO",
+      "VF-COLLECTIBLES",
+      "VF-VERIFY"
+    ]
+  },
+  "VF-OVERVIEW": {
+    "name": "VF-OVERVIEW \u2014 Introduction & Conventions",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-OVERVIEW.md",
+    "depends_on": [],
+    "depended_by": [
+      "VF-ARCH"
+    ]
+  },
+  "VF-PERFORMANCE": {
+    "name": "VF-PERFORMANCE \u2014 Performance Budget",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-PERFORMANCE.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-ARCH",
+      "VF-TERRAIN",
+      "VF-FOREST",
+      "VF-WATER",
+      "VF-WEATHER"
+    ],
+    "depended_by": [
+      "VF-VERIFY"
+    ]
+  },
+  "VF-TERRAIN": {
+    "name": "VF-TERRAIN \u2014 Terrain System",
+    "version": "1.1",
+    "status": "Active",
+    "path": "specs/VF-TERRAIN.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-ARCH"
+    ],
+    "depended_by": [
+      "VF-AUDIO",
+      "VF-COLLECTIBLES",
+      "VF-FOREST",
+      "VF-MOVEMENT",
+      "VF-PERFORMANCE",
+      "VF-VERIFY",
+      "VF-WATER",
+      "VF-WILDLIFE"
+    ]
+  },
+  "VF-VERIFY": {
+    "name": "VF-VERIFY \u2014 Verification Guide",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-VERIFY.md",
+    "depends_on": [
+      "VF-TERRAIN",
+      "VF-WATER",
+      "VF-FOREST",
+      "VF-WILDLIFE",
+      "VF-ATMOSPHERE",
+      "VF-WEATHER",
+      "VF-AUDIO",
+      "VF-MOVEMENT",
+      "VF-COLLECTIBLES",
+      "VF-PERFORMANCE",
+      "VF-CONFIG"
+    ],
+    "depended_by": []
+  },
+  "VF-WATER": {
+    "name": "VF-WATER \u2014 Water System",
+    "version": "1.1",
+    "status": "Active",
+    "path": "specs/VF-WATER.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-TERRAIN",
+      "VF-WEATHER"
+    ],
+    "depended_by": [
+      "VF-MOVEMENT",
+      "VF-PERFORMANCE",
+      "VF-VERIFY",
+      "VF-WEATHER"
+    ]
+  },
+  "VF-WEATHER": {
+    "name": "VF-WEATHER \u2014 Weather System",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-WEATHER.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-ARCH",
+      "VF-ATMOSPHERE",
+      "VF-WATER",
+      "VF-AUDIO"
+    ],
+    "depended_by": [
+      "VF-ATMOSPHERE",
+      "VF-AUDIO",
+      "VF-FOREST",
+      "VF-PERFORMANCE",
+      "VF-VERIFY",
+      "VF-WATER"
+    ]
+  },
+  "VF-WILDLIFE": {
+    "name": "VF-WILDLIFE \u2014 Wildlife",
+    "version": "1.0",
+    "status": "Active",
+    "path": "specs/VF-WILDLIFE.md",
+    "depends_on": [
+      "VF-CONFIG",
+      "VF-TERRAIN",
+      "VF-ATMOSPHERE",
+      "VF-AUDIO",
+      "VF-FOREST"
+    ],
+    "depended_by": [
+      "VF-VERIFY"
+    ]
+  }
+}

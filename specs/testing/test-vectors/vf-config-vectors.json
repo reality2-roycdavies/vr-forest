@@ -1,0 +1,223 @@
+{
+  "spec": "VF-CONFIG",
+  "version": "1.0",
+  "description": "Config parameter validation — verifies that CONFIG exports the correct types, values, and constraints. All magic numbers in the VR Forest experience are centralised in this single CONFIG object.",
+  "vectors": [
+    {
+      "id": "config-001",
+      "description": "Core terrain parameters exist with exact values.",
+      "input": {
+        "section": "Terrain"
+      },
+      "expected": {
+        "CHUNK_SIZE": {"value": 32, "type": "number"},
+        "CHUNK_SEGMENTS": {"value": 63, "type": "number"},
+        "CHUNK_SEGMENTS_LOD": {"value": 31, "type": "number"},
+        "LOAD_RADIUS": {"value": 5, "type": "number"},
+        "UNLOAD_RADIUS": {"value": 7, "type": "number"},
+        "MAX_CHUNKS_PER_FRAME": {"value": 2, "type": "number"},
+        "TERRAIN_SCALE": {"value": 0.008, "type": "number"},
+        "TERRAIN_OCTAVES": {"value": 4, "type": "number"},
+        "TERRAIN_PERSISTENCE": {"value": 0.45, "type": "number"},
+        "TERRAIN_LACUNARITY": {"value": 2.2, "type": "number"},
+        "TERRAIN_HEIGHT": {"value": 8, "type": "number"},
+        "TERRAIN_SEED": {"value": 42, "type": "number"}
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-002",
+      "description": "Movement and water parameters exist with exact values.",
+      "input": {
+        "section": "Movement and Water"
+      },
+      "expected": {
+        "MOVE_SPEED": {"value": 3.0, "type": "number"},
+        "SPRINT_SPEED": {"value": 7.0, "type": "number"},
+        "TERRAIN_FOLLOW_OFFSET": {"value": 1.6, "type": "number"},
+        "JUMP_VELOCITY": {"value": 4.0, "type": "number"},
+        "GRAVITY": {"value": 9.8, "type": "number"},
+        "WATER_LEVEL": {"value": -3.5, "type": "number"},
+        "SHORE_LEVEL": {"value": -2.8, "type": "number"},
+        "SWIM_DEPTH_THRESHOLD": {"value": 1.2, "type": "number"},
+        "SWIM_SPEED": {"value": 1.8, "type": "number"}
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-003",
+      "description": "Tree parameters exist with exact values.",
+      "input": {
+        "section": "Trees"
+      },
+      "expected": {
+        "TREE_DENSITY_SCALE": {"value": 0.05, "type": "number"},
+        "TREE_DENSITY_THRESHOLD": {"value": 0.15, "type": "number"},
+        "TREE_GRID_SPACING": {"value": 3, "type": "number"},
+        "TREE_JITTER": {"value": 1.2, "type": "number"},
+        "TREE_MIN_HEIGHT": {"value": 2.5, "type": "number"},
+        "TREE_MAX_HEIGHT": {"value": 6, "type": "number"},
+        "TREE_TYPES": {"value": 4, "type": "number"},
+        "TREE_COLLISION_RADIUS": {"value": 0.4, "type": "number"}
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-004",
+      "description": "Range checks: values must satisfy ordering constraints. FOG_NEAR < FOG_FAR, TREE_GRID_SPACING > 0, LOAD_RADIUS < UNLOAD_RADIUS, etc.",
+      "input": {
+        "section": "Range constraints"
+      },
+      "expected": {
+        "constraints": [
+          {"rule": "FOG_NEAR < FOG_FAR", "left": 50, "right": 130, "satisfied": true},
+          {"rule": "TREE_GRID_SPACING > 0", "value": 3, "satisfied": true},
+          {"rule": "LOAD_RADIUS < UNLOAD_RADIUS", "left": 5, "right": 7, "satisfied": true},
+          {"rule": "WATER_LEVEL < SHORE_LEVEL", "left": -3.5, "right": -2.8, "satisfied": true},
+          {"rule": "TREE_MIN_HEIGHT < TREE_MAX_HEIGHT", "left": 2.5, "right": 6, "satisfied": true},
+          {"rule": "RAIN_SPEED_MIN < RAIN_SPEED_MAX", "left": 11, "right": 16, "satisfied": true},
+          {"rule": "WEATHER_HOLD_MIN < WEATHER_HOLD_MAX", "left": 180, "right": 480, "satisfied": true},
+          {"rule": "CLOUD_MIN_RADIUS < CLOUD_MAX_RADIUS", "left": 35, "right": 200, "satisfied": true},
+          {"rule": "CLOUD_HEIGHT_MIN < CLOUD_HEIGHT_MAX", "left": 55, "right": 115, "satisfied": true},
+          {"rule": "SUBALPINE_START < TREELINE_START", "left": 10, "right": 16, "satisfied": true},
+          {"rule": "TREELINE_START < ALPINE_START", "left": 16, "right": 20, "satisfied": true},
+          {"rule": "LOG_MIN_LENGTH < LOG_MAX_LENGTH", "left": 1.5, "right": 4.0, "satisfied": true},
+          {"rule": "STUMP_RADIUS_MIN < STUMP_RADIUS_MAX", "left": 0.15, "right": 0.25, "satisfied": true},
+          {"rule": "STUMP_HEIGHT_MIN < STUMP_HEIGHT_MAX", "left": 0.15, "right": 0.4, "satisfied": true},
+          {"rule": "THUNDER_INTERVAL_MIN < THUNDER_INTERVAL_MAX", "left": 6, "right": 18, "satisfied": true},
+          {"rule": "LIGHTNING_BOLT_MIN_DIST < LIGHTNING_BOLT_MAX_DIST", "left": 60, "right": 200, "satisfied": true}
+        ]
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-005",
+      "description": "Colour values are valid. Hex colours are integers (0x-prefixed), RGB colours are objects with r, g, b properties containing numbers.",
+      "input": {
+        "section": "Colours"
+      },
+      "expected": {
+        "hexColours": {
+          "TRUNK_COLOR": {"value": "0x5c3a1e", "type": "number"},
+          "GRASS_COLOR": {"value": "0x4a7a2e", "type": "number"},
+          "ROCK_COLOR": {"value": "0x888888", "type": "number"},
+          "FERN_COLOR": {"value": "0x4a8040", "type": "number"},
+          "WEATHER_STORM_CLOUD_COLOR": {"value": "0x303038", "type": "number"},
+          "COLLECTIBLE_GLOW_COLOR": {"value": "0x66ffcc", "type": "number"},
+          "COLLECTIBLE_CORE_COLOR": {"value": "0xaaffee", "type": "number"}
+        },
+        "hexArrayColours": {
+          "CANOPY_COLORS": {"values": ["0x2d5a1e", "0x3a6b2a", "0x1e4a12"], "type": "number[]"},
+          "ROCK_COLORS": {"values": ["0x504d4a", "0x5a5652", "0x464442", "0x625e5a", "0x3e3c3a"], "type": "number[]"},
+          "FLOWER_COLORS": {"values": ["0xff4da6", "0xffe040", "0x8b6cf7", "0xff80b0", "0xffee55", "0xff6060"], "type": "number[]"}
+        },
+        "rgbColours": {
+          "SHORE_COLOR": {"r": 0.85, "g": 0.75, "b": 0.55},
+          "WATER_COLOR": {"r": 0.05, "g": 0.15, "b": 0.28},
+          "GROUND_LOW_COLOR": {"r": 0.13, "g": 0.24, "b": 0.06},
+          "GROUND_MID_COLOR": {"r": 0.28, "g": 0.45, "b": 0.12},
+          "GROUND_HIGH_COLOR": {"r": 0.35, "g": 0.50, "b": 0.18},
+          "GROUND_DIRT_COLOR": {"r": 0.40, "g": 0.30, "b": 0.18},
+          "GROUND_DIRT_DARK": {"r": 0.30, "g": 0.22, "b": 0.12},
+          "SUBALPINE_COLOR": {"r": 0.15, "g": 0.28, "b": 0.08},
+          "TUSSOCK_COLOR": {"r": 0.55, "g": 0.50, "b": 0.30},
+          "ALPINE_ROCK_COLOR": {"r": 0.45, "g": 0.42, "b": 0.38},
+          "SNOW_COLOR": {"r": 1.4, "g": 1.42, "b": 1.5},
+          "STEEP_ROCK_COLOR": {"r": 0.28, "g": 0.27, "b": 0.26},
+          "COTTAGE_GARDEN_COLOR": {"r": 0.38, "g": 0.30, "b": 0.16},
+          "SMOKE_COLOR": {"r": 0.55, "g": 0.55, "b": 0.58}
+        },
+        "note": "All hex values are valid JavaScript integer literals. All RGB objects have r, g, b float components. SNOW_COLOR values > 1.0 are intentional (emissive bloom)."
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-006",
+      "description": "Atmosphere parameters exist with exact values.",
+      "input": {
+        "section": "Atmosphere"
+      },
+      "expected": {
+        "FOG_NEAR": {"value": 50, "type": "number"},
+        "FOG_FAR": {"value": 130, "type": "number"},
+        "SKY_RADIUS": {"value": 200, "type": "number"},
+        "AMBIENT_VOLUME": {"value": 0.3, "type": "number"},
+        "SUN_VISUAL_RADIUS": {"value": 14, "type": "number"},
+        "SUN_DISTANCE": {"value": 150, "type": "number"},
+        "CLOUD_COUNT": {"value": 20, "type": "number"},
+        "DEFAULT_LATITUDE": {"value": -36.85, "type": "number"},
+        "DEFAULT_LONGITUDE": {"value": 174.76, "type": "number"},
+        "MOON_VISUAL_RADIUS": {"value": 1.75, "type": "number"},
+        "MOON_DISTANCE": {"value": 135, "type": "number"},
+        "PLANET_DISTANCE": {"value": 140, "type": "number"},
+        "PLANET_VISUAL_RADIUS": {"value": 0.6, "type": "number"}
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-007",
+      "description": "Weather parameters exist with exact values.",
+      "input": {
+        "section": "Weather"
+      },
+      "expected": {
+        "WEATHER_TRANSITION_RATE": {"value": 0.0083, "type": "number"},
+        "WEATHER_HOLD_MIN": {"value": 180, "type": "number"},
+        "WEATHER_HOLD_MAX": {"value": 480, "type": "number"},
+        "RAIN_PARTICLE_COUNT": {"value": 5000, "type": "number"},
+        "RAIN_RADIUS": {"value": 25, "type": "number"},
+        "RAIN_HEIGHT": {"value": 20, "type": "number"},
+        "WETNESS_WET_RATE": {"value": 0.0083, "type": "number"},
+        "WETNESS_DRY_RATE": {"value": 0.0042, "type": "number"}
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-008",
+      "description": "Altitude zone parameters exist with exact values.",
+      "input": {
+        "section": "Altitude Zones"
+      },
+      "expected": {
+        "SUBALPINE_START": {"value": 10, "type": "number"},
+        "TREELINE_START": {"value": 16, "type": "number"},
+        "ALPINE_START": {"value": 20, "type": "number"},
+        "SNOWLINE_START": {"value": 20, "type": "number"},
+        "TREELINE_SCALE_MIN": {"value": 0.3, "type": "number"}
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-009",
+      "description": "No duplicate keys: the CONFIG object must not contain any duplicate property names. Each parameter appears exactly once.",
+      "input": {
+        "section": "All"
+      },
+      "expected": {
+        "totalKeys": "approximately 160-180 keys",
+        "duplicates": [],
+        "note": "JavaScript object literals silently overwrite duplicate keys. A test should parse the source text of config.js and verify no key appears more than once."
+      },
+      "tolerance": 0
+    },
+    {
+      "id": "config-010",
+      "description": "Collision radii are arrays of the correct length and contain positive values.",
+      "input": {
+        "section": "Collision"
+      },
+      "expected": {
+        "ROCK_COLLISION_RADII": {
+          "value": [0.35, 0.7, 1.4],
+          "type": "number[]",
+          "length": 3,
+          "allPositive": true
+        },
+        "TREE_COLLISION_RADIUS": {"value": 0.4, "positive": true},
+        "COTTAGE_COLLISION_RADIUS": {"value": 2.0, "positive": true},
+        "COLLECTIBLE_COLLISION_RADIUS": {"value": 1.2, "positive": true}
+      },
+      "tolerance": 0
+    }
+  ]
+}
