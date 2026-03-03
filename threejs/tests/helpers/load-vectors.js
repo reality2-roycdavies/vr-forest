@@ -3,7 +3,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const VECTORS_DIR = resolve(__dirname, '../../specs/testing/test-vectors');
+const VECTORS_DIR = resolve(__dirname, '../../../specs/testing/test-vectors');
 
 /**
  * Load a test vector JSON file by spec name (e.g. 'config', 'terrain').

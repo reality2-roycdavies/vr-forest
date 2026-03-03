@@ -1,7 +1,14 @@
 *.pem
 serve-https.py
-node_modules/
 .DS_Store
 transcripts/*.jsonl
 specs/dashboard/__pycache__/
 specs/testing/results/*.json
+
+# Three.js
+threejs/node_modules/
+
+# Godot
+godot/.godot/
+godot/export_presets.cfg
+godot/*.import

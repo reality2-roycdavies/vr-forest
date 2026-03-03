@@ -4,7 +4,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:report": "vitest run --reporter=json --outputFile=specs/testing/results/vitest-results.json"
+    "test:report": "vitest run --reporter=json --outputFile=../specs/testing/results/vitest-results.json"
   },
   "devDependencies": {
     "simplex-noise": "4.0.3",

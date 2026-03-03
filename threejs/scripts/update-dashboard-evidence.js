@@ -8,7 +8,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, '..');
+const ROOT = resolve(__dirname, '../..');
 const REVIEWS_DIR = resolve(ROOT, 'specs/dashboard/spec-meta/reviews');
 const RESULTS_FILE = resolve(ROOT, 'specs/testing/results/vitest-results.json');
 
