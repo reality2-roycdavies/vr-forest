@@ -1,5 +1,5 @@
 extends CharacterBody3D
-## Desktop player controller — WASD + mouse look.
+## Desktop player controller — WASD + mouse look + terrain following.
 ## XR support will be added later via xr_setup.gd.
 
 const MOUSE_SENSITIVITY := 0.002
@@ -7,11 +7,20 @@ const MOUSE_SENSITIVITY := 0.002
 @onready var camera: Camera3D = $Camera3D
 
 var _mouse_captured := false
+var _noise: RefCounted
+var _target_y := 0.0
 
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_mouse_captured = true
+	add_to_group("player")
+	_target_y = Config.TERRAIN_FOLLOW_OFFSET
+	camera.current = true
+
+
+func set_noise(noise_instance: RefCounted) -> void:
+	_noise = noise_instance
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -32,10 +41,6 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# Gravity
-	if not is_on_floor():
-		velocity.y -= Config.GRAVITY * delta
-
 	# Movement direction from WASD
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var direction := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
@@ -48,5 +53,15 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.x = move_toward(velocity.x, 0, speed)
 		velocity.z = move_toward(velocity.z, 0, speed)
+
+	# Terrain following — smooth lerp to terrain height
+	if _noise:
+		var terrain_h: float = _noise.get_terrain_height(global_position.x, global_position.z)
+		_target_y = terrain_h + Config.TERRAIN_FOLLOW_OFFSET
+		global_position.y = lerpf(global_position.y, _target_y, 8.0 * delta)
+		velocity.y = 0.0
+	else:
+		if not is_on_floor():
+			velocity.y -= Config.GRAVITY * delta
 
 	move_and_slide()

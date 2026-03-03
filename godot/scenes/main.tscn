@@ -1,8 +1,15 @@
-[gd_scene format=3]
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://b2wwfptu4a1gg" path="res://scenes/main.gd" id="1"]
+[ext_resource type="Script" uid="uid://chfed7vlp2r4r" path="res://player/player.gd" id="2"]
 
 [node name="Main" type="Node3D"]
+script = ExtResource("1")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+[node name="Player" type="CharacterBody3D" parent="."]
+script = ExtResource("2")
 
-[node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+[node name="Camera3D" type="Camera3D" parent="Player"]
+fov = 75.0
+far = 300.0
+current = true
