@@ -1,0 +1,48 @@
+[gd_scene load_steps=3 format=3 uid="uid://main_scene"]
+
+[ext_resource type="Script" path="res://player/xr_setup.gd" id="1_xr"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
+sky_top_color = Color(0.385, 0.454, 0.55, 1)
+sky_horizon_color = Color(0.646, 0.654, 0.67, 1)
+ground_bottom_color = Color(0.2, 0.169, 0.133, 1)
+ground_horizon_color = Color(0.646, 0.654, 0.67, 1)
+
+[node name="Main" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("ProceduralSkyMaterial_1")
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 2
+sky = SubResource("Sky_1")
+ambient_light_source = 2
+ambient_light_color = Color(0.3, 0.35, 0.4, 1)
+ambient_light_energy = 0.5
+fog_enabled = true
+fog_light_color = Color(0.6, 0.65, 0.7, 1)
+fog_density = 0.005
+volumetric_fog_enabled = false
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707, 0.707, 0, -0.707, 0.707, 0, 50, 0)
+light_color = Color(1, 0.95, 0.85, 1)
+light_energy = 1.2
+shadow_enabled = true
+
+[node name="XRSetup" type="Node3D" parent="."]
+script = ExtResource("1_xr")
+
+[node name="XROrigin3D" type="XROrigin3D" parent="XRSetup"]
+
+[node name="XRCamera3D" type="XRCamera3D" parent="XRSetup/XROrigin3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+
+[node name="LeftController" type="XRController3D" parent="XRSetup/XROrigin3D"]
+tracker = &"left_hand"
+
+[node name="RightController" type="XRController3D" parent="XRSetup/XROrigin3D"]
+tracker = &"right_hand"
