@@ -12,3 +12,4 @@ threejs/node_modules/
 godot/.godot/
 godot/export_presets.cfg
 godot/*.import
+godot/.xdp-*
