@@ -22,6 +22,5 @@ window/vsync/vsync_mode=0
 [xr]
 
 openxr/enabled=true
-openxr/default_action_map="res://openxr_action_map.tres"
 openxr/environment_blend_mode=0
 shaders/enabled=true

@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://main_scene"]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://player/xr_setup.gd" id="1_xr"]
 
@@ -7,11 +7,6 @@ sky_top_color = Color(0.385, 0.454, 0.55, 1)
 sky_horizon_color = Color(0.646, 0.654, 0.67, 1)
 ground_bottom_color = Color(0.2, 0.169, 0.133, 1)
 ground_horizon_color = Color(0.646, 0.654, 0.67, 1)
-
-[node name="Main" type="Node3D"]
-
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment_1")
 
 [sub_resource type="Sky" id="Sky_1"]
 sky_material = SubResource("ProceduralSkyMaterial_1")
@@ -26,6 +21,11 @@ fog_enabled = true
 fog_light_color = Color(0.6, 0.65, 0.7, 1)
 fog_density = 0.005
 volumetric_fog_enabled = false
+
+[node name="Main" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.707, 0.707, 0, -0.707, 0.707, 0, 50, 0)
