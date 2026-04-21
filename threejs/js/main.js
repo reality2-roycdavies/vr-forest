@@ -20,6 +20,13 @@ import { CottageSystem } from './forest/cottage-system.js';
 import { getTerrainHeight, getTerrainHeightApprox, getStreamFactor } from './terrain/noise.js';
 import { riverTracer } from './terrain/river-tracer.js';
 import { updateGroundTime, getGroundMaterial, setGroundAnisotropy } from './terrain/ground-material.js';
+import { MP_CONFIG } from './multiplayer/config.js';
+import { loadOrCreateIdentity } from './multiplayer/identity.js';
+import { RelayClient } from './multiplayer/relay-client.js';
+import { AvatarSender } from './multiplayer/avatar-sender.js';
+import { AvatarRenderer } from './multiplayer/avatar-renderer.js';
+import { MultiplayerHud } from './multiplayer/hud.js';
+import { WorldStateSync } from './multiplayer/world-state-sync.js';
 
 // --- Scene ---
 const scene = new THREE.Scene();
@@ -354,6 +361,43 @@ const cottages = new CottageSystem(scene);
 const collectibles = new CollectibleSystem(scene);
 movement.collectibles = collectibles;
 movement.audio = audio;
+
+// --- Multiplayer (optional, non-blocking) ---
+const avatarRenderer = new AvatarRenderer(scene);
+const mpHud = new MultiplayerHud(vr.camera);
+let avatarSender = null;
+let worldSync = null;
+let mpRelay = null;
+(async () => {
+  try {
+    const identity = await loadOrCreateIdentity();
+    avatarRenderer.selfHex = identity.publicKeyHex;
+    mpRelay = new RelayClient({
+      url: MP_CONFIG.RELAY_URL,
+      trustGroupHex: MP_CONFIG.TRUST_GROUP_HEX,
+      identity,
+      onFrame: (bytes) => {
+        if (bytes.length < 33) return;
+        const type = bytes[32];
+        if (type === MP_CONFIG.FRAME_TYPE_POSE) {
+          avatarRenderer.onFrame(bytes);
+        } else if (type === MP_CONFIG.FRAME_TYPE_WORLD_STATE) {
+          if (worldSync) worldSync.onFrame(bytes);
+        }
+      },
+      onStatus: (s) => {
+        console.log('[mp]', s);
+        mpHud.setConnected(mpRelay && mpRelay.connected);
+      },
+    });
+    mpRelay.connect();
+    avatarSender = new AvatarSender({ relay: mpRelay, identity, camera: vr.camera });
+    worldSync = new WorldStateSync({ relay: mpRelay, identity, dayNight, weather });
+    console.log('[mp] identity', identity.publicKeyHex.slice(0, 16));
+  } catch (e) {
+    console.warn('[mp] disabled:', e.message || e);
+  }
+})();
 
 // --- Deferred cottage density update (spread across frames) ---
 let _cottageDensityQueue = [];
@@ -995,6 +1039,12 @@ function onFrame() {
       }
     } catch (e) { /* requestViewportScale not supported — no-op */ }
   }
+
+  // Multiplayer (broadcast local pose + world state, lerp remote avatars)
+  if (avatarSender) avatarSender.update(delta);
+  if (worldSync) worldSync.update(delta);
+  avatarRenderer.update(delta);
+  mpHud.setPeerCount(avatarRenderer.peerCount);
 
   // Render
   vr.renderer.render(scene, vr.camera);
