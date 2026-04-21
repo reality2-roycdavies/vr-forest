@@ -47,7 +47,7 @@ func _activate_desktop_fallback() -> void:
 	desktop_camera = Camera3D.new()
 	desktop_camera.position = Vector3(0, Config.TERRAIN_FOLLOW_OFFSET, 0)
 	desktop_camera.fov = 70.0
-	desktop_camera.far = 300.0
+	desktop_camera.far = Config.CAMERA_FAR_LOW
 	add_child(desktop_camera)
 	desktop_camera.make_current()
 

@@ -9,20 +9,46 @@ extends Node
 
 const CHUNK_SIZE := 32              ## meters per chunk side
 const CHUNK_SEGMENTS := 63          ## vertices per side (64x64 grid = 63x63 quads ≈ 8k tris)
-const CHUNK_SEGMENTS_LOD := 31      ## reduced segments for distant chunks in VR
-const LOAD_RADIUS := 5              ## chunks to load around player
-const UNLOAD_RADIUS := 7            ## chunks beyond this get recycled
-const MAX_CHUNKS_PER_FRAME := 2     ## staggered loading
+const CHUNK_SEGMENTS_LOD := 31      ## reduced segments for distant chunks
+const CHUNK_SEGMENTS_LOD2 := 15     ## ultra-low segments for far distant chunks
+const LOAD_RADIUS := 7              ## base chunks to load at ground level
+const UNLOAD_RADIUS := 9            ## base unload radius at ground level
+const MAX_CHUNKS_PER_FRAME := 2     ## staggered loading (legacy, see CHUNK_BUILD_BUDGET_MS)
+const CHUNK_BUILD_BUDGET_MS := 8    ## max ms per frame for applying built chunks to scene
+
+# Altitude-adaptive view distance
+const VIEW_ALTITUDE_MIN := 5.0      ## below this, use base radii
+const VIEW_ALTITUDE_MAX := 120.0    ## above this, use max radii
+const LOAD_RADIUS_MAX := 16         ## chunks to load when at altitude
+const UNLOAD_RADIUS_MAX := 18       ## unload radius when at altitude
+const LOD_NEAR_DIST_SQ := 2        ## chunks^2: within ~1.4 → full res (45m)
+const LOD_MID_DIST_SQ := 9         ## chunks^2: within 3 → LOD1 (96m), beyond → LOD2
+const FOG_DENSITY_LOW := 0.0015     ## fog density at ground level (~700m visibility)
+const FOG_DENSITY_HIGH := 0.0003    ## fog density at altitude (~3km visibility)
+const CAMERA_FAR_LOW := 600.0       ## camera far plane at ground level
+const CAMERA_FAR_HIGH := 10000.0    ## camera far plane at altitude — must exceed HORIZON_OUTER_RADIUS
+
+# Distant horizon mesh — 3 LOD bands
+const HORIZON_INNER_RADIUS := 130.0  ## start just inside min chunk range (LOAD_RADIUS * CHUNK_SIZE - margin)
+const HORIZON_MID_RADIUS := 1500.0   ## near band: full detail terrain
+const HORIZON_FAR_RADIUS := 4000.0   ## mid band: simplified terrain
+const HORIZON_OUTER_RADIUS := 9000.0 ## far band: distant mountains silhouette
+const HORIZON_NEAR_RING_STEPS := 20  ## rings in near band
+const HORIZON_MID_RING_STEPS := 16   ## rings in mid band
+const HORIZON_FAR_RING_STEPS := 12   ## rings in far band
+const HORIZON_RADIAL_STEPS := 128    ## angular resolution (points around ring)
+const HORIZON_RETRIGGER_DIST := 100.0 ## regenerate when player moves this far
+const HORIZON_DISTANT_FLOOR := 60.0  ## minimum terrain height at outer edge — must be tall enough to fill horizon from mountaintops
 
 # =============================================================================
 # Terrain noise
 # =============================================================================
 
 const TERRAIN_SCALE := 0.008        ## base frequency
-const TERRAIN_OCTAVES := 4
-const TERRAIN_PERSISTENCE := 0.45
+const TERRAIN_OCTAVES := 4          ## more detail in terrain
+const TERRAIN_PERSISTENCE := 0.42   ## moderate high-freq contribution
 const TERRAIN_LACUNARITY := 2.2
-const TERRAIN_HEIGHT := 8           ## max height displacement
+const TERRAIN_HEIGHT := 15          ## max height displacement — gentler base terrain
 const TERRAIN_SEED := 42
 
 # =============================================================================
@@ -44,9 +70,23 @@ const TREE_COLLISION_RADIUS := 0.4      ## trunk collision radius in meters
 
 const VEG_GRID_SPACING := 1.3
 const VEG_DENSITY_THRESHOLD := -0.15
-const VEG_GRASS_SCALE := 0.55
-const VEG_ROCK_SCALE := 0.3
-const VEG_FERN_SCALE := 1.2
+const VEG_GRASS_SCALE := 0.9
+const VEG_ROCK_SCALE := 1.0
+const VEG_FERN_SCALE := 2.0
+
+const VEG_GRASS_CAP := 3000
+const VEG_FERN_CAP := 3000
+const VEG_FLOWER_CAP := 1500
+const VEG_ROCK_CAP := 1000
+const VEG_LOG_CAP := 600
+const VEG_STUMP_CAP := 400
+
+const LOG_BARK_COLORS: Array[Color] = [
+	Color(0x5c / 255.0, 0x3a / 255.0, 0x1e / 255.0),
+	Color(0x4a / 255.0, 0x2f / 255.0, 0x16 / 255.0),
+	Color(0x6b / 255.0, 0x42 / 255.0, 0x26 / 255.0),
+]
+const STUMP_CUT_COLOR := Color(0x8b / 255.0, 0x6b / 255.0, 0x4a / 255.0)
 
 # =============================================================================
 # Movement
@@ -104,7 +144,7 @@ const PLANET_VISUAL_RADIUS := 0.6      ## base size, scaled by magnitude
 # =============================================================================
 
 const GROUND_DIRT_SCALE := 0.03        ## noise frequency for dirt patches
-const GROUND_DIRT_THRESHOLD := 0.5     ## noise > this = dirt
+const GROUND_DIRT_THRESHOLD := 0.25    ## noise > this = dirt (lower = more dirt under trees)
 const GROUND_TEX_REPEAT := 6          ## texture tiles per chunk
 
 # =============================================================================
@@ -141,8 +181,16 @@ const STUMP_HEIGHT_MAX := 0.4
 # Water / shore
 # =============================================================================
 
-const WATER_LEVEL := -3.5              ## Y at or below = water
-const SHORE_LEVEL := -2.8              ## Y below this = sandy shore (no vegetation)
+const WATER_LEVEL := -3.5              ## Y at or below = water (main ocean/sea level)
+const SHORE_LEVEL := -3.2              ## Y below this = sandy shore (no vegetation)
+
+# Highland lakes — noise-driven basins at various altitudes
+const LAKE_BASIN_SCALE := 0.0015       ## noise freq for lake center locations
+const LAKE_BASIN_RADIUS := 60.0        ## max basin radius in meters
+const LAKE_BASIN_DEPTH := 6.0          ## max depression depth
+const LAKE_BASIN_THRESHOLD := 0.60     ## noise > this = lake basin center
+const LAKE_FILL_FRACTION := 0.7        ## water fills bottom 70% of basin depth
+const LAKE_SHORE_WIDTH := 1.5          ## shore band width around highland lakes
 const SHORE_COLOR := Color(0.85, 0.75, 0.55)      ## warm sandy beige
 const WATER_COLOR := Color(0.05, 0.15, 0.28)      ## dark opaque water
 const SWIM_DEPTH_THRESHOLD := 1.2      ## water deeper than this triggers swimming
@@ -164,7 +212,7 @@ const FOAM_WATER_WIDTH := 0.8         ## strip offset toward water
 # =============================================================================
 
 const VALLEY_SCALE := 0.009            ## noise frequency for valley lines
-const VALLEY_DEPTH := 6.0              ## max carving depth
+const VALLEY_DEPTH := 10.0             ## max carving depth — deeper valleys hold water
 const VALLEY_WARP := 22               ## domain warp for meander
 const VALLEY_SHARPNESS := 2           ## power exponent
 
@@ -173,7 +221,7 @@ const VALLEY_SHARPNESS := 2           ## power exponent
 # =============================================================================
 
 const RIVER_SOURCE_SPACING := 64       ## source candidate grid (meters)
-const RIVER_SOURCE_MIN_ALT := 12       ## min base terrain height for sources
+const RIVER_SOURCE_MIN_ALT := 6        ## min base terrain height — rivers from foothills too
 const RIVER_STEP_SIZE := 4.0           ## trace step (meters)
 const RIVER_GRAD_EPS := 2.0            ## gradient central-difference epsilon
 const RIVER_MAX_STEPS := 500           ## max steps per river
@@ -201,22 +249,80 @@ const RIVER_PIT_MIN_DESCENT := 0.3     ## min height drop over stuck interval
 # =============================================================================
 
 const MOUNTAIN_SCALE := 0.003          ## lower freq than streams = broader chains
-const MOUNTAIN_HEIGHT := 45            ## max additive height
+const MOUNTAIN_HEIGHT := 150           ## max additive height — tall enough to see from ground at distance
 const MOUNTAIN_WARP := 35              ## domain warp amount
-const MOUNTAIN_SHARPNESS := 1.0        ## ridge sharpness
-const MOUNTAIN_THRESHOLD := 0.25       ## ridge value below this = no mountain
-const MOUNTAIN_VALLEY_DEPTH := 5       ## valley depression between ridges
-const FOOTHILL_HEIGHT := 6             ## max foothill height
-const FOOTHILL_SCALE := 0.008          ## higher freq = smaller hills
+const MOUNTAIN_SHARPNESS := 1.2        ## ridge sharpness
+const MOUNTAIN_THRESHOLD := 0.15       ## lower = wider mountain bases with more foothills
+const MOUNTAIN_VALLEY_DEPTH := 18      ## valley depression between ridges
+const FOOTHILL_HEIGHT := 30            ## max foothill height — less extreme foothills
+const FOOTHILL_SCALE := 0.005          ## lower freq = broader, more visible rolling hills
+
+# =============================================================================
+# Continental / biome variation
+# =============================================================================
+
+const CONTINENT_SCALE := 0.0008
+const CONTINENT_WARP := 80
+
+# =============================================================================
+# Ridged multifractal base terrain
+# =============================================================================
+
+const RMF_OCTAVES := 4
+const RMF_PERSISTENCE := 0.45
+const RMF_LACUNARITY := 2.13
+const RMF_SCALE := 0.0035
+const RMF_RIDGE_OFFSET := 1.0
+const RMF_RIDGE_GAIN := 2.0
+
+# =============================================================================
+# Swiss turbulence
+# =============================================================================
+
+const SWISS_WEIGHT_CLAMP := 0.85
+const SWISS_EROSION_SCALE := 0.035
+
+# =============================================================================
+# Power-law height remapping
+# =============================================================================
+
+const HEIGHT_REMAP_POWER := 1.6      ## >1 = flat bottoms, steep peaks
+const HEIGHT_REMAP_BIAS := 0.15
+
+# =============================================================================
+# Pre-computed erosion overlay
+# =============================================================================
+
+const EROSION_MAP_SIZE := 1024
+const EROSION_TILE_METERS := 512.0
+const EROSION_DROPLETS := 120000
+const EROSION_AMPLITUDE := 1.8
+const EROSION_INERTIA := 0.06
+const EROSION_CAPACITY := 8.0
+const EROSION_DEPOSITION := 0.02
+const EROSION_EROSION_RATE := 0.7
+const EROSION_EVAPORATION := 0.015
+const EROSION_MIN_SLOPE := 0.01
+const EROSION_RADIUS := 3
+const EROSION_MAX_LIFETIME := 90
+const EROSION_SEED := 7919
+
+# =============================================================================
+# Terrace / stratification
+# =============================================================================
+
+const TERRACE_STRENGTH := 0.15
+const TERRACE_FREQUENCY := 3.0
+const TERRACE_NOISE_SCALE := 0.015
 
 # =============================================================================
 # Altitude zones
 # =============================================================================
 
-const SUBALPINE_START := 10
-const TREELINE_START := 16
-const ALPINE_START := 20
-const SNOWLINE_START := 20
+const SUBALPINE_START := 25
+const TREELINE_START := 45
+const ALPINE_START := 80
+const SNOWLINE_START := 85
 const TREELINE_SCALE_MIN := 0.3        ## tree scale at treeline
 
 # =============================================================================
@@ -262,7 +368,7 @@ const FLOWER_COLORS: Array[Color] = [
 ]
 const FLOWER_DENSITY_THRESHOLD := 0.55
 const FLOWER_GRID_SPACING := 2.0
-const FLOWER_SCALE := 0.55
+const FLOWER_SCALE := 1.5
 
 # =============================================================================
 # Footsteps
@@ -384,6 +490,24 @@ const COTTAGE_MIN_TREE_DENSITY := 0.0          ## relaxed
 const COTTAGE_MAX_SLOPE := 0.3                 ## max terrain slope
 const COTTAGE_COLLISION_RADIUS := 2.0          ## player collision radius
 const COTTAGE_GARDEN_COLOR := Color(0.38, 0.30, 0.16)  ## warm earthy garden soil
+
+# Cottage geometry
+const COTTAGE_MAX_COUNT := 50
+const COTTAGE_JITTER := 3.0
+const COTTAGE_WIDTH_X_RANGE := Vector2(2.5, 5.0)
+const COTTAGE_WIDTH_Z_RANGE := Vector2(2.0, 4.0)
+const COTTAGE_LOG_RADIUS_RANGE := Vector2(0.10, 0.16)
+const COTTAGE_LOG_COUNT_RANGE := Vector2i(10, 14)
+const COTTAGE_ROOF_PITCH_RANGE := Vector2(0.5, 1.1)
+const COTTAGE_ROOF_OVERHANG_RANGE := Vector2(0.2, 0.6)
+const COTTAGE_LOG_OVERHANG_RANGE := Vector2(0.08, 0.2)
+
+# Cottage colors
+const COTTAGE_STONE_COLOR := Color(0.4, 0.4, 0.375)
+const COTTAGE_GLASS_COLOR := Color(0.18, 0.24, 0.35)
+const COTTAGE_DOOR_COLOR := Color(0.165, 0.118, 0.063)
+const COTTAGE_FRAME_COLOR := Color(0.227, 0.157, 0.063)
+const COTTAGE_GLOW_COLOR := Color(0.9, 0.65, 0.2)
 
 # =============================================================================
 # Cottage smoke particles
