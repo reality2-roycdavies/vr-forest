@@ -1,10 +1,10 @@
-console.log('%c[VR Forest v14] Loaded', 'color: #66ffcc; font-size: 14px;');
+console.log('%c[VR Forest v15] Loaded', 'color: #66ffcc; font-size: 14px;');
 // Bootstrap: scene, systems, render loop
 import * as THREE from 'three';
 import { VRSetup } from './vr-setup.js';
 import { InputManager } from './input.js';
 import { MovementSystem } from './movement.js';
-import { ChunkManager } from './terrain/chunk-manager.js';
+import { ChunkManager } from './terrain/chunk-manager.js?v=202';
 import { TreePool } from './forest/tree-pool.js';
 import { VegetationPool } from './forest/vegetation.js';
 import { DayNightSystem } from './atmosphere/day-night.js';
@@ -13,7 +13,7 @@ import { WildlifeSystem } from './forest/wildlife.js';
 import { FireflySystem } from './atmosphere/fireflies.js';
 import { CONFIG } from './config.js';
 import { updateWind, windUniforms } from './atmosphere/wind.js';
-import { WeatherSystem } from './atmosphere/weather.js';
+import { WeatherSystem } from './atmosphere/weather.js?v=202';
 import { BirdFlockSystem } from './forest/birds.js';
 import { CollectibleSystem } from './forest/collectibles.js';
 import { CottageSystem } from './forest/cottage-system.js';
@@ -435,6 +435,8 @@ vr.onSessionStart = () => {
   audio.start();
   if (audio.ctx) birds.setAudioContext(audio.ctx, audio.spatialBus);
   document.getElementById('info').style.display = 'none';
+  minimapCanvas.style.display = 'none';
+  vrMinimapSprite.visible = true;
   // Re-apply 180° rotation so player faces the lake in VR
   vr.dolly.rotation.y = Math.PI;
   // Swap to lower-resolution water grid for VR
@@ -446,6 +448,8 @@ vr.onSessionStart = () => {
 vr.onSessionEnd = () => {
   audio.stop();
   document.getElementById('info').style.display = '';
+  minimapCanvas.style.display = '';
+  vrMinimapSprite.visible = false;
   // Restore high-resolution water grid for desktop
   waterPlane.geometry = waterGeomHi;
   waterGeom = waterGeomHi;
@@ -647,16 +651,84 @@ const vrMinimapMat = new THREE.SpriteMaterial({
 const vrMinimapSprite = new THREE.Sprite(vrMinimapMat);
 vrMinimapSprite.scale.set(0.06, 0.06, 1);
 vrMinimapSprite.position.set(0.10, 0.06, -0.3);
+vrMinimapSprite.visible = false;
 vr.camera.add(vrMinimapSprite);
+
+const MINIMAP_RADIUS = 80;
+const MINIMAP_STEP = 3;
+const MINIMAP_CACHE_MARGIN = 12;
+const MINIMAP_CACHE_SIZE = 256;
+const minimapTerrainCanvas = document.createElement('canvas');
+minimapTerrainCanvas.width = MINIMAP_CACHE_SIZE;
+minimapTerrainCanvas.height = MINIMAP_CACHE_SIZE;
+const minimapTerrainCtx = minimapTerrainCanvas.getContext('2d', { alpha: false });
+let _minimapCacheX = Infinity;
+let _minimapCacheZ = Infinity;
+
+function _minimapTerrainColor(wx, wz) {
+  const h = getTerrainHeight(wx, wz);
+  if (h <= CONFIG.WATER_LEVEL) return '#0a2844';
+  if (h <= CONFIG.SHORE_LEVEL) return '#8b6e3c';
+
+  let r, g, b;
+  if (h > 24) {
+    r = 240; g = 243; b = 248;
+  } else if (h > 20) {
+    r = 115; g = 107; b = 97;
+  } else if (h > 16) {
+    r = 140; g = 128; b = 77;
+  } else if (h > 10) {
+    r = 38; g = 72; b = 20;
+  } else {
+    const t = Math.min(1, (h - CONFIG.SHORE_LEVEL) / 8);
+    r = Math.floor(30 + t * 20);
+    g = Math.floor(60 + t * 40);
+    b = Math.floor(15 + t * 10);
+  }
+
+  // River streams: blue overlay where river factor is strong.
+  const sf = getStreamFactor(wx, wz);
+  if (sf > 0.3 && h < 18) {
+    const blend = Math.min(1, (sf - 0.3) / 0.4);
+    r = Math.floor(r * (1 - blend) + 15 * blend);
+    g = Math.floor(g * (1 - blend) + 50 * blend);
+    b = Math.floor(b * (1 - blend) + 90 * blend);
+  }
+  return `rgb(${r},${g},${b})`;
+}
+
+function _updateMinimapTerrainCache(playerPos) {
+  const movedX = playerPos.x - _minimapCacheX;
+  const movedZ = playerPos.z - _minimapCacheZ;
+  const refreshDistance = MINIMAP_CACHE_MARGIN * 0.5;
+  if (movedX * movedX + movedZ * movedZ < refreshDistance * refreshDistance) return;
+
+  // Snap the cache origin to the sampling grid so nearby samples remain stable.
+  _minimapCacheX = Math.round(playerPos.x / MINIMAP_STEP) * MINIMAP_STEP;
+  _minimapCacheZ = Math.round(playerPos.z / MINIMAP_STEP) * MINIMAP_STEP;
+
+  const cacheRadius = MINIMAP_RADIUS + MINIMAP_CACHE_MARGIN;
+  const cacheHalf = MINIMAP_CACHE_SIZE / 2;
+  const cacheScale = cacheHalf / cacheRadius;
+  const pixelSize = MINIMAP_STEP * cacheScale;
+
+  minimapTerrainCtx.fillStyle = '#0a1a2e';
+  minimapTerrainCtx.fillRect(0, 0, MINIMAP_CACHE_SIZE, MINIMAP_CACHE_SIZE);
+  for (let dz = -cacheRadius; dz <= cacheRadius; dz += MINIMAP_STEP) {
+    for (let dx = -cacheRadius; dx <= cacheRadius; dx += MINIMAP_STEP) {
+      minimapTerrainCtx.fillStyle = _minimapTerrainColor(_minimapCacheX + dx, _minimapCacheZ + dz);
+      const px = cacheHalf + dz * cacheScale;
+      const py = cacheHalf - dx * cacheScale;
+      minimapTerrainCtx.fillRect(px - pixelSize / 2, py - pixelSize / 2, pixelSize, pixelSize);
+    }
+  }
+}
 
 let _minimapFrame = 0;
 function renderMinimap(ctx, size, playerPos, cameraDir) {
-  const radius = 80; // world meters
-  const step = 3;    // sample every 3m
+  const radius = MINIMAP_RADIUS;
   const half = size / 2;
   const scale = half / radius;
-  const waterY = CONFIG.WATER_LEVEL;
-  const shoreY = CONFIG.SHORE_LEVEL;
 
   // Forward/right vectors from camera direction, normalized in XZ plane
   // (prevents minimap shrinking when looking up/down)
@@ -675,56 +747,19 @@ function renderMinimap(ctx, size, playerPos, cameraDir) {
   ctx.fillStyle = '#0a1a2e';
   ctx.fillRect(0, 0, size, size);
 
-  // Sample terrain — rotate world offsets so forward = screen up
-  for (let dz = -radius; dz <= radius; dz += step) {
-    for (let dx = -radius; dx <= radius; dx += step) {
-      if (dx * dx + dz * dz > radius * radius) continue;
-      const wx = playerPos.x + dx;
-      const wz = playerPos.z + dz;
-      const h = getTerrainHeight(wx, wz);
-
-      let color;
-      if (h <= waterY) {
-        color = '#0a2844';
-      } else if (h <= shoreY) {
-        color = '#8b6e3c';
-      } else {
-        let r, g, b;
-        if (h > 24) {
-          r = 240; g = 243; b = 248;
-        } else if (h > 20) {
-          r = 115; g = 107; b = 97;
-        } else if (h > 16) {
-          r = 140; g = 128; b = 77;
-        } else if (h > 10) {
-          r = 38; g = 72; b = 20;
-        } else {
-          const t = Math.min(1, (h - shoreY) / 8);
-          r = Math.floor(30 + t * 20);
-          g = Math.floor(60 + t * 40);
-          b = Math.floor(15 + t * 10);
-        }
-        // River streams: blue overlay where river factor is strong
-        const sf = getStreamFactor(wx, wz);
-        if (sf > 0.3 && h > waterY && h < 18) {
-          const blend = Math.min(1, (sf - 0.3) / 0.4);
-          r = Math.floor(r * (1 - blend) + 15 * blend);
-          g = Math.floor(g * (1 - blend) + 50 * blend);
-          b = Math.floor(b * (1 - blend) + 90 * blend);
-        }
-        color = `rgb(${r},${g},${b})`;
-      }
-
-      // Project: screen_x = dot(offset, right), screen_y = -dot(offset, forward)
-      const sx = -dx * fz + dz * fx;
-      const sy = -(dx * fx + dz * fz);
-      const px = half + sx * scale;
-      const py = half + sy * scale;
-      const ps = Math.max(1, step * scale);
-      ctx.fillStyle = color;
-      ctx.fillRect(px - ps / 2, py - ps / 2, ps, ps);
-    }
-  }
+  // Reuse the cached north-up terrain and rotate it so forward = screen up.
+  _updateMinimapTerrainCache(playerPos);
+  const cacheRadius = MINIMAP_RADIUS + MINIMAP_CACHE_MARGIN;
+  const cacheScale = (MINIMAP_CACHE_SIZE / 2) / cacheRadius;
+  const playerCacheX = MINIMAP_CACHE_SIZE / 2 + (playerPos.z - _minimapCacheZ) * cacheScale;
+  const playerCacheY = MINIMAP_CACHE_SIZE / 2 - (playerPos.x - _minimapCacheX) * cacheScale;
+  ctx.save();
+  ctx.translate(half, half);
+  ctx.rotate(-Math.atan2(fz, fx));
+  ctx.scale(scale / cacheScale, scale / cacheScale);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(minimapTerrainCanvas, -playerCacheX, -playerCacheY);
+  ctx.restore();
 
   // Uncollected orbs as teal dots
   const chunks = [...chunkManager.getActiveChunks()];
@@ -1009,12 +1044,12 @@ function onFrame() {
   _minimapFrame++;
   if (_minimapFrame >= 10) {
     _minimapFrame = 0;
-    renderMinimap(minimapCtx, minimapSize, pos, _cameraDir);
-    if (vr.isInVR()) {
+    if (inVR) {
       renderMinimap(vrMinimapCtx, 128, pos, _cameraDir);
       vrMinimapTex.needsUpdate = true;
+    } else {
+      renderMinimap(minimapCtx, minimapSize, pos, _cameraDir);
     }
-    vrMinimapSprite.visible = vr.isInVR();
   }
 
   // Dynamic resolution scaling in VR — reduce when moving, full when still

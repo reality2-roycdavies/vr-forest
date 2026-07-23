@@ -83,7 +83,7 @@ export class Chunk {
   }
 
   /**
-   * Phase 2: ground-level detail (vegetation, flowers, rocks, logs, collectibles, foam, stream features).
+   * Phase 2: ground-level detail (vegetation, flowers, rocks, logs, collectibles, stream features).
    * Called on the frame after build() for full-quality chunks.
    */
   buildPhase2() {
@@ -97,7 +97,9 @@ export class Chunk {
     this._generateRocks(chunkX, chunkZ);
     this._generateLogs(chunkX, chunkZ);
     this._generateCollectibles(chunkX, chunkZ);
-    this._generateFoam(chunkX, chunkZ);
+    // Foam rendering is disabled in VegetationPool, so do not spend chunk-build
+    // time tracing and sampling river banks for data that never reaches the GPU.
+    this.foamSegments.length = 0;
     // this._generateStreamRocks(chunkX, chunkZ);  // Rivers disabled
     // this._generateRiverWater(chunkX, chunkZ);  // Rivers disabled
   }
