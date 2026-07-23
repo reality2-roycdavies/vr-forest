@@ -54,9 +54,19 @@ export class WeatherSystem {
 
     // --- Rain particles ---
     this._rainMesh = null;
-    this._rainPositions = null;
-    this._rainOpacities = null;
-    this._rainSpeeds = null;
+    this._precipitationTime = 0;
+    this._shelterData = new Uint8Array(SHELTER_RES * SHELTER_RES);
+    this._shelterTexture = new THREE.DataTexture(
+      this._shelterData,
+      SHELTER_RES,
+      SHELTER_RES,
+      THREE.RedFormat,
+      THREE.UnsignedByteType
+    );
+    this._shelterTexture.minFilter = THREE.NearestFilter;
+    this._shelterTexture.magFilter = THREE.NearestFilter;
+    this._shelterTexture.generateMipmaps = false;
+    this._shelterTexture.needsUpdate = true;
     this._createRainParticles(scene);
 
     // --- Lightning ---
@@ -99,43 +109,132 @@ export class WeatherSystem {
     const positions = new Float32Array(count * 3);
     const opacities = new Float32Array(count);
     const speeds = new Float32Array(count);
+    const seeds = new Float32Array(count);
+    const indices = new Float32Array(count);
 
     for (let i = 0; i < count; i++) {
-      // sqrt distribution for uniform area density (more near center)
+      // Static attributes seed an analytic GPU simulation. The particle's
+      // horizontal spawn point is regenerated in the shader each fall cycle.
       const angle = Math.random() * Math.PI * 2;
       const r = Math.sqrt(Math.random()) * CONFIG.RAIN_RADIUS;
       positions[i * 3] = Math.cos(angle) * r;
       positions[i * 3 + 1] = Math.random() * CONFIG.RAIN_HEIGHT;
       positions[i * 3 + 2] = Math.sin(angle) * r;
-      opacities[i] = 0;
+      opacities[i] = 0.5 + Math.random() * 0.5;
       speeds[i] = CONFIG.RAIN_SPEED_MIN + Math.random() * (CONFIG.RAIN_SPEED_MAX - CONFIG.RAIN_SPEED_MIN);
+      seeds[i] = Math.random() * 10000;
+      indices[i] = (i + 0.5) / count;
     }
 
     const geo = new THREE.BufferGeometry();
-    // Use BufferAttribute (not Float32BufferAttribute) to avoid array copy —
-    // we need direct writes to positions/opacities each frame
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('aOpacity', new THREE.BufferAttribute(opacities, 1));
+    geo.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
+    geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 1));
+    geo.setAttribute('aIndex', new THREE.BufferAttribute(indices, 1));
 
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uColor: { value: new THREE.Color(0.7, 0.75, 0.85) },
         uSnowBlend: { value: 0.0 },
         uStormIntensity: { value: 0.0 },
+        uTime: { value: 0.0 },
+        uActiveFraction: { value: 0.0 },
+        uSpeedScale: { value: 1.0 },
+        uWind: { value: new THREE.Vector2() },
+        uSwirlStrength: { value: 0.0 },
+        uRadius: { value: CONFIG.RAIN_RADIUS },
+        uHeight: { value: CONFIG.RAIN_HEIGHT },
+        uShelterSize: { value: SHELTER_SIZE },
+        uShelterMap: { value: this._shelterTexture },
       },
       vertexShader: `
         attribute float aOpacity;
+        attribute float aSpeed;
+        attribute float aSeed;
+        attribute float aIndex;
         uniform float uSnowBlend;
         uniform float uStormIntensity;
+        uniform float uTime;
+        uniform float uActiveFraction;
+        uniform float uSpeedScale;
+        uniform vec2 uWind;
+        uniform float uSwirlStrength;
+        uniform float uRadius;
+        uniform float uHeight;
+        uniform float uShelterSize;
+        uniform sampler2D uShelterMap;
         varying float vOpacity;
         varying float vDepth;
         varying float vSnow;
         varying float vStorm;
+
+        float hash11(float p) {
+          p = fract(p * 0.1031);
+          p *= p + 33.33;
+          p *= p + p;
+          return fract(p);
+        }
+
         void main() {
-          vOpacity = aOpacity;
+          vOpacity = aOpacity * step(aIndex, uActiveFraction);
           vSnow = uSnowBlend;
           vStorm = uStormIntensity;
-          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+          if (vOpacity < 0.001) {
+            vDepth = 1.0;
+            gl_PointSize = 0.0;
+            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+            return;
+          }
+
+          float phaseTime = uTime * aSpeed * uSpeedScale / uHeight + position.y / uHeight;
+          float cycle = floor(phaseTime);
+          float life = fract(phaseTime);
+          float angle = hash11(aSeed + cycle * 17.17) * 6.28318530718;
+          float radius = sqrt(hash11(aSeed * 1.91 + cycle * 29.23)) * uRadius;
+          vec2 spawnXZ = vec2(cos(angle), sin(angle)) * radius;
+
+          float fallSeconds = life * uHeight / max(0.01, aSpeed * uSpeedScale);
+          vec2 localXZ = spawnXZ + uWind * fallSeconds;
+
+          // Turbulent snow motion stays analytic, avoiding per-frame buffer uploads.
+          float particlePhase = aSeed * 0.73 + position.y * 0.3;
+          localXZ.x += (
+            sin(uTime * 1.7 + particlePhase) / 1.7 +
+            sin(uTime * 3.1 + aSeed * 0.53) * 0.13
+          ) * uSwirlStrength;
+          localXZ.y += (
+            cos(uTime * 1.3 + particlePhase * 0.8) / 1.3 +
+            cos(uTime * 2.7 + aSeed * 0.71) * 0.15
+          ) * uSwirlStrength;
+
+          float localY = uHeight * (1.0 - life);
+          localXZ += vec2(
+            sin(localY * 0.4 + aSeed * 0.7),
+            cos(localY * 0.5 + aSeed * 1.1)
+          ) * (uSnowBlend * 0.5);
+
+          // Keep wind-driven snow around the viewer without CPU respawn checks.
+          float wrapRadius = uRadius * 1.2;
+          localXZ = mod(localXZ + vec2(wrapRadius), vec2(wrapRadius * 2.0)) - vec2(wrapRadius);
+
+          // Canopy is sampled at the spawn column so shelter stays stable for
+          // the whole fall instead of flickering as wind moves a particle.
+          vec2 shelterUV = spawnXZ / uShelterSize + vec2(0.5);
+          float insideShelterMap =
+            step(0.0, shelterUV.x) * step(shelterUV.x, 1.0) *
+            step(0.0, shelterUV.y) * step(shelterUV.y, 1.0);
+          float sheltered = step(0.5, texture2D(uShelterMap, shelterUV).r) *
+            insideShelterMap * (1.0 - step(0.1, uSnowBlend));
+          float drip = step(12.0 / 13.0, hash11(aSeed + floor(uTime * 0.5) * 43.7));
+
+          if (sheltered > 0.5) {
+            vOpacity *= drip;
+            float dripPhase = fract(uTime * aSpeed * uSpeedScale * 0.3 / uHeight + position.y / uHeight);
+            localXZ = spawnXZ;
+            localY = uHeight * (1.0 - dripPhase);
+          }
+          vec4 mvPos = modelViewMatrix * vec4(localXZ.x, localY, localXZ.y, 1.0);
           vDepth = -mvPos.z;
           // Rain: tall thin streaks; Snow: soft dots, bigger in storms
           float rainSize = clamp(90.0 / max(1.0, -mvPos.z), 2.0, 45.0);
@@ -144,6 +243,10 @@ export class WeatherSystem {
           float snowSize = clamp(snowBase / max(1.0, -mvPos.z), 1.5, snowMax);
           gl_PointSize = mix(rainSize, snowSize, uSnowBlend);
           gl_Position = projectionMatrix * mvPos;
+          if (vOpacity < 0.001) {
+            gl_PointSize = 0.0;
+            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+          }
         }
       `,
       fragmentShader: `
@@ -180,10 +283,6 @@ export class WeatherSystem {
     this._rainMesh.frustumCulled = false;
     this._rainMesh.visible = false;
     scene.add(this._rainMesh);
-
-    this._rainPositions = positions;
-    this._rainOpacities = opacities;
-    this._rainSpeeds = speeds;
   }
 
   _createBoltMesh(scene) {
@@ -284,6 +383,8 @@ export class WeatherSystem {
     const terrainY = this._playerTerrainY || 0;
     if (terrainY > CONFIG.TREELINE_START) {
       _shelterGrid.fill(0);
+      this._shelterData.fill(0);
+      this._shelterTexture.needsUpdate = true;
       this._shelterTarget = 0;
       return;
     }
@@ -297,6 +398,10 @@ export class WeatherSystem {
           getTreeDensity(wx, wz) > 0.3 ? 1.0 : 0.0;
       }
     }
+    for (let i = 0; i < _shelterGrid.length; i++) {
+      this._shelterData[i] = _shelterGrid[i] > 0 ? 255 : 0;
+    }
+    this._shelterTexture.needsUpdate = true;
 
     // Player shelter factor: average 3x3 cells around center for spatial smoothing
     const mid = SHELTER_RES >> 1;
@@ -331,16 +436,10 @@ export class WeatherSystem {
     // Smooth shelter factor over ~1 second for gradual rain audio transitions
     this._shelterFactor += (this._shelterTarget - this._shelterFactor) * Math.min(1, 1.5 * delta);
 
-    const count = CONFIG.RAIN_PARTICLE_COUNT;
     // More particles in snow zone — blizzard at altitude during storms
     const stormFactor = clamp01(this.rainIntensity);
     const snowBoost = 1 + snowBlend * (3.0 + stormFactor * 3.0);
-    const activeCount = Math.min(count, Math.floor(count * effectivePrecip * snowBoost));
-    const radius = CONFIG.RAIN_RADIUS;
-    const height = CONFIG.RAIN_HEIGHT;
-    const positions = this._rainPositions;
-    const opacities = this._rainOpacities;
-    const speeds = this._rainSpeeds;
+    const activeFraction = Math.min(1, effectivePrecip * snowBoost);
 
     // Wind sideways push — much stronger in snow storms (blizzard gusts)
     const windScale = lerp(1.0, 4.0 + stormFactor * 6.0, snowBlend);
@@ -352,71 +451,8 @@ export class WeatherSystem {
     const speedScale = lerp(1.0, stormSpeed, snowBlend);
 
     // Time-based swirl — turbulent vortex motion in blizzards
-    if (!this._swirlTime) this._swirlTime = 0;
-    this._swirlTime += delta;
-    const swirlT = this._swirlTime;
+    this._precipitationTime += delta;
     const swirlStrength = snowBlend * stormFactor * 3.5;
-
-    for (let i = 0; i < count; i++) {
-      if (i >= activeCount) {
-        opacities[i] = 0;
-        continue;
-      }
-
-      // First activation: set opacity for particles transitioning from inactive
-      if (opacities[i] === 0) {
-        opacities[i] = 0.5 + Math.random() * 0.5;
-      }
-
-      const px = positions[i * 3];
-      const py = positions[i * 3 + 1];
-      const pz = positions[i * 3 + 2];
-
-      // Swirling vortex: each particle gets unique phase from index + position
-      const phase = i * 1.37 + py * 0.3;
-      const swirlX = Math.sin(swirlT * 1.7 + phase) * swirlStrength;
-      const swirlZ = Math.cos(swirlT * 1.3 + phase * 0.8) * swirlStrength;
-      // Secondary smaller swirl for turbulence
-      const turbX = Math.sin(swirlT * 3.1 + i * 0.53) * swirlStrength * 0.4;
-      const turbZ = Math.cos(swirlT * 2.7 + i * 0.71) * swirlStrength * 0.4;
-
-      // Canopy shelter check
-      const gx = Math.floor((px / SHELTER_SIZE + 0.5) * SHELTER_RES);
-      const gz = Math.floor((pz / SHELTER_SIZE + 0.5) * SHELTER_RES);
-      const sheltered = (gx >= 0 && gx < SHELTER_RES && gz >= 0 && gz < SHELTER_RES)
-        ? _shelterGrid[gz * SHELTER_RES + gx] > 0 : false;
-
-      if (sheltered && snowBlend < 0.1) {
-        const dripCycle = Math.floor(swirlT * 0.5);
-        const isDrip = ((i * 7 + dripCycle) % 13) === 0;
-        if (isDrip) {
-          // Drip: fall straight down, slower
-          positions[i * 3 + 1] -= speeds[i] * speedScale * 0.3 * delta;
-        } else {
-          // Hidden under canopy: fall invisibly to recycle to clearings
-          opacities[i] = 0;
-          positions[i * 3 + 1] -= speeds[i] * speedScale * delta;
-        }
-      } else {
-        // Normal movement — wind + swirl
-        positions[i * 3] += (windX + swirlX + turbX + snowBlend * Math.sin(py * 0.4 + i * 0.7) * 0.5) * delta;
-        positions[i * 3 + 1] -= speeds[i] * speedScale * delta;
-        positions[i * 3 + 2] += (windZ + swirlZ + turbZ + snowBlend * Math.cos(py * 0.5 + i * 1.1) * 0.5) * delta;
-      }
-
-      // Respawn at top if below ground or too far from center
-      const dx = positions[i * 3];
-      const dz = positions[i * 3 + 2];
-      if (positions[i * 3 + 1] < 0 || dx * dx + dz * dz > radius * radius * 1.44) {
-        const angle = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * radius;
-        positions[i * 3] = Math.cos(angle) * r;
-        positions[i * 3 + 1] = height + Math.random() * 2;
-        positions[i * 3 + 2] = Math.sin(angle) * r;
-        speeds[i] = CONFIG.RAIN_SPEED_MIN + Math.random() * (CONFIG.RAIN_SPEED_MAX - CONFIG.RAIN_SPEED_MIN);
-        opacities[i] = 0.5 + Math.random() * 0.5;
-      }
-    }
 
     // Particle color: rain blue-grey → snow white; darken at night
     const mat = this._rainMesh.material;
@@ -428,13 +464,14 @@ export class WeatherSystem {
     rc.b = lerp(0.85, 1.0, snowBlend) * nightDim;
     mat.uniforms.uSnowBlend.value = snowBlend;
     mat.uniforms.uStormIntensity.value = stormFactor;
+    mat.uniforms.uTime.value = this._precipitationTime;
+    mat.uniforms.uActiveFraction.value = activeFraction;
+    mat.uniforms.uSpeedScale.value = speedScale;
+    mat.uniforms.uWind.value.set(windX, windZ);
+    mat.uniforms.uSwirlStrength.value = swirlStrength;
 
     // Position rain cylinder at player
     this._rainMesh.position.set(playerPos.x, playerPos.y, playerPos.z);
-
-    const geo = this._rainMesh.geometry;
-    geo.getAttribute('position').needsUpdate = true;
-    geo.getAttribute('aOpacity').needsUpdate = true;
   }
 
   // ======== Lightning ========
@@ -1130,5 +1167,6 @@ export class WeatherSystem {
       this._rainMesh.geometry.dispose();
       this._rainMesh.material.dispose();
     }
+    this._shelterTexture?.dispose();
   }
 }

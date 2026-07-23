@@ -1,6 +1,6 @@
 // Chunk lifecycle: load/unload/recycle around player
 import { CONFIG } from '../config.js';
-import { Chunk } from './chunk.js';
+import { Chunk } from './chunk.js?v=202';
 
 export class ChunkManager {
   constructor(scene) {
