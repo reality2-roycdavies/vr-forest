@@ -30,6 +30,7 @@ export class MultiplayerHud {
     this._sprite = new THREE.Sprite(this._mat);
     this._sprite.scale.set(0.12, 0.03, 1);
     this._sprite.position.set(-0.10, 0.09, -0.3);
+    this._sprite.visible = false;
     camera.add(this._sprite);
 
     this._lastText = null;
@@ -46,6 +47,11 @@ export class MultiplayerHud {
     if (this.peerCount === count) return;
     this.peerCount = count;
     this._render();
+  }
+
+  setVRMode(isInVR) {
+    this._desktopEl.style.display = isInVR ? 'none' : '';
+    this._sprite.visible = isInVR;
   }
 
   _render() {
