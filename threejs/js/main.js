@@ -1,4 +1,4 @@
-console.log('%c[VR Forest v17] Loaded', 'color: #66ffcc; font-size: 14px;');
+console.log('%c[VR Forest v18] Loaded', 'color: #66ffcc; font-size: 14px;');
 // Bootstrap: scene, systems, render loop
 import * as THREE from 'three';
 import { VRSetup } from './vr-setup.js';
@@ -28,6 +28,7 @@ import { AvatarRenderer } from './multiplayer/avatar-renderer.js';
 import { MultiplayerHud } from './multiplayer/hud.js?v=203';
 import { WorldStateSync } from './multiplayer/world-state-sync.js';
 import { XRQualityController } from './xr-quality.js?v=204';
+import { ShadowUpdateScheduler } from './shadow-scheduler.js?v=205';
 
 // --- Scene ---
 const scene = new THREE.Scene();
@@ -57,6 +58,7 @@ setGroundAnisotropy(vr.renderer.capabilities.getMaxAnisotropy());
 // --- Terrain ---
 const chunkManager = new ChunkManager(scene);
 movement.chunkManager = chunkManager;
+const shadowScheduler = new ShadowUpdateScheduler();
 
 // --- Water surface with wave displacement ---
 const waterGeomHi = new THREE.PlaneGeometry(300, 300, 128, 128);
@@ -429,11 +431,17 @@ chunkManager.onChunksChanged = () => {
   for (const chunk of chunkManager.getActiveChunks()) {
     if (chunk.active) _cottageDensityQueue.push(chunk);
   }
+
+  // New or rebuilt shadow casters must appear in the next XR frame.
+  shadowScheduler.invalidate();
 };
 
 // --- VR Session Events ---
 vr.onSessionStart = () => {
   xrQuality.reset();
+  shadowScheduler.reset();
+  vr.renderer.shadowMap.autoUpdate = false;
+  vr.renderer.shadowMap.needsUpdate = true;
   _vrResScale = 1.0;
   _vrLastRequestedScale = -1;
   audio.start();
@@ -452,6 +460,9 @@ vr.onSessionStart = () => {
 
 vr.onSessionEnd = () => {
   xrQuality.reset();
+  shadowScheduler.reset();
+  vr.renderer.shadowMap.autoUpdate = true;
+  vr.renderer.shadowMap.needsUpdate = true;
   _vrResScale = 1.0;
   _vrLastRequestedScale = -1;
   audio.stop();
@@ -1116,6 +1127,12 @@ function onFrame() {
   if (worldSync) worldSync.update(delta);
   avatarRenderer.update(delta);
   mpHud.setPeerCount(avatarRenderer.peerCount);
+
+  // Shadow depth rendering traverses every caster. In XR, update it at a
+  // perceptually sufficient cadence instead of paying that cost every frame.
+  if (inVR && shadowScheduler.update(delta, movement.isMoving)) {
+    vr.renderer.shadowMap.needsUpdate = true;
+  }
 
   // Render
   vr.renderer.render(scene, vr.camera);
