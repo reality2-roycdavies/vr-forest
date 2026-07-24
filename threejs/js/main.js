@@ -1,4 +1,4 @@
-console.log('%c[VR Forest v16] Loaded', 'color: #66ffcc; font-size: 14px;');
+console.log('%c[VR Forest v17] Loaded', 'color: #66ffcc; font-size: 14px;');
 // Bootstrap: scene, systems, render loop
 import * as THREE from 'three';
 import { VRSetup } from './vr-setup.js';
@@ -27,6 +27,7 @@ import { AvatarSender } from './multiplayer/avatar-sender.js';
 import { AvatarRenderer } from './multiplayer/avatar-renderer.js';
 import { MultiplayerHud } from './multiplayer/hud.js?v=203';
 import { WorldStateSync } from './multiplayer/world-state-sync.js';
+import { XRQualityController } from './xr-quality.js?v=204';
 
 // --- Scene ---
 const scene = new THREE.Scene();
@@ -432,6 +433,9 @@ chunkManager.onChunksChanged = () => {
 
 // --- VR Session Events ---
 vr.onSessionStart = () => {
+  xrQuality.reset();
+  _vrResScale = 1.0;
+  _vrLastRequestedScale = -1;
   audio.start();
   if (audio.ctx) birds.setAudioContext(audio.ctx, audio.spatialBus);
   document.getElementById('info').style.display = 'none';
@@ -447,6 +451,9 @@ vr.onSessionStart = () => {
 };
 
 vr.onSessionEnd = () => {
+  xrQuality.reset();
+  _vrResScale = 1.0;
+  _vrLastRequestedScale = -1;
   audio.stop();
   document.getElementById('info').style.display = '';
   minimapCanvas.style.display = '';
@@ -853,7 +860,9 @@ let timeHudFade = 0;
 let weatherHudFade = 0;
 let _lastWeatherState = '';
 let _frameCount = 0;
-let _vrResScale = 1.0; // dynamic VR resolution scale (1.0 = full, 0.65 = reduced)
+let _vrResScale = 1.0;
+let _vrLastRequestedScale = -1;
+const xrQuality = new XRQualityController();
 const clock = new THREE.Clock();
 
 // Initial heightmap generation (synchronous full pass for first frame)
@@ -1054,23 +1063,48 @@ function onFrame() {
     }
   }
 
-  // Dynamic resolution scaling in VR — reduce when moving, full when still
+  // Adaptive XR quality — body/head motion plus sustained missed-frame feedback.
   if (inVR) {
-    const targetScale = movement.isMoving ? (movement.isSprinting ? 0.55 : 0.65) : 1.0;
-    // Fast drop (0.15s), slow recovery (0.5s) for responsive feel
-    const rate = targetScale < _vrResScale ? 7 : 2;
-    _vrResScale += (targetScale - _vrResScale) * Math.min(1, delta * rate);
     try {
       const xr = vr.renderer.xr;
-      const frame = xr.getFrame && xr.getFrame();
-      if (frame) {
+      const xrFrame = xr.getFrame && xr.getFrame();
+      if (xrFrame) {
         const refSpace = xr.getReferenceSpace();
-        const pose = frame.getViewerPose(refSpace);
+        const pose = xrFrame.getViewerPose(refSpace);
         if (pose) {
+          let recommendedScale = null;
           for (const view of pose.views) {
-            if (view.requestViewportScale) {
-              view.requestViewportScale(_vrResScale);
+            if (Number.isFinite(view.recommendedViewportScale)) {
+              recommendedScale = recommendedScale === null
+                ? view.recommendedViewportScale
+                : Math.min(recommendedScale, view.recommendedViewportScale);
             }
+          }
+
+          const session = xr.getSession && xr.getSession();
+          const quality = xrQuality.update({
+            delta,
+            refreshRate: session?.frameRate || 72,
+            isMoving: movement.isMoving,
+            isSprinting: movement.isSprinting,
+            orientation: pose.transform?.orientation,
+            recommendedScale,
+          });
+          _vrResScale = quality.scale;
+
+          // The WebXR scale persists across frames. Request only meaningful
+          // changes, plus the final target, to avoid visible scale chatter.
+          const scaleDelta = Math.abs(_vrResScale - _vrLastRequestedScale);
+          const atTarget = Math.abs(_vrResScale - quality.targetScale) < 0.005;
+          if (_vrLastRequestedScale < 0 || scaleDelta >= 0.02 || (atTarget && scaleDelta >= 0.005)) {
+            let requested = false;
+            for (const view of pose.views) {
+              if (view.requestViewportScale) {
+                view.requestViewportScale(_vrResScale);
+                requested = true;
+              }
+            }
+            if (requested) _vrLastRequestedScale = _vrResScale;
           }
         }
       }
