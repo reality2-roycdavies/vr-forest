@@ -1,4 +1,4 @@
-console.log('%c[VR Forest v15] Loaded', 'color: #66ffcc; font-size: 14px;');
+console.log('%c[VR Forest v16] Loaded', 'color: #66ffcc; font-size: 14px;');
 // Bootstrap: scene, systems, render loop
 import * as THREE from 'three';
 import { VRSetup } from './vr-setup.js';
@@ -25,7 +25,7 @@ import { loadOrCreateIdentity } from './multiplayer/identity.js';
 import { RelayClient } from './multiplayer/relay-client.js';
 import { AvatarSender } from './multiplayer/avatar-sender.js';
 import { AvatarRenderer } from './multiplayer/avatar-renderer.js';
-import { MultiplayerHud } from './multiplayer/hud.js';
+import { MultiplayerHud } from './multiplayer/hud.js?v=203';
 import { WorldStateSync } from './multiplayer/world-state-sync.js';
 
 // --- Scene ---
@@ -437,6 +437,7 @@ vr.onSessionStart = () => {
   document.getElementById('info').style.display = 'none';
   minimapCanvas.style.display = 'none';
   vrMinimapSprite.visible = true;
+  mpHud.setVRMode(true);
   // Re-apply 180° rotation so player faces the lake in VR
   vr.dolly.rotation.y = Math.PI;
   // Swap to lower-resolution water grid for VR
@@ -450,6 +451,7 @@ vr.onSessionEnd = () => {
   document.getElementById('info').style.display = '';
   minimapCanvas.style.display = '';
   vrMinimapSprite.visible = false;
+  mpHud.setVRMode(false);
   // Restore high-resolution water grid for desktop
   waterPlane.geometry = waterGeomHi;
   waterGeom = waterGeomHi;
